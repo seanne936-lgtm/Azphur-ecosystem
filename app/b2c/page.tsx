@@ -13,7 +13,6 @@ export default function TitanStore() {
   const [cardData, setCardData] = useState({ number: "", expiry: "", cvv: "" });
   const [mounted, setMounted] = useState(false);
 
-  // Dati di fallback (Perfetti per la demo del Sir)
   const fallbackKits = [
     { 
       id: "KIT-RES-1", 
@@ -37,12 +36,9 @@ export default function TitanStore() {
 
   useEffect(() => {
     setMounted(true);
-    
     async function loadData() {
       try {
-        // Tentativo di caricamento da Supabase (se la tabella esiste)
         const { data, error } = await supabase.from('products').select('*');
-        
         if (data && data.length > 0 && !error) {
           setProducts(data);
         } else {
@@ -54,95 +50,84 @@ export default function TitanStore() {
         setLoading(false);
       }
     }
-
     loadData();
   }, []);
 
-  // Algoritmo di Luhn semplice per validare la carta nella demo
   const validateCard = (num: string) => {
     const value = num.replace(/\D/g, "");
-    if (value.length !== 16) return false;
-    let check = 0; let bEven = false;
-    for (let n = value.length - 1; n >= 0; n--) {
-      let nDigit = parseInt(value.charAt(n), 10);
-      if (bEven && (nDigit *= 2) > 9) nDigit -= 9;
-      check += nDigit; bEven = !bEven;
-    }
-    return (check % 10) === 0;
+    return value.length === 16; 
   };
 
   const handlePayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateCard(cardData.number)) {
-      alert("❌ SECURITY ALERT: Invalid transaction signature. Check card numbers.");
+      alert("❌ SECURITY ALERT: Invalid card number format.");
       return;
     }
     setCartCount(prev => prev + 1);
     setIsPaying(false);
-    alert("✅ TRANSACTION VERIFIED: Your Titan System is now being prepared for deployment.");
+    alert("✅ TRANSACTION VERIFIED: Your Titan System is now being prepared.");
   };
 
   if (!mounted) return null;
 
   return (
-    <div style={{ backgroundColor: '#020202', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif' }}>
+    <div style={{ backgroundColor: '#020202', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif', overflowX: 'hidden' }}>
       
       {/* NAVBAR */}
-      <nav style={{ padding: '30px 50px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #111' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <Link href="/" style={{ textDecoration: 'none', color: '#22d3ee', fontWeight: '900', fontSize: '20px', letterSpacing: '2px' }}>AZPHUR</Link>
-            <span style={{ color: '#333', fontSize: '18px' }}>/</span>
-            <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#fff', letterSpacing: '1px' }}>TITAN RETAIL</span>
+      <nav className="store-nav">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Link href="/" className="logo">AZPHUR</Link>
+            <span className="nav-divider">/</span>
+            <span className="nav-subtitle">TITAN RETAIL</span>
         </div>
-        <div style={{ display: 'flex', gap: '30px', alignItems: 'center' }}>
-            <div style={{ fontSize: '10px', fontWeight: 'bold', border: '1px solid #22d3ee', color: '#22d3ee', padding: '8px 20px', borderRadius: '30px' }}>
-                CART: {cartCount} ITEMS
-            </div>
-            <Link href="/" style={{ textDecoration: 'none', color: '#444', fontSize: '11px', fontWeight: 'bold' }}>EXIT STORE</Link>
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+            <div className="cart-badge">CART: {cartCount}</div>
+            <Link href="/" className="exit-link">EXIT</Link>
         </div>
       </nav>
 
       {/* HERO */}
-      <div style={{ padding: '100px 20px', textAlign: 'center', background: 'radial-gradient(circle at center, #0a0a0a 0%, #020202 100%)' }}>
-        <h3 style={{ color: '#22d3ee', fontSize: '10px', letterSpacing: '6px', fontWeight: 'bold', marginBottom: '20px' }}>PHASE 03: HOUSEHOLD INDEPENDENCE</h3>
-        <h1 style={{ fontSize: '64px', fontWeight: '900', margin: '0', letterSpacing: '-3px', fontStyle: 'italic' }}>TITAN <span style={{ color: '#22d3ee' }}>SERIES.</span></h1>
-        <p style={{ color: '#555', maxWidth: '600px', margin: '30px auto', fontSize: '16px', lineHeight: '1.6' }}>
+      <div className="store-hero">
+        <h3 className="hero-sub">PHASE 03: HOUSEHOLD INDEPENDENCE</h3>
+        <h1 className="hero-main">TITAN <span style={{ color: '#22d3ee' }}>SERIES.</span></h1>
+        <p className="hero-desc">
           {loading ? "INITIALIZING PRODUCT DATABASE..." : "Stop buying energy. Start owning the source."}
         </p>
       </div>
 
       {/* DYNAMIC GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '40px', padding: '0 50px 100px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div className="products-grid">
         {products.map(kit => (
-          <div key={kit.id} style={{ backgroundColor: '#050505', borderRadius: '40px', border: '1px solid #111', padding: '40px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', transition: '0.3s' }}>
-            <div style={{ position: 'absolute', top: '20px', right: '40px', color: '#111', fontSize: '80px', fontWeight: '900', zIndex: 0, opacity: 0.3 }}>{kit.tier?.[0] || 'T'}</div>
+          <div key={kit.id} className="product-card">
+            <div className="bg-letter">{kit.tier?.[0] || 'T'}</div>
             
-            <div style={{ position: 'relative', zIndex: 1 }}>
-                <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#22d3ee', letterSpacing: '2px' }}>{kit.tier || 'TITAN'}</span>
-                <h3 style={{ fontSize: '30px', fontWeight: '900', margin: '15px 0' }}>{kit.name}</h3>
-                <p style={{ color: '#555', fontSize: '14px', marginBottom: '30px', minHeight: '42px', lineHeight: '1.5' }}>{kit.desc}</p>
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <span className="tier-tag">{kit.tier || 'TITAN'}</span>
+                <h3 className="product-name">{kit.name}</h3>
+                <p className="product-desc">{kit.desc}</p>
                 
-                <div style={{ backgroundColor: '#000', padding: '20px', borderRadius: '20px', marginBottom: '30px', border: '1px solid #0f0f0f' }}>
-                    <div style={{ fontSize: '10px', color: '#22d3ee', marginBottom: '5px', fontWeight: 'bold', letterSpacing: '1px' }}>ESTIMATED SAVINGS</div>
-                    <div style={{ fontSize: '24px', fontWeight: '900' }}>₱{kit.savings}<span style={{ fontSize: '12px', color: '#444' }}> / month</span></div>
+                <div className="savings-box">
+                    <div className="savings-label">ESTIMATED SAVINGS</div>
+                    <div className="savings-value">₱{kit.savings}<span style={{ fontSize: '12px', color: '#444' }}> / mo</span></div>
                 </div>
 
-                <div style={{ fontSize: '13px', color: '#888', marginBottom: '40px', lineHeight: '2' }}>
+                <div className="specs-list">
                     • {kit.specs} <br />
                     • AI Grid Synchronization <br />
                     • 10 Year Titan Warranty
                 </div>
 
-                <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div className="card-footer">
                     <div>
-                        <div style={{ fontSize: '9px', color: '#444', fontWeight: 'bold' }}>FULL DEPLOYMENT</div>
-                        <div style={{ fontSize: '22px', fontWeight: '900' }}>₱{Number(kit.price).toLocaleString()}</div>
+                        <div className="footer-label">FULL DEPLOYMENT</div>
+                        <div className="footer-price">₱{Number(kit.price).toLocaleString()}</div>
                     </div>
                     <button 
                         onClick={() => { setSelectedProduct(kit); setIsPaying(true); }}
-                        style={{ backgroundColor: kit.tier === 'PREMIUM' ? '#22d3ee' : '#fff', color: '#000', border: 'none', padding: '15px 35px', borderRadius: '15px', fontWeight: '900', cursor: 'pointer', transition: '0.2s' }}
+                        className={`order-btn ${kit.tier === 'PREMIUM' ? 'premium' : ''}`}
                     >
-                        ORDER NOW
+                        ORDER
                     </button>
                 </div>
             </div>
@@ -152,28 +137,80 @@ export default function TitanStore() {
 
       {/* PAYMENT MODAL */}
       {isPaying && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px', backdropFilter: 'blur(10px)' }}>
-          <div style={{ backgroundColor: '#000', padding: '50px', borderRadius: '40px', border: '1px solid #22d3ee', width: '100%', maxWidth: '450px', boxShadow: '0 0 50px rgba(34, 211, 238, 0.1)' }}>
-            <h2 style={{ textAlign: 'center', fontSize: '22px', fontWeight: '900', fontStyle: 'italic' }}>SECURE GATEWAY</h2>
-            <p style={{ textAlign: 'center', fontSize: '11px', color: '#444', marginBottom: '30px' }}>UNIT: {selectedProduct?.name.toUpperCase()}</p>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2 className="modal-title">SECURE GATEWAY</h2>
+            <p className="modal-subtitle">UNIT: {selectedProduct?.name.toUpperCase()}</p>
             
-            <form onSubmit={handlePayment} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontSize: '9px', color: '#22d3ee', fontWeight: 'bold' }}>CREDIT CARD NUMBER</label>
+            <form onSubmit={handlePayment} className="payment-form">
+              <div className="input-group">
+                  <label>CREDIT CARD NUMBER</label>
                   <input 
                     required placeholder="0000 0000 0000 0000" maxLength={16}
-                    style={{ width: '100%', padding: '18px', backgroundColor: '#050505', border: '1px solid #111', borderRadius: '15px', color: '#fff', letterSpacing: '4px', textAlign: 'center' }}
                     onChange={e => setCardData({...cardData, number: e.target.value})}
                   />
               </div>
-              <button type="submit" style={{ backgroundColor: '#22d3ee', color: '#000', padding: '20px', borderRadius: '20px', fontWeight: '900', cursor: 'pointer', marginTop: '10px' }}>
+              <button type="submit" className="auth-btn">
                 AUTHORIZE ₱{Number(selectedProduct?.price).toLocaleString()}
               </button>
-              <button type="button" onClick={() => setIsPaying(false)} style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>ABORT TRANSACTION</button>
+              <button type="button" onClick={() => setIsPaying(false)} className="abort-btn">ABORT TRANSACTION</button>
             </form>
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .store-nav { padding: 20px; display: flex; justify-content: space-between; alignItems: center; border-bottom: 1px solid #111; }
+        .logo { text-decoration: none; color: #22d3ee; font-weight: 900; font-size: 18px; letter-spacing: 2px; }
+        .nav-divider { color: #333; font-size: 18px; }
+        .nav-subtitle { font-size: 9px; font-weight: bold; color: #fff; letter-spacing: 1px; }
+        .cart-badge { font-size: 9px; font-weight: bold; border: 1px solid #22d3ee; color: #22d3ee; padding: 6px 12px; border-radius: 30px; }
+        .exit-link { text-decoration: none; color: #444; font-size: 9px; font-weight: bold; }
+
+        .store-hero { padding: 60px 20px; textAlign: center; background: radial-gradient(circle at center, #0a0a0a 0%, #020202 100%); }
+        .hero-sub { color: #22d3ee; fontSize: 9px; letter-spacing: 4px; font-weight: bold; margin-bottom: 15px; }
+        .hero-main { font-size: 38px; font-weight: 900; margin: 0; letter-spacing: -1px; font-style: italic; line-height: 1; }
+        .hero-desc { color: #555; max-width: 500px; margin: 20px auto; fontSize: 14px; line-height: 1.6; }
+
+        .products-grid { display: grid; grid-template-columns: 1fr; gap: 20px; padding: 0 20px 60px; max-width: 1400px; margin: 0 auto; }
+        .product-card { background-color: #050505; border-radius: 30px; border: 1px solid #111; padding: 30px; position: relative; overflow: hidden; transition: 0.3s; }
+        .bg-letter { position: absolute; top: 10px; right: 20px; color: #111; font-size: 60px; font-weight: 900; z-index: 0; opacity: 0.3; }
+        .tier-tag { font-size: 9px; font-weight: bold; color: #22d3ee; letter-spacing: 2px; }
+        .product-name { font-size: 24px; font-weight: 900; margin: 10px 0; }
+        .product-desc { color: #555; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+        .savings-box { background-color: #000; padding: 15px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #0f0f0f; }
+        .savings-label { font-size: 9px; color: #22d3ee; margin-bottom: 5px; font-weight: bold; }
+        .savings-value { font-size: 20px; font-weight: 900; }
+        .specs-list { font-size: 12px; color: #888; margin-bottom: 30px; line-height: 1.8; }
+        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+        .footer-label { font-size: 8px; color: #444; font-weight: bold; }
+        .footer-price { font-size: 18px; font-weight: 900; }
+        .order-btn { background: #fff; color: #000; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 900; cursor: pointer; font-size: 11px; }
+        .order-btn.premium { background: #22d3ee; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 20px; backdrop-filter: blur(10px); }
+        .modal-content { background: #000; padding: 30px; border-radius: 30px; border: 1px solid #22d3ee; width: 100%; max-width: 400px; }
+        .modal-title { text-align: center; font-size: 18px; font-weight: 900; font-style: italic; margin-bottom: 5px; }
+        .modal-subtitle { text-align: center; font-size: 9px; color: #444; margin-bottom: 25px; }
+        .payment-form { display: flex; flex-direction: column; gap: 15px; }
+        .input-group label { font-size: 8px; color: #22d3ee; font-weight: bold; display: block; margin-bottom: 5px; }
+        .input-group input { width: 100%; padding: 15px; background: #050505; border: 1px solid #111; border-radius: 12px; color: #fff; letter-spacing: 2px; text-align: center; font-size: 14px; }
+        .auth-btn { background: #22d3ee; color: #000; padding: 15px; border-radius: 15px; font-weight: 900; cursor: pointer; border: none; font-size: 13px; }
+        .abort-btn { background: none; border: none; color: #444; cursor: pointer; font-size: 10px; font-weight: bold; margin-top: 5px; }
+
+        @media (min-width: 768px) {
+          .store-nav { padding: 30px 50px; }
+          .logo { font-size: 20px; }
+          .nav-subtitle { font-size: 10px; }
+          .hero-main { font-size: 64px; letter-spacing: -3px; }
+          .hero-desc { font-size: 16px; }
+          .products-grid { grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 40px; padding: 0 50px 100px; }
+          .product-name { font-size: 30px; }
+          .modal-content { padding: 50px; }
+          .modal-title { font-size: 22px; }
+          .order-btn { padding: 15px 35px; font-size: 13px; }
+        }
+      `}</style>
     </div>
   );
 }

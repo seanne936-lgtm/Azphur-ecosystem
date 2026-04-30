@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
-// ... (Le interfacce restano identiche)
 interface InventoryItem {
   id: number; 
   name: string;
@@ -42,7 +41,6 @@ export default function S2BCombinedPortal() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userRole, setUserRole] = useState<'ADMIN' | 'CUSTOMER'>('CUSTOMER');
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("ALL");
   const [loading, setLoading] = useState(true);
 
   const [newOrder, setNewOrder] = useState({
@@ -55,10 +53,7 @@ export default function S2BCombinedPortal() {
       if (!session) {
         router.push('/login');
       } else {
-        // --- ADMIN EMAIL CONFIGURATION ---
-        // Aggiungi qui le email che devono avere i poteri da Admin
         const adminEmails = ['admin@azphur.com', 'tuofratello@email.com']; 
-        
         const userEmail = session.user.email || '';
         if (adminEmails.includes(userEmail)) {
           setUserRole('ADMIN');
@@ -85,7 +80,6 @@ export default function S2BCombinedPortal() {
         const mappedData: Shipment[] = data.map((item: InventoryItem) => {
           let portalStatus: Shipment['status'] = 'Processing';
           const dbStatus = item.status?.toUpperCase().replace('_', ' ');
-          
           if (dbStatus === 'DELIVERED') portalStatus = 'Delivered';
           else if (dbStatus === 'IN TRANSIT') portalStatus = 'In Transit';
           else if (dbStatus === 'ON HOLD') portalStatus = 'On Hold';
@@ -116,9 +110,7 @@ export default function S2BCombinedPortal() {
     const states: Shipment['status'][] = ['Processing', 'In Transit', 'Delivered', 'On Hold'];
     const currentIndex = states.indexOf(currentStatus as any);
     const nextStatus = states[(currentIndex + 1) % states.length];
-    
     await supabase.from('inventory').update({ status: nextStatus.toUpperCase().replace(' ', '_') }).eq('id', realId);
-    
     const { data: { session } } = await supabase.auth.getSession();
     fetchCloudShipments(userRole, session?.user?.email || '');
   };
@@ -136,25 +128,20 @@ export default function S2BCombinedPortal() {
       eta: newOrder.eta,
       customer_email: newOrder.customer_email
     };
-
     const { error } = await supabase.from('inventory').insert([payload]);
     if (!error) {
       setIsModalOpen(false);
       setNewOrder({ id: "", provider: "", origin: "", destination: "", type: "", weight: "", eta: "", price: "", customer_email: "" });
       const { data: { session } } = await supabase.auth.getSession();
       fetchCloudShipments('ADMIN', session?.user?.email || '');
-    } else {
-      alert("Error: " + error.message);
     }
   };
 
-  const filteredShipments = shipments.filter(ship => {
-    const matchesSearch = ship.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          ship.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          ship.type.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === "ALL" || ship.status.toUpperCase() === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  const filteredShipments = shipments.filter(ship => 
+    ship.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    ship.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    ship.type.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -167,161 +154,175 @@ export default function S2BCombinedPortal() {
   };
 
   return (
-    <div style={{ backgroundColor: '#050505', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif', display: 'flex' }}>
+    <div className="portal-container">
       
-      {/* SIDEBAR */}
-      <aside style={{ width: '260px', backgroundColor: '#0a0a0a', borderRight: '1px solid #111', padding: '20px', position: 'fixed', height: '100vh', zIndex: 10, display: 'flex', flexDirection: 'column' }}>
-        
-        <div style={{ marginBottom: '25px' }}>
-          <button 
-            onClick={() => router.push('/')}
-            style={{ 
-              backgroundColor: 'transparent', border: '1px solid #1a1a1a', padding: '12px', borderRadius: '10px', color: '#555',
-              fontSize: '11px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              gap: '10px', width: '100%', fontWeight: 'bold', letterSpacing: '1px', transition: '0.3s'
-            }}
-          >
-            &larr; BACK TO MAIN PAGE
-          </button>
+      {/* SIDEBAR - Adattiva */}
+      <aside className="sidebar">
+        <div className="sidebar-content">
+          <button onClick={() => router.push('/')} className="back-btn">&larr; HOME</button>
+          <div className="logo-section">
+            <span className="logo-text">AZPHUR</span>
+            <span className="logo-subtext">LOGISTICS</span>
+          </div>
+          <nav className="nav-links">
+            {['Shipments', 'Inventory', 'Providers'].map(item => (
+              <div key={item} onClick={() => setActiveTab(item as any)}
+                className={`nav-item ${activeTab === item ? 'active' : ''}`}>
+                {item.toUpperCase()}
+              </div>
+            ))}
+          </nav>
         </div>
-
-        <div style={{ marginBottom: '40px', paddingLeft: '10px' }}>
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <span style={{ fontSize: '22px', fontWeight: '900', color: '#22d3ee', fontStyle: 'italic' }}>AZPHUR</span>
-            <span style={{ display: 'block', fontSize: '10px', color: '#444', letterSpacing: '2px' }}>LOGISTICS</span>
-          </Link>
-        </div>
-
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-          {['Shipments', 'Inventory', 'Providers'].map(item => (
-            <div key={item} onClick={() => setActiveTab(item as any)}
-              style={{ 
-                padding: '12px', borderRadius: '10px', fontSize: '11px', letterSpacing: '1px', fontWeight: 'bold',
-                color: activeTab === item ? '#22d3ee' : '#444', 
-                backgroundColor: activeTab === item ? '#22d3ee10' : 'transparent', 
-                cursor: 'pointer', transition: '0.2s' 
-              }}>
-              {item.toUpperCase()}
-            </div>
-          ))}
-        </nav>
       </aside>
 
-      <main style={{ marginLeft: '260px', padding: '50px', width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
+      <main className="main-content">
+        <div className="header-section">
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: '900', fontStyle: 'italic' }}>S2B <span style={{ color: '#22d3ee' }}>GATEWAY</span></h1>
-            <p style={{ color: '#444', fontSize: '10px', fontWeight: 'bold', letterSpacing: '1px' }}>
-                ACCESS MODE: <span style={{color: userRole === 'ADMIN' ? '#22d3ee' : '#eab308'}}>{userRole}</span>
+            <h1 className="main-title">S2B <span style={{ color: '#22d3ee' }}>GATEWAY</span></h1>
+            <p className="access-label">
+                MODE: <span style={{color: userRole === 'ADMIN' ? '#22d3ee' : '#eab308'}}>{userRole}</span>
             </p>
           </div>
           {userRole === 'ADMIN' && (
-            <button onClick={() => setIsModalOpen(true)} style={{ backgroundColor: '#fff', color: '#000', border: 'none', padding: '12px 25px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 20px rgba(255,255,255,0.1)' }}>
-              + REGISTER CARGO
-            </button>
+            <button onClick={() => setIsModalOpen(true)} className="add-cargo-btn">+ NEW</button>
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '15px', marginBottom: '30px' }}>
-          <input 
-            placeholder="Search by ID, Provider or Hardware..." 
-            style={{ flex: 2, padding: '15px', backgroundColor: '#0a0a0a', border: '1px solid #1a1a1a', borderRadius: '12px', color: '#fff', fontSize: '14px' }}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+        <input 
+          placeholder="Search cargo..." 
+          className="search-input"
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
 
-        <div style={{ backgroundColor: '#0a0a0a', borderRadius: '20px', border: '1px solid #1a1a1a', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead style={{ backgroundColor: '#0f0f0f' }}>
-              <tr style={{ textAlign: 'left', fontSize: '10px', color: '#444', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                <th style={{ padding: '20px' }}>Cargo Ref / Item</th>
-                <th style={{ padding: '20px' }}>Logistics Route</th>
-                <th style={{ padding: '20px' }}>Valuation</th>
-                <th style={{ padding: '20px' }}>Current Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+        <div className="data-container">
+          {/* VIEW PER DESKTOP (Tabella) */}
+          <div className="desktop-table">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={4} style={{ padding: '60px', textAlign: 'center' }}>
-                    <div className="animate-pulse" style={{ color: '#22d3ee', fontSize: '11px', letterSpacing: '2px', fontWeight: 'bold' }}>
-                      SYNCHRONIZING WITH GLOBAL NODES...
-                    </div>
-                  </td>
+                  <th>Cargo Ref</th>
+                  <th>Route</th>
+                  <th>Valuation</th>
+                  <th>Status</th>
                 </tr>
-              ) : filteredShipments.length > 0 ? (
-                filteredShipments.map((ship, index) => {
+              </thead>
+              <tbody>
+                {!loading && filteredShipments.map((ship, index) => {
                   const colors = getStatusColor(ship.status);
                   return (
-                    <tr key={index} style={{ borderBottom: '1px solid #111', transition: '0.3s' }}>
-                      <td style={{ padding: '20px' }}>
-                        <div style={{ color: '#22d3ee', fontWeight: '900', fontSize: '14px' }}>AZ-{ship.id}</div>
-                        <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>{ship.type}</div>
+                    <tr key={index}>
+                      <td>
+                        <div className="ref-id">AZ-{ship.id}</div>
+                        <div className="item-type">{ship.type}</div>
                       </td>
-                      <td style={{ padding: '20px' }}>
-                        <div style={{ fontSize: '12px', color: '#fff' }}>{ship.origin} &rarr; {ship.destination}</div>
-                        <div style={{ fontSize: '10px', color: '#444', marginTop: '4px' }}>Provider: {ship.provider}</div>
+                      <td>
+                        <div className="route-text">{ship.origin} &rarr; {ship.destination}</div>
+                        <div className="provider-text">{ship.provider}</div>
                       </td>
-                      <td style={{ padding: '20px', fontSize: '14px', fontWeight: 'bold' }}>
-                        ₱{Number(ship.price).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '20px' }}>
-                        <div 
-                          onClick={() => updateCargoStatus(ship.realId, ship.status)}
-                          style={{ 
-                            display: 'inline-block', padding: '6px 12px', borderRadius: '6px', fontSize: '9px', fontWeight: '900', 
-                            cursor: userRole === 'ADMIN' ? 'pointer' : 'default',
-                            backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}`,
-                            letterSpacing: '1px'
-                          }}>
+                      <td className="price-text">₱{Number(ship.price).toLocaleString()}</td>
+                      <td>
+                        <div onClick={() => updateCargoStatus(ship.realId, ship.status)}
+                          className="status-badge" style={{ backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
                           {ship.status.toUpperCase()}
                         </div>
                       </td>
                     </tr>
                   );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={4} style={{ padding: '80px 40px', textAlign: 'center' }}>
-                    <div style={{ marginBottom: '15px', fontSize: '40px' }}>📡</div>
-                    <div style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold', marginBottom: '8px' }}>
-                      NO ACTIVE SHIPMENTS FOUND
-                    </div>
-                    <div style={{ color: '#444', fontSize: '12px', maxWidth: '300px', margin: '0 auto', lineHeight: '1.6' }}>
-                      Your radar is currently clear. Please contact <span style={{color: '#22d3ee'}}>Azphur Command HQ</span> to register and track your first cargo.
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* VIEW PER MOBILE (Cards) */}
+          <div className="mobile-list">
+            {loading ? <p className="loading-text">SYNCING...</p> : filteredShipments.map((ship, index) => {
+               const colors = getStatusColor(ship.status);
+               return (
+                 <div key={index} className="mobile-card">
+                   <div className="card-header">
+                     <span className="ref-id">AZ-{ship.id}</span>
+                     <div onClick={() => updateCargoStatus(ship.realId, ship.status)}
+                          className="status-badge" style={{ backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
+                          {ship.status.toUpperCase()}
+                     </div>
+                   </div>
+                   <div className="card-body">
+                     <p><strong>Item:</strong> {ship.type}</p>
+                     <p><strong>Route:</strong> {ship.origin} &rarr; {ship.destination}</p>
+                     <p><strong>Price:</strong> ₱{Number(ship.price).toLocaleString()}</p>
+                   </div>
+                 </div>
+               );
+            })}
+          </div>
         </div>
       </main>
 
-      {/* ADMIN MODAL */}
-      {isModalOpen && userRole === 'ADMIN' && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.95)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100, backdropFilter: 'blur(10px)' }}>
-          <div style={{ backgroundColor: '#0a0a0a', padding: '40px', borderRadius: '25px', border: '1px solid #22d3ee', width: '450px', boxShadow: '0 0 50px rgba(34, 211, 238, 0.1)' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '900', marginBottom: '25px', color: '#fff', fontStyle: 'italic' }}>REGISTER NEW CARGO</h2>
-            <form onSubmit={handleCloudSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label style={{ fontSize: '9px', color: '#22d3ee', fontWeight: 'bold', letterSpacing: '1px' }}>ASSIGN TO CUSTOMER (EMAIL)</label>
-                <input placeholder="customer@email.com" required style={{ padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
-              </div>
-              <input placeholder="Provider Name" required style={{ padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, provider: e.target.value})} />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input placeholder="Origin" required style={{ flex: 1, padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, origin: e.target.value})} />
-                <input placeholder="Dest." required style={{ flex: 1, padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, destination: e.target.value})} />
-              </div>
-              <input placeholder="Hardware Description (eg. Solar Kit X-1)" required style={{ padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, type: e.target.value})} />
-              <input type="number" placeholder="Total Value (PHP)" required style={{ padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, price: e.target.value})} />
-              <input type="date" style={{ padding: '12px', backgroundColor: '#000', border: '1px solid #1a1a1a', borderRadius: '10px', color: '#fff' }} onChange={e => setNewOrder({...newOrder, eta: e.target.value})} />
-              <button type="submit" style={{ backgroundColor: '#22d3ee', color: '#000', padding: '15px', borderRadius: '10px', fontWeight: '900', border: 'none', cursor: 'pointer', marginTop: '10px', letterSpacing: '1px' }}>PUSH TO COMMAND HQ</button>
-              <button type="button" onClick={() => setIsModalOpen(false)} style={{ color: '#444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>ABORT OPERATION</button>
+      {isModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>REGISTER CARGO</h3>
+            <form onSubmit={handleCloudSubmit}>
+              <input placeholder="Customer Email" required onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
+              <input placeholder="Provider" required onChange={e => setNewOrder({...newOrder, provider: e.target.value})} />
+              <input placeholder="Origin" required onChange={e => setNewOrder({...newOrder, origin: e.target.value})} />
+              <input placeholder="Destination" required onChange={e => setNewOrder({...newOrder, destination: e.target.value})} />
+              <input placeholder="Hardware Description" required onChange={e => setNewOrder({...newOrder, type: e.target.value})} />
+              <input type="number" placeholder="Value (PHP)" required onChange={e => setNewOrder({...newOrder, price: e.target.value})} />
+              <button type="submit" className="submit-btn">PUSH TO HQ</button>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="abort-btn">ABORT</button>
             </form>
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .portal-container { background-color: #050505; min-height: 100vh; color: #fff; display: flex; flex-direction: column; }
+        .sidebar { width: 100%; background-color: #0a0a0a; border-bottom: 1px solid #111; padding: 15px; }
+        .sidebar-content { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+        .back-btn { background: none; border: 1px solid #1a1a1a; color: #555; padding: 8px; border-radius: 8px; font-size: 10px; cursor: pointer; }
+        .logo-section { display: none; }
+        .nav-links { display: flex; gap: 10px; }
+        .nav-item { padding: 8px 12px; border-radius: 8px; font-size: 10px; cursor: pointer; color: #444; }
+        .nav-item.active { background: #22d3ee10; color: #22d3ee; }
+
+        .main-content { padding: 20px; width: 100%; }
+        .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .main-title { font-size: 24px; font-weight: 900; font-style: italic; }
+        .access-label { font-size: 9px; color: #444; }
+        .add-cargo-btn { background: #fff; color: #000; padding: 10px 15px; border-radius: 10px; font-weight: bold; font-size: 12px; border: none; }
+        .search-input { width: 100%; padding: 12px; background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 10px; color: #fff; margin-bottom: 20px; }
+
+        .desktop-table { display: none; }
+        .mobile-list { display: flex; flex-direction: column; gap: 15px; }
+        .mobile-card { background: #0a0a0a; border: 1px solid #1a1a1a; padding: 15px; border-radius: 15px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .card-body p { font-size: 12px; color: #888; margin: 5px 0; }
+        .card-body strong { color: #fff; }
+        .ref-id { color: #22d3ee; font-weight: 900; }
+        .status-badge { padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 900; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; padding: 20px; z-index: 100; }
+        .modal-content { background: #0a0a0a; padding: 25px; border-radius: 20px; border: 1px solid #22d3ee; width: 100%; max-width: 400px; }
+        .modal-content input { width: 100%; padding: 12px; background: #000; border: 1px solid #1a1a1a; border-radius: 8px; color: #fff; margin-bottom: 10px; }
+        .submit-btn { width: 100%; padding: 15px; background: #22d3ee; border: none; border-radius: 10px; font-weight: 900; cursor: pointer; }
+        .abort-btn { width: 100%; background: none; border: none; color: #444; margin-top: 10px; cursor: pointer; }
+
+        @media (min-width: 768px) {
+          .portal-container { flex-direction: row; }
+          .sidebar { width: 260px; height: 100vh; position: fixed; border-right: 1px solid #111; border-bottom: none; }
+          .sidebar-content { flex-direction: column; align-items: flex-start; justify-content: flex-start; height: 100%; }
+          .logo-section { display: block; margin: 30px 0; }
+          .nav-links { flex-direction: column; width: 100%; }
+          .main-content { margin-left: 260px; padding: 50px; }
+          .desktop-table { display: block; background: #0a0a0a; border-radius: 20px; border: 1px solid #1a1a1a; overflow: hidden; }
+          .mobile-list { display: none; }
+          table { width: 100%; border-collapse: collapse; }
+          th { background: #0f0f0f; padding: 20px; text-align: left; font-size: 10px; color: #444; }
+          td { padding: 20px; border-bottom: 1px solid #111; }
+          .main-title { font-size: 32px; }
+        }
+      `}</style>
     </div>
   );
 }
