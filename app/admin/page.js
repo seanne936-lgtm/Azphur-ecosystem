@@ -21,6 +21,7 @@ export default function AdminDashboard() {
   }, []);
 
   async function syncHqData() {
+    if (!supabase) return; // Protezione se il client non è inizializzato
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -28,11 +29,21 @@ export default function AdminDashboard() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
+      if (error) throw error;
+
+      if (data) {
         setShipments(data);
-        const total = data.reduce((sum, item) => sum + (Number(item.price) * (Number(item.quantity) || 0)), 0);
+        // Calcolo sicuro: se price o quantity sono nulli, usa 0 invece di crashare
+        const total = data.reduce((sum, item) => {
+          const p = Number(item.price) || 0;
+          const q = Number(item.quantity) || 0;
+          return sum + (p * q);
+        }, 0);
         setTotalRevenue(total);
       }
+    } catch (err) {
+      console.error("Link Terminal Error:", err);
+      // Non resettiamo shipments a null per evitare crash nel .map()
     } finally {
       setLoading(false);
     }
@@ -40,17 +51,25 @@ export default function AdminDashboard() {
 
   async function handleAddAsset(e) {
     e.preventDefault();
-    const { error } = await supabase.from('inventory').insert([newItem]);
-    if (!error) {
-      setNewItem({ name: '', quantity: 0, price: 0, status: 'IN STOCK' });
-      syncHqData();
+    try {
+      const { error } = await supabase.from('inventory').insert([newItem]);
+      if (!error) {
+        setNewItem({ name: '', quantity: 0, price: 0, status: 'IN STOCK' });
+        syncHqData();
+      }
+    } catch (err) {
+      console.error("Inflow Error:", err);
     }
   }
 
   async function deleteAsset(id) {
     if (!confirm("CONFIRM TERMINATION?")) return;
-    const { error } = await supabase.from('inventory').delete().eq('id', id);
-    if (!error) syncHqData();
+    try {
+      const { error } = await supabase.from('inventory').delete().eq('id', id);
+      if (!error) syncHqData();
+    } catch (err) {
+      console.error("Termination Error:", err);
+    }
   }
 
   if (!mounted) return null;
@@ -58,7 +77,7 @@ export default function AdminDashboard() {
   return (
     <div className="hq-wrapper">
       
-      {/* HEADER NAV - RIPRISTINATO DESIGN ORIGINALE */}
+      {/* HEADER NAV */}
       <nav className="hq-nav">
         <div className="nav-left">
           <Link href="/" className="exit-terminal">
@@ -89,7 +108,7 @@ export default function AdminDashboard() {
         </div>
         <div className="kpi-box cyan">
           <span className="kpi-label">ACTIVE_UNITS</span>
-          <span className="kpi-data">{shipments.length}</span>
+          <span className="kpi-data">{shipments?.length || 0}</span>
         </div>
         <div className="kpi-box">
           <span className="kpi-label">CO2_OFFSET_TONS</span>
@@ -100,7 +119,7 @@ export default function AdminDashboard() {
       {/* MAIN CONSOLE */}
       <div className="hq-console">
         
-        {/* LEFT PANEL: COMMANDS & GRID */}
+        {/* LEFT PANEL */}
         <div className="hq-panel">
           <div className="sub-card">
              <h3 className="card-title">ARCHIPELAGO_GRID_VISUALIZER</h3>
@@ -126,19 +145,19 @@ export default function AdminDashboard() {
                 onChange={(e) => setNewItem({...newItem, name: e.target.value})}
               />
               <div className="input-row">
-                <input type="number" placeholder="QTY" onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value)})}/>
-                <input type="number" placeholder="UNIT_VALUE" onChange={(e) => setNewItem({...newItem, price: parseFloat(e.target.value)})}/>
+                <input type="number" placeholder="QTY" value={newItem.quantity} onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value) || 0})}/>
+                <input type="number" step="0.01" placeholder="UNIT_VALUE" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: parseFloat(e.target.value) || 0})}/>
               </div>
               <button type="submit" className="exec-btn">EXECUTE_INFLOW</button>
             </form>
           </div>
         </div>
 
-        {/* RIGHT PANEL: LIVE FEED */}
+        {/* RIGHT PANEL */}
         <div className="hq-panel feed">
             <h3 className="card-title">LIVE_INVENTORY_DATABASE</h3>
             <div className="feed-container">
-                {shipments.map((s) => (
+                {shipments && shipments.length > 0 ? shipments.map((s) => (
                     <div key={s.id} className="feed-item">
                         <div className="item-main">
                             <span className="item-name">{s.name}</span>
@@ -146,45 +165,37 @@ export default function AdminDashboard() {
                         </div>
                         <div className="item-sub">
                             <div className="specs">
-                              <span>VOL: {s.quantity}</span> | <span>VAL: ₱{(s.price * s.quantity).toLocaleString()}</span>
-                              <div className="id-tag">REF_{s.id.slice(0,8)}</div>
+                              <span>VOL: {s.quantity}</span> | <span>VAL: ₱{((s.price || 0) * (s.quantity || 0)).toLocaleString()}</span>
+                              <div className="id-tag">REF_{s.id?.toString().slice(0,8)}</div>
                             </div>
                             <button onClick={() => deleteAsset(s.id)} className="term-btn">TERM</button>
                         </div>
                     </div>
-                ))}
+                )) : (
+                  <div style={{color: '#222', fontSize: '10px', textAlign: 'center', marginTop: '40px'}}>NO_DATA_STREAM_FOUND</div>
+                )}
             </div>
         </div>
       </div>
 
       <style jsx>{`
         .hq-wrapper { background-color: #000; color: #fff; min-height: 100vh; padding: 0 0 50px 0; font-family: 'JetBrains Mono', monospace, sans-serif; }
-        
-        /* HEADER NAV */
         .hq-nav { height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; border-bottom: 1px solid #111; background: #000; position: sticky; top: 0; z-index: 100; }
         .exit-terminal { color: #555; text-decoration: none; font-size: 10px; font-weight: bold; letter-spacing: 2px; transition: 0.3s; }
         .exit-terminal:hover { color: #06b6d4; }
         .sys-status { font-size: 10px; color: #22c55e; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
         .pulse-dot { width: 6px; height: 6px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 10px #22c55e; animation: blink 2s infinite; }
-
-        /* HERO */
         .hq-hero { padding: 80px 40px 40px; max-width: 1400px; margin: 0 auto; }
         .hero-tag { font-size: 10px; color: #06b6d4; letter-spacing: 5px; margin-bottom: 10px; }
         .hero-title { font-size: 48px; font-weight: 900; letter-spacing: -2px; font-style: italic; margin: 0; }
         .cyan-cursor { color: #06b6d4; animation: blink 1s infinite; }
-
-        /* KPI LAYER */
         .kpi-layer { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2px; background: #111; max-width: 1400px; margin: 0 auto 40px; border: 1px solid #111; }
         .kpi-box { background: #000; padding: 30px; display: flex; flex-direction: column; }
         .kpi-label { font-size: 9px; color: #444; letter-spacing: 2px; margin-bottom: 10px; }
         .kpi-data { font-size: 24px; font-weight: 900; }
         .kpi-box.cyan .kpi-data { color: #06b6d4; }
-
-        /* CONSOLE GRID */
         .hq-console { display: grid; grid-template-columns: 1fr; gap: 40px; max-width: 1400px; margin: 0 auto; padding: 0 40px; }
         .card-title { font-size: 11px; color: #333; margin-bottom: 25px; letter-spacing: 2px; }
-
-        /* PANELS */
         .sub-card { background: #050505; border: 1px solid #111; padding: 30px; border-radius: 4px; margin-bottom: 20px; }
         .map-viz { height: 300px; background: radial-gradient(circle, #08334411 0%, #050505 100%); display: flex; justify-content: center; align-items: center; position: relative; }
         .viz-placeholder { width: 200px; height: 300px; position: relative; }
@@ -194,16 +205,12 @@ export default function AdminDashboard() {
         .n3 { bottom: 20%; left: 40%; background: #eab308; box-shadow: 0 0 15px #eab308; }
         .node .label { position: absolute; left: 15px; top: -5px; font-size: 8px; font-weight: 900; color: #444; }
         .svg-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.2; }
-
-        /* FORM */
         .hq-form { display: flex; flex-direction: column; gap: 10px; }
         .hq-form input { background: #000; border: 1px solid #111; padding: 15px; color: #fff; font-size: 11px; outline: none; }
         .hq-form input:focus { border-color: #06b6d4; }
         .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .exec-btn { background: #06b6d4; color: #000; border: none; padding: 18px; font-weight: 900; font-size: 11px; cursor: pointer; transition: 0.3s; margin-top: 10px; }
         .exec-btn:hover { background: #fff; }
-
-        /* DATABASE FEED */
         .feed { background: #050505; border: 1px solid #111; padding: 30px; border-radius: 4px; }
         .feed-container { max-height: 800px; overflow-y: auto; padding-right: 15px; }
         .feed-item { padding: 20px 0; border-bottom: 1px solid #111; transition: 0.3s; }
@@ -216,22 +223,9 @@ export default function AdminDashboard() {
         .id-tag { font-size: 8px; color: #111; margin-top: 5px; }
         .term-btn { background: none; border: 1px solid #300; color: #400; padding: 4px 10px; font-size: 9px; font-weight: 900; cursor: pointer; }
         .term-btn:hover { border-color: #f00; color: #f00; }
-
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-
-        @media (min-width: 1024px) {
-          .hq-console { grid-template-columns: 1fr 1fr; }
-          .hero-title { font-size: 64px; }
-          .kpi-layer { grid-template-columns: repeat(3, 1fr); }
-        }
-
-        @media (max-width: 768px) {
-          .hq-nav { padding: 0 20px; }
-          .hq-hero { padding: 40px 20px; }
-          .hero-title { font-size: 32px; }
-          .hq-console { padding: 0 20px; }
-        }
-
+        @media (min-width: 1024px) { .hq-console { grid-template-columns: 1fr 1fr; } .hero-title { font-size: 64px; } .kpi-layer { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 768px) { .hq-nav { padding: 0 20px; } .hq-hero { padding: 40px 20px; } .hero-title { font-size: 32px; } .hq-console { padding: 0 20px; } }
         ::-webkit-scrollbar { width: 3px; }
         ::-webkit-scrollbar-thumb { background: #111; }
       `}</style>

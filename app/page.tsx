@@ -31,27 +31,10 @@ const TopTicker = () => {
         <span className="hidden-mobile">STATUS: ARCHIPELAGO GRID ACTIVE</span>
       </div>
       <style jsx>{`
-        .ticker-container {
-          background-color: rgba(34, 211, 238, 0.05);
-          border-bottom: 1px solid #111;
-          padding: 10px 20px;
-          overflow: hidden;
-        }
-        .ticker-content {
-          display: flex;
-          justify-content: center;
-          gap: 15px;
-          font-size: 9px;
-          font-weight: 900;
-          color: #22d3ee;
-          letter-spacing: 1px;
-          white-space: nowrap;
-        }
-        .separator { color: #111; }
-        @media (max-width: 600px) {
-          .hidden-mobile { display: none; }
-          .ticker-content { font-size: 8px; gap: 8px; }
-        }
+        .ticker-container { background: #080808; border-bottom: 1px solid #111; padding: 10px 20px; }
+        .ticker-content { display: flex; justify-content: center; gap: 20px; font-size: 9px; font-weight: 900; color: #22d3ee; letter-spacing: 1px; }
+        .separator { color: #1a1a1a; }
+        @media (max-width: 600px) { .hidden-mobile { display: none; } }
       `}</style>
     </div>
   );
@@ -72,148 +55,157 @@ export default function Home() {
   const isAuthorized = staffCode.trim().toUpperCase() === 'AZ-001';
 
   return (
-    <div style={{ backgroundColor: '#020202', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif' }}>
-      
+    <div className="main-wrapper">
       <TopTicker />
 
-      {/* NAV SECTION */}
-      <nav style={{ padding: '60px 20px 40px', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '32px', fontWeight: '900', fontStyle: 'italic', letterSpacing: '8px', margin: 0 }}>AZPHUR</h1>
-          <div style={{ height: '1px', width: '40px', backgroundColor: '#22d3ee', margin: '15px auto' }}></div>
-          <p style={{ fontSize: '10px', color: '#22d3ee', fontWeight: 'bold', letterSpacing: '4px', textTransform: 'uppercase' }}>
-            Shaping Sustainable Possibilities
-          </p>
+      {/* HEADER LOGO */}
+      <nav className="main-nav">
+          <h1 className="logo-text">AZPHUR</h1>
+          <div className="accent-line"></div>
+          <p className="tagline">Shaping Sustainable Possibilities</p>
       </nav>
 
       {/* HERO SECTION */}
-      <div style={{ textAlign: 'center', padding: '40px 20px 80px' }}>
-        <h2 style={{ fontSize: '12px', color: '#333', fontWeight: 'bold', letterSpacing: '8px', marginBottom: '20px' }}>PHILIPPINES 2026</h2>
-        <h3 className="hero-text">
+      <section className="hero-section">
+        <h2 className="year-tag">PHILIPPINES 2026</h2>
+        <h3 className="hero-main">
           DECENTRALIZING <br />
-          <span style={{ color: '#22d3ee' }}>THE GRID.</span>
+          <span className="cyan-text">THE GRID.</span>
         </h3>
         {inventoryCount !== null && (
-          <div className="inventory-badge">LIVE ASSETS: {inventoryCount} UNITS</div>
+          <div className="live-badge">NETWORK_NODES: {inventoryCount} UNITS</div>
         )}
-      </div>
+      </section>
 
-      {/* I QUADRATONI - GRID RE-ENGINEERED */}
-      <div className="main-grid">
-        <Link href="/login" className="mega-card">
-          <div className="card-inner">
-            <span className="phase-tag">PHASE 01 // LOGISTICS</span>
-            <h4 className="card-title">S2B PORTAL</h4>
-            <p className="card-desc">Global procurement gateway. Individual asset tracking and fulfillment.</p>
-            <div className="card-footer">OPERATOR ACCESS →</div>
+      {/* GRID DEI QUADRATONI - REALI E DEFINITI */}
+      <div className="bento-grid">
+        <Link href="/login" className="card s2b">
+          <div className="card-content">
+            <span className="label">PHASE_01 // LOGISTICS</span>
+            <h4 className="title">S2B_PORTAL</h4>
+            <p className="desc">Global procurement gateway. Asset tracking and fulfillment infrastructure.</p>
+            <div className="footer">ACCESS SYSTEM →</div>
           </div>
         </Link>
 
-        <Link href="/b2b" className="mega-card">
-          <div className="card-inner">
-            <span className="phase-tag">PHASE 02 // ENTERPRISE</span>
-            <h4 className="card-title">B2B CONSOLE</h4>
-            <p className="card-desc">Industrial-scale PPA monitoring. Infrastructure asset management.</p>
-            <div className="card-footer">NETWORK OVERVIEW →</div>
+        <Link href="/b2b" className="card b2b">
+          <div className="card-content">
+            <span className="label">PHASE_02 // ENTERPRISE</span>
+            <h4 className="title">B2B_CONSOLE</h4>
+            <p className="desc">Industrial-scale PPA monitoring. High-yield asset management for partners.</p>
+            <div className="footer">VIEW NETWORK →</div>
           </div>
         </Link>
 
-        <Link href="/b2c" className="mega-card highlight">
-          <div className="card-inner">
-            <span className="phase-tag" style={{ color: 'rgba(0,0,0,0.4)' }}>PHASE 03 // RETAIL</span>
-            <h4 className="card-title">TITAN STORE</h4>
-            <p className="card-desc">Direct-to-consumer ecosystem. Advanced solar kits for the tropics.</p>
-            <div className="card-footer">EXPLORE SERIES →</div>
+        <Link href="/b2c" className="card titan">
+          <div className="card-content">
+            <span className="label dark">PHASE_03 // RETAIL</span>
+            <h4 className="title">TITAN_STORE</h4>
+            <p className="desc">Direct-to-consumer ecosystem. Advanced solar hardware for the tropics.</p>
+            <div className="footer">EXPLORE SERIES →</div>
           </div>
         </Link>
       </div>
 
       {/* COMMAND TERMINAL */}
-      <div className="terminal-section">
-        <div className={`terminal-box ${isAuthorized ? 'unlocked' : ''}`}>
-          <div className="terminal-info">
-            <h5 className="terminal-title">COMMAND TERMINAL</h5>
-            <p className="terminal-status">{isAuthorized ? "ENCRYPTED LINK ACTIVE" : "AUTHENTICATION REQUIRED"}</p>
+      <section className="terminal-area">
+        <div className={`terminal-card ${isAuthorized ? 'unlocked' : ''}`}>
+          <div className="terminal-text">
+            <h5>COMMAND_TERMINAL</h5>
+            <p>{isAuthorized ? "LINK_ENCRYPTED_AND_READY" : "SECURE_AUTH_REQUIRED"}</p>
           </div>
-          
-          <div className="terminal-actions">
+          <div className="terminal-form">
             <input 
-              type="text" 
+              type="password" 
               placeholder="CREDENTIALS" 
               value={staffCode}
               onChange={(e) => setStaffCode(e.target.value)}
-              className="terminal-input"
             />
             {isAuthorized ? (
-              <Link href="/admin" className="btn-access active">ENTER HQ</Link>
+              <Link href="/admin" className="auth-btn active">ENTER_HQ</Link>
             ) : (
-              <div className="btn-access">LOCKED</div>
+              <div className="auth-btn">LOCKED</div>
             )}
           </div>
         </div>
-      </div>
+      </section>
 
       <style jsx>{`
-        .hero-text { font-size: clamp(40px, 8vw, 85px); font-weight: 900; font-style: italic; line-height: 0.9; letter-spacing: -2px; margin: 0; }
-        .inventory-badge { display: inline-block; margin-top: 30px; padding: 8px 20px; background: #111; border: 1px solid #22d3ee; color: #22d3ee; font-size: 10px; font-weight: 900; border-radius: 5px; }
+        .main-wrapper { background-color: #020202; min-height: 100vh; color: #fff; font-family: 'Inter', sans-serif; }
+        
+        /* NAV & HERO */
+        .main-nav { padding: 80px 20px 40px; text-align: center; }
+        .logo-text { font-size: 32px; font-weight: 900; font-style: italic; letter-spacing: 12px; margin: 0; }
+        .accent-line { height: 1px; width: 40px; background: #22d3ee; margin: 20px auto; }
+        .tagline { font-size: 10px; color: #22d3ee; letter-spacing: 4px; text-transform: uppercase; font-weight: 800; }
+        
+        .hero-section { text-align: center; padding: 40px 20px 80px; }
+        .year-tag { font-size: 12px; color: #1a1a1a; letter-spacing: 8px; margin-bottom: 20px; font-weight: 900; }
+        .hero-main { font-size: clamp(40px, 10vw, 90px); font-weight: 900; font-style: italic; line-height: 0.85; letter-spacing: -3px; margin: 0; }
+        .cyan-text { color: #22d3ee; }
+        .live-badge { display: inline-block; margin-top: 40px; padding: 10px 25px; background: #080808; border: 1px solid #111; color: #22d3ee; font-size: 10px; font-weight: 900; border-radius: 4px; letter-spacing: 1px; }
 
-        /* GRID DEI QUADRATONI */
-        .main-grid { 
+        /* IL GRID DEI BLOCCHETTONI */
+        .bento-grid { 
           display: grid; 
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
-          gap: 2px; /* Margine sottile tra i blocchi */
-          padding: 0 20px; 
+          grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
           max-width: 1400px; 
           margin: 0 auto; 
-        }
-
-        .mega-card { 
-          aspect-ratio: 1 / 1; /* Forza la forma quadrata */
-          background-color: #050505; 
+          background: #111; /* Crea la linea di divisione tra i blocchi */
+          gap: 1px;
           border: 1px solid #111;
-          text-decoration: none;
-          color: #fff;
-          display: flex;
-          transition: transform 0.3s ease, border-color 0.3s ease;
         }
 
-        .mega-card.highlight { background-color: #22d3ee; color: #000; border: none; }
-        .mega-card:hover { border-color: #22d3ee; z-index: 10; transform: scale(1.02); }
+        .card { 
+          aspect-ratio: 1 / 1; 
+          background: #050505; 
+          text-decoration: none !important; /* Rimuove sottolineatura */
+          color: #fff; 
+          display: flex; 
+          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+        }
 
-        .card-inner { padding: 40px; display: flex; flex-direction: column; justify-content: space-between; width: 100%; }
-        .phase-tag { font-size: 10px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; }
-        .card-title { font-size: clamp(24px, 4vw, 36px); font-weight: 900; margin: 20px 0; letter-spacing: -1px; }
-        .card-desc { font-size: 14px; line-height: 1.6; color: #666; max-width: 250px; }
-        .mega-card.highlight .card-desc { color: rgba(0,0,0,0.7); }
-        .card-footer { font-size: 11px; font-weight: 900; letter-spacing: 1px; margin-top: auto; }
+        .card:hover { background: #080808; }
+        .card.titan { background: #22d3ee; color: #000; }
+        .card.titan:hover { background: #fff; }
 
-        /* TERMINAL SECTION */
-        .terminal-section { max-width: 1400px; margin: 80px auto; padding: 0 20px 100px; }
-        .terminal-box { 
-          background-color: #050505; 
+        .card-content { padding: 50px; display: flex; flex-direction: column; width: 100%; }
+        .label { font-size: 10px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; }
+        .label.dark { color: rgba(0,0,0,0.4); }
+        .title { font-size: 32px; font-weight: 900; margin: 25px 0 15px; letter-spacing: -1px; text-decoration: none !important; }
+        .desc { font-size: 14px; color: #444; line-height: 1.6; max-width: 280px; text-decoration: none !important; }
+        .card.titan .desc { color: rgba(0,0,0,0.6); }
+        .footer { margin-top: auto; font-size: 11px; font-weight: 900; letter-spacing: 2px; }
+
+        /* TERMINAL */
+        .terminal-area { max-width: 1400px; margin: 100px auto; padding: 0 20px 100px; }
+        .terminal-card { 
+          background: #050505; 
           border: 1px solid #111; 
-          border-radius: 40px; 
-          padding: 40px;
-          display: flex;
-          justify-content: space-between;
+          padding: 50px; 
+          border-radius: 4px;
+          display: flex; 
+          justify-content: space-between; 
           align-items: center;
-          transition: all 0.5s ease;
         }
-        .terminal-box.unlocked { border-color: #22d3ee; box-shadow: 0 0 40px rgba(34, 211, 238, 0.1); }
+        .terminal-card.unlocked { border-color: #22d3ee; }
+        .terminal-text h5 { font-size: 18px; margin: 0; letter-spacing: 2px; }
+        .terminal-text p { font-size: 9px; color: #222; margin-top: 10px; letter-spacing: 3px; font-weight: 900; }
+        .unlocked .terminal-text p { color: #22d3ee; }
         
-        .terminal-title { font-size: 20px; font-weight: 900; margin: 0; }
-        .terminal-status { font-size: 10px; color: #333; margin-top: 8px; letter-spacing: 2px; }
-        .unlocked .terminal-status { color: #22d3ee; font-weight: bold; }
+        .terminal-form { display: flex; gap: 15px; }
+        .terminal-form input { background: #000; border: 1px solid #111; padding: 15px; color: #fff; font-family: monospace; outline: none; width: 180px; }
+        .auth-btn { background: #111; color: #222; padding: 15px 30px; font-size: 11px; font-weight: 900; text-decoration: none; cursor: default; }
+        .auth-btn.active { background: #22d3ee; color: #000; cursor: pointer; }
 
-        .terminal-actions { display: flex; gap: 20px; align-items: center; }
-        .terminal-input { background: #000; border: 1px solid #1a1a1a; padding: 15px; border-radius: 12px; color: #fff; width: 150px; text-align: center; font-size: 12px; outline: none; }
-        .btn-access { padding: 15px 30px; background: #111; color: #333; border-radius: 12px; font-weight: 900; font-size: 12px; text-decoration: none; }
-        .btn-access.active { background: #22d3ee; color: #000; cursor: pointer; }
-
-        /* MOBILE FIXES */
+        /* MOBILE */
         @media (max-width: 768px) {
-          .terminal-box { flex-direction: column; text-align: center; gap: 30px; }
-          .mega-card { aspect-ratio: auto; min-height: 350px; } /* Mantiene l'altezza ma non forza il quadrato se lo schermo è troppo stretto */
-          .main-grid { gap: 20px; }
+          .bento-grid { grid-template-columns: 1fr; }
+          .card { aspect-ratio: 1.2 / 1; }
+          .terminal-card { flex-direction: column; text-align: center; gap: 30px; }
+          .card-content { padding: 30px; }
         }
       `}</style>
     </div>
