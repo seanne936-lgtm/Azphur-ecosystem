@@ -19,7 +19,7 @@ const TopTicker = () => {
     return () => clearInterval(interval);
   }, []);
 
-  if (!mounted) return <div style={{ height: '35px', backgroundColor: '#020202' }} />;
+  if (!mounted) return <div style={{ height: '35px', backgroundColor: '#000' }} />;
 
   return (
     <div className="ticker-container">
@@ -46,9 +46,7 @@ export default function Home() {
 
   useEffect(() => {
     async function getCount() {
-      const { data, error, count } = await supabase
-        .from('inventory')
-        .select('*', { count: 'exact', head: true });
+      const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
       if (count !== null) setInventoryCount(count);
     }
     getCount();
@@ -77,7 +75,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* BENTO GRID - NASA/APPLE MODERN DESIGN */}
+      {/* BENTO GRID - NASA/APPLE DESIGN */}
       <div className="bento-grid">
         
         <Link href="/login" className="quadratone">
@@ -132,7 +130,12 @@ export default function Home() {
       </section>
 
       <style jsx>{`
-        .main-wrapper { background-color: #000; min-height: 100vh; color: #fff; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        /* KILL UNDERLINES EVERYWHERE */
+        :global(a), :global(a:hover), :global(a:visited) { 
+          text-decoration: none !important; 
+        }
+        
+        .main-wrapper { background-color: #000; min-height: 100vh; color: #fff; font-family: 'Inter', sans-serif; }
         
         .main-nav { padding: 80px 20px 40px; text-align: center; }
         .logo-text { font-size: 32px; font-weight: 900; font-style: italic; letter-spacing: 12px; margin: 0; }
@@ -140,42 +143,45 @@ export default function Home() {
         .tagline { font-size: 10px; color: #22d3ee; letter-spacing: 4px; text-transform: uppercase; font-weight: 800; }
         
         .hero-section { text-align: center; padding: 40px 20px 80px; }
-        .year-tag { font-size: 12px; color: #222; letter-spacing: 8px; margin-bottom: 20px; font-weight: 900; }
+        .year-tag { font-size: 12px; color: #111; letter-spacing: 8px; margin-bottom: 20px; font-weight: 900; }
         .hero-main { font-size: clamp(40px, 10vw, 90px); font-weight: 900; font-style: italic; line-height: 0.85; letter-spacing: -3px; margin: 0; }
         .cyan-text { color: #22d3ee; }
         .live-badge { display: inline-block; margin-top: 40px; padding: 10px 25px; background: rgba(34, 211, 238, 0.05); border: 1px solid rgba(34, 211, 238, 0.2); color: #22d3ee; font-size: 10px; font-weight: 900; border-radius: 100px; }
 
-        /* BENTO GRID RE-DESIGN */
         .bento-grid { 
           display: grid; 
-          grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); 
+          grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
           max-width: 1300px; 
           margin: 0 auto; 
-          gap: 20px;
-          padding: 0 20px;
+          gap: 25px;
+          padding: 0 25px;
         }
 
+        /* IL QUADRATONE */
         .quadratone { 
           aspect-ratio: 1 / 1; 
-          background: #050505;
-          border: 1px solid #111; /* Contorno scuro base */
-          border-radius: 40px; /* Angoli smussati stile Apple */
-          text-decoration: none !important; /* Rimuove sottolineature globali */
+          background: #050505; 
+          border: 1px solid #151515;
+          border-radius: 45px;
           display: flex; 
           transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
           position: relative;
-          overflow: hidden;
+          text-decoration: none !important;
+        }
+
+        /* RIMOZIONE FORZATA DI SOTTOLINEATURE SU TUTTI I FIGLI */
+        .quadratone * {
+          text-decoration: none !important;
         }
 
         .quadratone:hover {
-          border-color: #22d3ee; /* Contorno Verde Acqua al passaggio */
-          transform: translateY(-8px);
-          box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6), 0 0 15px rgba(34, 211, 238, 0.1);
+          border-color: #22d3ee; /* Bordo verde acqua al passaggio */
+          transform: translateY(-5px);
+          background: #080808;
         }
 
         .quadratone.highlight {
-          border-color: #22d3ee; /* Sempre verde acqua per Titan Store */
-          background: rgba(34, 211, 238, 0.03);
+          border-color: rgba(34, 211, 238, 0.3);
         }
 
         .card-content { 
@@ -183,47 +189,15 @@ export default function Home() {
           display: flex; 
           flex-direction: column; 
           width: 100%; 
-          text-decoration: none !important;
         }
 
-        .phase-label { 
-          font-size: 11px; 
-          font-weight: 900; 
-          color: #22d3ee; 
-          letter-spacing: 2px; 
-          text-decoration: none !important;
-        }
+        .phase-label { font-size: 10px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; margin-bottom: 25px; }
+        .card-title { font-size: 36px; font-weight: 900; margin: 0 0 15px 0; color: #fff; letter-spacing: -1px; }
+        .card-desc { font-size: 14px; color: #444; line-height: 1.6; max-width: 280px; }
+        .card-footer { margin-top: auto; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #22d3ee; }
 
-        .card-title { 
-          font-size: 38px; 
-          font-weight: 900; 
-          margin: 25px 0 15px; 
-          color: #fff;
-          letter-spacing: -1px;
-          text-decoration: none !important;
-        }
-
-        .card-desc { 
-          font-size: 15px; 
-          color: #555; 
-          line-height: 1.6; 
-          max-width: 280px;
-          text-decoration: none !important;
-        }
-
-        .quadratone:hover .card-desc { color: #888; }
-
-        .card-footer { 
-          margin-top: auto; 
-          font-size: 12px; 
-          font-weight: 900; 
-          color: #22d3ee; 
-          letter-spacing: 2px;
-          text-decoration: none !important;
-        }
-
-        /* TERMINAL */
-        .terminal-area { max-width: 1300px; margin: 100px auto; padding: 0 20px 100px; }
+        /* TERMINAL AREA */
+        .terminal-area { max-width: 1300px; margin: 100px auto; padding: 0 25px 100px; }
         .terminal-card { 
           background: #050505; 
           border: 1px solid #111; 
@@ -234,8 +208,8 @@ export default function Home() {
           align-items: center;
         }
         .terminal-card.unlocked { border-color: #22d3ee; }
-        .terminal-text h5 { font-size: 18px; margin: 0; font-weight: 900; letter-spacing: 1px; }
-        .terminal-text p { font-size: 9px; color: #222; margin-top: 8px; letter-spacing: 2px; font-weight: 900; }
+        .terminal-text h5 { font-size: 18px; margin: 0; letter-spacing: 1px; font-weight: 900; }
+        .terminal-text p { font-size: 9px; color: #222; margin-top: 10px; letter-spacing: 3px; font-weight: 900; }
         .unlocked .terminal-text p { color: #22d3ee; }
         
         .terminal-form { display: flex; gap: 15px; }
@@ -249,25 +223,22 @@ export default function Home() {
           outline: none; 
           width: 180px; 
         }
-        .terminal-form input:focus { border-color: #22d3ee; }
-
-        .auth-link, .auth-btn { 
-          background: #111; 
-          color: #222; 
+        .auth-link { 
+          background: #22d3ee; 
+          color: #000; 
           padding: 18px 30px; 
           border-radius: 15px; 
           font-size: 11px; 
           font-weight: 900; 
-          text-decoration: none !important; 
           display: flex;
           align-items: center;
         }
-        .auth-link { background: #22d3ee; color: #000; cursor: pointer; }
+        .auth-btn { background: #111; color: #222; padding: 18px 30px; border-radius: 15px; font-size: 11px; font-weight: 900; }
 
         @media (max-width: 768px) {
           .bento-grid { grid-template-columns: 1fr; }
           .quadratone { aspect-ratio: 1.1 / 1; border-radius: 30px; }
-          .terminal-card { flex-direction: column; text-align: center; gap: 30px; padding: 40px; border-radius: 30px; }
+          .terminal-card { flex-direction: column; text-align: center; gap: 30px; padding: 40px; }
           .terminal-form { flex-direction: column; width: 100%; }
           .terminal-form input, .auth-link, .auth-btn { width: 100%; justify-content: center; }
         }
