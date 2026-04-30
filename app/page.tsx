@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 
 const TopTicker = () => {
   const [stats, setStats] = useState({ co2: 14200, mw: 842.15 });
@@ -20,37 +19,38 @@ const TopTicker = () => {
     return () => clearInterval(interval);
   }, []);
 
-  if (!mounted) {
-    return <div style={{ backgroundColor: 'rgba(34, 211, 238, 0.06)', borderBottom: '1px solid rgba(34, 211, 238, 0.12)', padding: '10px', minHeight: '35px' }} />;
-  }
+  if (!mounted) return <div style={{ height: '35px', backgroundColor: '#020202' }} />;
 
   return (
     <div className="ticker-container">
-      <span>TOTAL CO2 REDUCTION: {stats.co2.toLocaleString('en-US')} TONS</span>
-      <span>NETWORK CAPACITY: {stats.mw.toFixed(2)} MW</span>
-      <span className="hidden-mobile">STATUS: ARCHIPELAGO GRID ACTIVE</span>
+      <div className="ticker-content">
+        <span>TOTAL CO2 REDUCTION: {stats.co2.toLocaleString()} TONS</span>
+        <span className="separator">|</span>
+        <span>NETWORK CAPACITY: {stats.mw.toFixed(2)} MW</span>
+        <span className="separator hidden-mobile">|</span>
+        <span className="hidden-mobile">STATUS: ARCHIPELAGO GRID ACTIVE</span>
+      </div>
       <style jsx>{`
         .ticker-container {
-          background-color: rgba(34, 211, 238, 0.06);
-          border-bottom: 1px solid rgba(34, 211, 238, 0.12);
-          padding: 10px;
+          background-color: rgba(34, 211, 238, 0.05);
+          border-bottom: 1px solid #111;
+          padding: 10px 20px;
+          overflow: hidden;
+        }
+        .ticker-content {
           display: flex;
           justify-content: center;
-          gap: 20px;
+          gap: 15px;
           font-size: 9px;
-          font-weight: bold;
+          font-weight: 900;
           color: #22d3ee;
           letter-spacing: 1px;
-          min-height: 35px;
-          text-align: center;
-          flex-wrap: wrap;
+          white-space: nowrap;
         }
-        @media (max-width: 640px) {
+        .separator { color: #111; }
+        @media (max-width: 600px) {
           .hidden-mobile { display: none; }
-          .ticker-container { gap: 10px; flex-direction: column; }
-        }
-        @media (min-width: 768px) {
-          .ticker-container { font-size: 10px; gap: 40px; flex-direction: row; }
+          .ticker-content { font-size: 8px; gap: 8px; }
         }
       `}</style>
     </div>
@@ -62,142 +62,158 @@ export default function Home() {
   const [staffCode, setStaffCode] = useState("");
 
   useEffect(() => {
-    async function initializeHome() {
-      const { data: { session } } = await supabase.auth.getSession();
-      const { count, error } = await supabase
-        .from('inventory')
-        .select('*', { count: 'exact', head: true });
-      if (!error && count !== null) setInventoryCount(count);
+    async function getCount() {
+      const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
+      if (count !== null) setInventoryCount(count);
     }
-    initializeHome();
+    getCount();
   }, []);
 
   const isAuthorized = staffCode.trim().toUpperCase() === 'AZ-001';
 
   return (
-    <div style={{ backgroundColor: '#020202', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif', overflowX: 'hidden' }}>
+    <div style={{ backgroundColor: '#020202', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif' }}>
       
       <TopTicker />
 
-      <nav style={{ padding: '40px 20px', display: 'flex', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: '900', fontStyle: 'italic', letterSpacing: '4px', margin: 0 }}>AZPHUR</h1>
-          <p style={{ fontSize: '9px', color: '#22d3ee', fontWeight: 'bold', letterSpacing: '2px', marginTop: '5px', textTransform: 'uppercase' }}>
+      {/* NAV SECTION */}
+      <nav style={{ padding: '60px 20px 40px', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '32px', fontWeight: '900', fontStyle: 'italic', letterSpacing: '8px', margin: 0 }}>AZPHUR</h1>
+          <div style={{ height: '1px', width: '40px', backgroundColor: '#22d3ee', margin: '15px auto' }}></div>
+          <p style={{ fontSize: '10px', color: '#22d3ee', fontWeight: 'bold', letterSpacing: '4px', textTransform: 'uppercase' }}>
             Shaping Sustainable Possibilities
           </p>
-        </div>
       </nav>
 
-      <div style={{ textAlign: 'center', padding: '20px 20px 40px' }}>
-        <h2 style={{ fontSize: '10px', color: '#22d3ee', fontWeight: 'bold', letterSpacing: '5px', marginBottom: '20px' }}>PHILIPPINES 2026</h2>
-        <h3 className="hero-title">
+      {/* HERO SECTION */}
+      <div style={{ textAlign: 'center', padding: '40px 20px 80px' }}>
+        <h2 style={{ fontSize: '12px', color: '#333', fontWeight: 'bold', letterSpacing: '8px', marginBottom: '20px' }}>PHILIPPINES 2026</h2>
+        <h3 className="hero-text">
           DECENTRALIZING <br />
           <span style={{ color: '#22d3ee' }}>THE GRID.</span>
         </h3>
-        <p style={{ color: '#888', maxWidth: '600px', margin: '30px auto', fontSize: '15px', lineHeight: '1.6', padding: '0 10px' }}>
-          Leading the archipelago's energy revolution through Tier-1 N-Type solar technology. 
-          {inventoryCount !== null && (
-            <span style={{ display: 'block', marginTop: '10px', color: '#22d3ee', fontWeight: 'bold' }}>
-              CURRENT LIVE ASSETS IN STOCK: {inventoryCount}
-            </span>
-          )}
-        </p>
+        {inventoryCount !== null && (
+          <div className="inventory-badge">LIVE ASSETS: {inventoryCount} UNITS</div>
+        )}
       </div>
 
-      <div className="cert-bar">
-        {['TIER-1 RATED', 'ISO 9001', 'DENR COMPLIANT', '25-YEAR WARRANTY'].map((text) => (
-          <span key={text} style={{ fontSize: '8px', color: '#444', letterSpacing: '1px', fontWeight: 'bold' }}>{text}</span>
-        ))}
-      </div>
-
-      <div className="cards-grid">
-        <Link href="/login" className="card s2b">
-          <div>
-            <span className="card-phase">PHASE 01: SUPPLY CHAIN</span>
+      {/* I QUADRATONI - GRID RE-ENGINEERED */}
+      <div className="main-grid">
+        <Link href="/login" className="mega-card">
+          <div className="card-inner">
+            <span className="phase-tag">PHASE 01 // LOGISTICS</span>
             <h4 className="card-title">S2B PORTAL</h4>
-            <p className="card-text">Global procurement gateway. Individual customer tracking.</p>
+            <p className="card-desc">Global procurement gateway. Individual asset tracking and fulfillment.</p>
+            <div className="card-footer">OPERATOR ACCESS →</div>
           </div>
-          <div className="card-footer">CUSTOMER LOGIN &rarr;</div>
         </Link>
 
-        <Link href="/b2b" className="card b2b">
-          <div>
-            <span className="card-phase">PHASE 02: ENTERPRISE</span>
+        <Link href="/b2b" className="mega-card">
+          <div className="card-inner">
+            <span className="phase-tag">PHASE 02 // ENTERPRISE</span>
             <h4 className="card-title">B2B CONSOLE</h4>
-            <p className="card-text">Industrial-scale PPA monitoring and asset management.</p>
+            <p className="card-desc">Industrial-scale PPA monitoring. Infrastructure asset management.</p>
+            <div className="card-footer">NETWORK OVERVIEW →</div>
           </div>
-          <div className="card-footer">MANAGE ASSETS &rarr;</div>
         </Link>
 
-        <Link href="/b2c" className="card b2c">
-          <div>
-            <span className="card-phase" style={{ color: 'rgba(0,0,0,0.5)' }}>PHASE 03: HOUSEHOLD</span>
+        <Link href="/b2c" className="mega-card highlight">
+          <div className="card-inner">
+            <span className="phase-tag" style={{ color: 'rgba(0,0,0,0.4)' }}>PHASE 03 // RETAIL</span>
             <h4 className="card-title">TITAN STORE</h4>
-            <p className="card-text" style={{ color: 'rgba(0,0,0,0.6)' }}>Direct-to-consumer ecosystem. Kits for tropical climate.</p>
+            <p className="card-desc">Direct-to-consumer ecosystem. Advanced solar kits for the tropics.</p>
+            <div className="card-footer">EXPLORE SERIES →</div>
           </div>
-          <div className="card-footer">SHOP ECOSYSTEM &rarr;</div>
         </Link>
       </div>
 
-      <div style={{ maxWidth: '1300px', margin: '60px auto', padding: '0 20px 100px' }}>
-        <div className="command-terminal" style={{ 
-          border: isAuthorized ? '1px solid #22d3ee' : '1px solid #111', 
-          boxShadow: isAuthorized ? '0 0 30px rgba(34, 211, 238, 0.15)' : 'none'
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <h5 style={{ fontWeight: '900', fontSize: '18px', margin: 0 }}>HQ COMMAND TERMINAL</h5>
-            <p style={{ color: isAuthorized ? '#22d3ee' : '#333', fontSize: '10px', marginTop: '5px', fontWeight: isAuthorized ? 'bold' : 'normal', textTransform: 'uppercase', letterSpacing: '1px' }}>
-              {isAuthorized ? "IDENTITY VERIFIED: ACCESS GRANTED" : "Restricted: Enter Staff Credentials"}
-            </p>
+      {/* COMMAND TERMINAL */}
+      <div className="terminal-section">
+        <div className={`terminal-box ${isAuthorized ? 'unlocked' : ''}`}>
+          <div className="terminal-info">
+            <h5 className="terminal-title">COMMAND TERMINAL</h5>
+            <p className="terminal-status">{isAuthorized ? "ENCRYPTED LINK ACTIVE" : "AUTHENTICATION REQUIRED"}</p>
           </div>
-
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexDirection: 'column' }}>
+          
+          <div className="terminal-actions">
             <input 
               type="text" 
-              placeholder="STAFF ID" 
+              placeholder="CREDENTIALS" 
               value={staffCode}
               onChange={(e) => setStaffCode(e.target.value)}
-              className="staff-input"
+              className="terminal-input"
             />
-
             {isAuthorized ? (
-              <Link href="/admin" className="unlock-btn">UNLOCKED: GO TO HQ &rarr;</Link>
+              <Link href="/admin" className="btn-access active">ENTER HQ</Link>
             ) : (
-              <div className="lock-btn">LOCKED</div>
+              <div className="btn-access">LOCKED</div>
             )}
           </div>
         </div>
       </div>
-      
-      <style jsx>{`
-        .hero-title { font-weight: 900; font-style: italic; margin: 0; letter-spacing: -1px; line-height: 1.1; font-size: 42px; }
-        .cert-bar { display: flex; justify-content: center; gap: 15px; padding: 20px; border-top: 1px solid #111; border-bottom: 1px solid #111; background-color: rgba(255,255,255,0.01); margin-bottom: 40px; flex-wrap: wrap; }
-        .cards-grid { display: flex; flex-direction: column; gap: 20px; padding: 0 20px; max-width: 1400px; margin: 0 auto; }
-        .card { border-radius: 30px; padding: 30px; transition: all 0.3s ease; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; min-height: 280px; }
-        .s2b, .b2b { background-color: #0a0a0a; border: 1px solid #1a1a1a; color: #fff; }
-        .b2c { background-color: #22d3ee; color: #000; border: none; }
-        .card-phase { font-size: 9px; font-weight: bold; color: #22d3ee; }
-        .card-title { font-size: 28px; font-weight: 900; margin: 10px 0; }
-        .card-text { color: #555; font-size: 13px; line-height: 1.5; }
-        .card-footer { margin-top: 30px; font-weight: bold; font-size: 11px; letter-spacing: 1px; }
-        .command-terminal { background-color: #050505; padding: 30px; borderRadius: 30px; display: flex; flex-direction: column; align-items: center; gap: 25px; transition: all 0.5s ease; }
-        .staff-input { background-color: #000; border: 1px solid #222; padding: 12px; border-radius: 12px; color: #fff; fontSize: 12px; width: 100%; max-width: 200px; outline: none; letter-spacing: 2px; text-align: center; }
-        .unlock-btn { background-color: #22d3ee; color: #000; padding: 12px 25px; border-radius: 12px; font-weight: 900; text-decoration: none; font-size: 11px; animation: pulse 2s infinite; text-align: center; }
-        .lock-btn { background-color: #111; color: #222; padding: 12px 25px; border-radius: 12px; font-weight: 900; font-size: 11px; border: 1px solid #1a1a1a; cursor: not-allowed; }
 
-        @media (min-width: 768px) {
-          .hero-title { font-size: 72px; letter-spacing: -3px; }
-          .cards-grid { flex-direction: row; padding: 0 40px; }
-          .card { flex: 1; padding: 40px; }
-          .command-terminal { flex-direction: row; justify-content: space-between; padding: 40px; border-radius: 40px; }
-          .staff-input { width: 160px; }
-          .cert-bar { gap: 60px; }
+      <style jsx>{`
+        .hero-text { font-size: clamp(40px, 8vw, 85px); font-weight: 900; font-style: italic; line-height: 0.9; letter-spacing: -2px; margin: 0; }
+        .inventory-badge { display: inline-block; margin-top: 30px; padding: 8px 20px; background: #111; border: 1px solid #22d3ee; color: #22d3ee; font-size: 10px; font-weight: 900; border-radius: 5px; }
+
+        /* GRID DEI QUADRATONI */
+        .main-grid { 
+          display: grid; 
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+          gap: 2px; /* Margine sottile tra i blocchi */
+          padding: 0 20px; 
+          max-width: 1400px; 
+          margin: 0 auto; 
         }
 
-        @keyframes pulse {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.02); }
-          100% { transform: scale(1); }
+        .mega-card { 
+          aspect-ratio: 1 / 1; /* Forza la forma quadrata */
+          background-color: #050505; 
+          border: 1px solid #111;
+          text-decoration: none;
+          color: #fff;
+          display: flex;
+          transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .mega-card.highlight { background-color: #22d3ee; color: #000; border: none; }
+        .mega-card:hover { border-color: #22d3ee; z-index: 10; transform: scale(1.02); }
+
+        .card-inner { padding: 40px; display: flex; flex-direction: column; justify-content: space-between; width: 100%; }
+        .phase-tag { font-size: 10px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; }
+        .card-title { font-size: clamp(24px, 4vw, 36px); font-weight: 900; margin: 20px 0; letter-spacing: -1px; }
+        .card-desc { font-size: 14px; line-height: 1.6; color: #666; max-width: 250px; }
+        .mega-card.highlight .card-desc { color: rgba(0,0,0,0.7); }
+        .card-footer { font-size: 11px; font-weight: 900; letter-spacing: 1px; margin-top: auto; }
+
+        /* TERMINAL SECTION */
+        .terminal-section { max-width: 1400px; margin: 80px auto; padding: 0 20px 100px; }
+        .terminal-box { 
+          background-color: #050505; 
+          border: 1px solid #111; 
+          border-radius: 40px; 
+          padding: 40px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          transition: all 0.5s ease;
+        }
+        .terminal-box.unlocked { border-color: #22d3ee; box-shadow: 0 0 40px rgba(34, 211, 238, 0.1); }
+        
+        .terminal-title { font-size: 20px; font-weight: 900; margin: 0; }
+        .terminal-status { font-size: 10px; color: #333; margin-top: 8px; letter-spacing: 2px; }
+        .unlocked .terminal-status { color: #22d3ee; font-weight: bold; }
+
+        .terminal-actions { display: flex; gap: 20px; align-items: center; }
+        .terminal-input { background: #000; border: 1px solid #1a1a1a; padding: 15px; border-radius: 12px; color: #fff; width: 150px; text-align: center; font-size: 12px; outline: none; }
+        .btn-access { padding: 15px 30px; background: #111; color: #333; border-radius: 12px; font-weight: 900; font-size: 12px; text-decoration: none; }
+        .btn-access.active { background: #22d3ee; color: #000; cursor: pointer; }
+
+        /* MOBILE FIXES */
+        @media (max-width: 768px) {
+          .terminal-box { flex-direction: column; text-align: center; gap: 30px; }
+          .mega-card { aspect-ratio: auto; min-height: 350px; } /* Mantiene l'altezza ma non forza il quadrato se lo schermo è troppo stretto */
+          .main-grid { gap: 20px; }
         }
       `}</style>
     </div>
