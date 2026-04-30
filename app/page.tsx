@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
+// Mantengo il TopTicker invariato come richiesto
 const TopTicker = () => {
   const [stats, setStats] = useState({ co2: 14200, mw: 842.15 });
   const [mounted, setMounted] = useState(false);
@@ -31,9 +32,9 @@ const TopTicker = () => {
         <span className="hidden-mobile">STATUS: ARCHIPELAGO GRID ACTIVE</span>
       </div>
       <style jsx>{`
-        .ticker-container { background: #080808; border-bottom: 1px solid #111; padding: 10px 20px; }
+        .ticker-container { background: #000; border-bottom: 1px solid rgba(34, 211, 238, 0.1); padding: 10px 20px; }
         .ticker-content { display: flex; justify-content: center; gap: 20px; font-size: 9px; font-weight: 900; color: #22d3ee; letter-spacing: 1px; }
-        .separator { color: #1a1a1a; }
+        .separator { color: #111; }
         @media (max-width: 600px) { .hidden-mobile { display: none; } }
       `}</style>
     </div>
@@ -77,29 +78,38 @@ export default function Home() {
         )}
       </section>
 
-      {/* GRID DEI QUADRATONI - REALI E DEFINITI */}
+      {/* GRID DEI QUADRATONI - NASA/APPLE STYLE */}
       <div className="bento-grid">
-        <Link href="/login" className="card s2b">
+        <Link href="/login" className="card card-modern">
           <div className="card-content">
-            <span className="label">PHASE_01 // LOGISTICS</span>
+            <div className="card-top">
+              <span className="label">PHASE_01 // LOGISTICS</span>
+              <div className="status-dot"></div>
+            </div>
             <h4 className="title">S2B_PORTAL</h4>
             <p className="desc">Global procurement gateway. Asset tracking and fulfillment infrastructure.</p>
             <div className="footer">ACCESS SYSTEM →</div>
           </div>
         </Link>
 
-        <Link href="/b2b" className="card b2b">
+        <Link href="/b2b" className="card card-modern">
           <div className="card-content">
-            <span className="label">PHASE_02 // ENTERPRISE</span>
+            <div className="card-top">
+              <span className="label">PHASE_02 // ENTERPRISE</span>
+              <div className="status-dot"></div>
+            </div>
             <h4 className="title">B2B_CONSOLE</h4>
             <p className="desc">Industrial-scale PPA monitoring. High-yield asset management for partners.</p>
             <div className="footer">VIEW NETWORK →</div>
           </div>
         </Link>
 
-        <Link href="/b2c" className="card titan">
+        <Link href="/b2c" className="card card-modern card-highlight">
           <div className="card-content">
-            <span className="label dark">PHASE_03 // RETAIL</span>
+            <div className="card-top">
+              <span className="label dark">PHASE_03 // RETAIL</span>
+              <div className="status-dot dark"></div>
+            </div>
             <h4 className="title">TITAN_STORE</h4>
             <p className="desc">Direct-to-consumer ecosystem. Advanced solar hardware for the tropics.</p>
             <div className="footer">EXPLORE SERIES →</div>
@@ -131,7 +141,7 @@ export default function Home() {
       </section>
 
       <style jsx>{`
-        .main-wrapper { background-color: #020202; min-height: 100vh; color: #fff; font-family: 'Inter', sans-serif; }
+        .main-wrapper { background-color: #000; min-height: 100vh; color: #fff; font-family: 'Inter', sans-serif; overflow-x: hidden; }
         
         /* NAV & HERO */
         .main-nav { padding: 80px 20px 40px; text-align: center; }
@@ -140,72 +150,128 @@ export default function Home() {
         .tagline { font-size: 10px; color: #22d3ee; letter-spacing: 4px; text-transform: uppercase; font-weight: 800; }
         
         .hero-section { text-align: center; padding: 40px 20px 80px; }
-        .year-tag { font-size: 12px; color: #1a1a1a; letter-spacing: 8px; margin-bottom: 20px; font-weight: 900; }
+        .year-tag { font-size: 12px; color: #333; letter-spacing: 8px; margin-bottom: 20px; font-weight: 900; }
         .hero-main { font-size: clamp(40px, 10vw, 90px); font-weight: 900; font-style: italic; line-height: 0.85; letter-spacing: -3px; margin: 0; }
-        .cyan-text { color: #22d3ee; }
-        .live-badge { display: inline-block; margin-top: 40px; padding: 10px 25px; background: #080808; border: 1px solid #111; color: #22d3ee; font-size: 10px; font-weight: 900; border-radius: 4px; letter-spacing: 1px; }
+        .cyan-text { color: #22d3ee; text-shadow: 0 0 30px rgba(34, 211, 238, 0.3); }
+        .live-badge { display: inline-block; margin-top: 40px; padding: 10px 25px; background: rgba(34, 211, 238, 0.05); border: 1px solid rgba(34, 211, 238, 0.2); color: #22d3ee; font-size: 10px; font-weight: 900; border-radius: 100px; letter-spacing: 1px; }
 
-        /* IL GRID DEI BLOCCHETTONI */
+        /* IL GRID DEI BLOCCHETTONI - NASA STYLE */
         .bento-grid { 
           display: grid; 
           grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
-          max-width: 1400px; 
+          max-width: 1300px; 
           margin: 0 auto; 
-          background: #111; /* Crea la linea di divisione tra i blocchi */
-          gap: 1px;
-          border: 1px solid #111;
+          gap: 25px;
+          padding: 0 25px;
         }
 
-        .card { 
+        .card-modern { 
           aspect-ratio: 1 / 1; 
-          background: #050505; 
-          text-decoration: none !important; /* Rimuove sottolineatura */
+          background: rgba(15, 15, 15, 0.6);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 40px; /* Angoli smussati Apple-style */
+          text-decoration: none !important;
           color: #fff; 
           display: flex; 
-          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
           position: relative;
-          overflow: hidden;
+          backdrop-filter: blur(10px);
         }
 
-        .card:hover { background: #080808; }
-        .card.titan { background: #22d3ee; color: #000; }
-        .card.titan:hover { background: #fff; }
+        .card-modern:hover { 
+          transform: translateY(-10px);
+          background: rgba(20, 20, 20, 0.8);
+          border-color: rgba(34, 211, 238, 0.4);
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(34, 211, 238, 0.1);
+        }
 
-        .card-content { padding: 50px; display: flex; flex-direction: column; width: 100%; }
-        .label { font-size: 10px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; }
-        .label.dark { color: rgba(0,0,0,0.4); }
-        .title { font-size: 32px; font-weight: 900; margin: 25px 0 15px; letter-spacing: -1px; text-decoration: none !important; }
-        .desc { font-size: 14px; color: #444; line-height: 1.6; max-width: 280px; text-decoration: none !important; }
-        .card.titan .desc { color: rgba(0,0,0,0.6); }
-        .footer { margin-top: auto; font-size: 11px; font-weight: 900; letter-spacing: 2px; }
+        .card-highlight { 
+          background: #22d3ee; 
+          color: #000; 
+          border: none; 
+          box-shadow: 0 10px 30px rgba(34, 211, 238, 0.3);
+        }
 
-        /* TERMINAL */
-        .terminal-area { max-width: 1400px; margin: 100px auto; padding: 0 20px 100px; }
+        .card-highlight:hover {
+          background: #fff;
+          transform: translateY(-10px) scale(1.02);
+          box-shadow: 0 20px 50px rgba(255, 255, 255, 0.2);
+        }
+
+        .card-content { padding: 50px; display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; }
+        .card-top { display: flex; justify-content: space-between; align-items: center; }
+        
+        .label { font-size: 11px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; }
+        .label.dark { color: rgba(0, 0, 0, 0.4); }
+        
+        .status-dot { width: 8px; height: 8px; background: #22d3ee; border-radius: 50%; box-shadow: 0 0 10px #22d3ee; }
+        .status-dot.dark { background: rgba(0,0,0,0.2); box-shadow: none; }
+
+        .title { font-size: 36px; font-weight: 900; margin: 30px 0 15px; letter-spacing: -1px; }
+        .desc { font-size: 15px; color: #888; line-height: 1.6; max-width: 280px; }
+        .card-highlight .desc { color: rgba(0, 0, 0, 0.6); }
+        
+        .footer { margin-top: auto; font-size: 12px; font-weight: 900; letter-spacing: 2px; opacity: 0.6; }
+
+        /* TERMINAL AREA */
+        .terminal-area { max-width: 1300px; margin: 100px auto; padding: 0 25px 100px; }
         .terminal-card { 
-          background: #050505; 
-          border: 1px solid #111; 
-          padding: 50px; 
-          border-radius: 4px;
+          background: rgba(10, 10, 10, 0.8); 
+          border: 1px solid rgba(255, 255, 255, 0.05); 
+          padding: 40px 60px; 
+          border-radius: 40px;
           display: flex; 
           justify-content: space-between; 
           align-items: center;
+          backdrop-filter: blur(20px);
         }
-        .terminal-card.unlocked { border-color: #22d3ee; }
-        .terminal-text h5 { font-size: 18px; margin: 0; letter-spacing: 2px; }
-        .terminal-text p { font-size: 9px; color: #222; margin-top: 10px; letter-spacing: 3px; font-weight: 900; }
+        .terminal-card.unlocked { border-color: rgba(34, 211, 238, 0.5); box-shadow: 0 0 50px rgba(34, 211, 238, 0.1); }
+        
+        .terminal-text h5 { font-size: 18px; margin: 0; letter-spacing: 2px; font-weight: 900; }
+        .terminal-text p { font-size: 10px; color: #444; margin-top: 10px; letter-spacing: 3px; font-weight: 900; text-transform: uppercase; }
         .unlocked .terminal-text p { color: #22d3ee; }
         
-        .terminal-form { display: flex; gap: 15px; }
-        .terminal-form input { background: #000; border: 1px solid #111; padding: 15px; color: #fff; font-family: monospace; outline: none; width: 180px; }
-        .auth-btn { background: #111; color: #222; padding: 15px 30px; font-size: 11px; font-weight: 900; text-decoration: none; cursor: default; }
-        .auth-btn.active { background: #22d3ee; color: #000; cursor: pointer; }
+        .terminal-form { display: flex; gap: 20px; }
+        .terminal-form input { 
+          background: rgba(255, 255, 255, 0.03); 
+          border: 1px solid rgba(255, 255, 255, 0.1); 
+          padding: 18px 25px; 
+          border-radius: 20px; 
+          color: #fff; 
+          font-family: monospace; 
+          outline: none; 
+          width: 200px;
+          transition: all 0.3s;
+        }
+        .terminal-form input:focus { border-color: #22d3ee; background: rgba(34, 211, 238, 0.05); }
+
+        .auth-btn { 
+          padding: 18px 40px; 
+          background: rgba(255, 255, 255, 0.05); 
+          color: #444; 
+          border-radius: 20px; 
+          font-weight: 900; 
+          font-size: 12px; 
+          text-decoration: none; 
+          transition: all 0.3s;
+          border: 1px solid transparent;
+        }
+        .auth-btn.active { 
+          background: #22d3ee; 
+          color: #000; 
+          cursor: pointer;
+          box-shadow: 0 10px 20px rgba(34, 211, 238, 0.2);
+        }
+        .auth-btn.active:hover { transform: scale(1.05); background: #fff; }
 
         /* MOBILE */
         @media (max-width: 768px) {
           .bento-grid { grid-template-columns: 1fr; }
-          .card { aspect-ratio: 1.2 / 1; }
-          .terminal-card { flex-direction: column; text-align: center; gap: 30px; }
-          .card-content { padding: 30px; }
+          .card-modern { aspect-ratio: 1.1 / 1; border-radius: 30px; }
+          .terminal-card { flex-direction: column; text-align: center; gap: 30px; padding: 40px; border-radius: 30px; }
+          .card-content { padding: 35px; }
+          .terminal-form { flex-direction: column; width: 100%; }
+          .terminal-form input, .auth-btn { width: 100%; box-sizing: border-box; }
         }
       `}</style>
     </div>
