@@ -115,7 +115,7 @@ export default function S2BCombinedPortal() {
     fetchCloudShipments(userRole, session?.user?.email || '');
   };
 
-  // FUNZIONE AGGIORNATA PER CREARE IL CARGO
+  // FUNZIONE AGGIORNATA PER CREARE IL CARGO SENZA ERRORI DI SINTASSI DATA
   const handleCloudSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -126,7 +126,8 @@ export default function S2BCombinedPortal() {
       provider: newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
-      eta: newOrder.eta || 'TBD',
+      // Se eta è vuoto o "TBD", mandiamo null per evitare errori di tipo "date" nel DB
+      eta: (newOrder.eta && newOrder.eta !== "TBD") ? newOrder.eta : null,
       customer_email: newOrder.customer_email
     };
 
