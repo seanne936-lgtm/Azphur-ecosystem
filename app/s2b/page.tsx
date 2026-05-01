@@ -115,6 +115,7 @@ export default function S2BCombinedPortal() {
     fetchCloudShipments(userRole, session?.user?.email || '');
   };
 
+  // FUNZIONE AGGIORNATA PER CREARE IL CARGO
   const handleCloudSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -125,11 +126,22 @@ export default function S2BCombinedPortal() {
       provider: newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
-      eta: newOrder.eta,
+      eta: newOrder.eta || 'TBD',
       customer_email: newOrder.customer_email
     };
-    const { error } = await supabase.from('inventory').insert([payload]);
-    if (!error) {
+
+    const { data, error } = await supabase
+      .from('inventory')
+      .insert([payload])
+      .select();
+
+    if (error) {
+      console.error("ERRORE HQ:", error.message);
+      alert("Errore HQ: " + error.message);
+      return;
+    }
+
+    if (data) {
       setIsModalOpen(false);
       setNewOrder({ id: "", provider: "", origin: "", destination: "", type: "", weight: "", eta: "", price: "", customer_email: "" });
       const { data: { session } } = await supabase.auth.getSession();
