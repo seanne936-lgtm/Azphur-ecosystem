@@ -48,7 +48,7 @@ export default function AdminDashboard() {
     };
   }, []);
 
-async function syncHqData() {
+  async function syncHqData() {
     if (!supabase) return; 
     setLoading(true);
     try {
@@ -217,50 +217,74 @@ async function syncHqData() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@500;800&display=swap');
         body { margin: 0; background-color: #fdfbf7; color: #111; }
-        .hq-wrapper { background-color: #fdfbf7; background-image: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 600px); color: #111; min-height: 100vh; padding: 0 0 50px 0; font-family: 'Inter', sans-serif; }
-        .hq-nav { height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; border-bottom: 1px solid #e2e8f0; background: #fff; position: sticky; top: 0; z-index: 100; }
+        .hq-wrapper { background-color: #fdfbf7; background-image: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 600px); color: #111; min-height: 100vh; padding: 0 0 50px 0; font-family: 'Inter', sans-serif; box-sizing: border-box; }
+        
+        .hq-nav { height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; border-bottom: 1px solid #e2e8f0; background: #fff; position: sticky; top: 0; z-index: 100; box-sizing: border-box; }
         .nav-left { display: flex; align-items: center; gap: 25px; }
         .hq-logo { height: 32px; width: auto; cursor: pointer; }
-        .exit-terminal { color: #64748b; text-decoration: none; font-size: 11px; font-weight: 800; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
+        .exit-terminal { color: #64748b; text-textdecoration: none; font-size: 11px; font-weight: 800; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; text-decoration: none; }
         .sys-status { font-size: 10px; color: #059669; display: flex; align-items: center; gap: 8px; font-weight: 800; }
         .pulse-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: blink 2s infinite; }
-        .hq-hero { padding: 80px 40px 40px; max-width: 1400px; margin: 0 auto; }
+        
+        .hq-hero { padding: 60px 40px 40px; max-width: 1400px; margin: 0 auto; box-sizing: border-box; }
         .hero-tag { font-size: 10px; color: #0ea5e9; letter-spacing: 4px; margin-bottom: 10px; font-weight: 900; }
-        .hero-title { font-size: 48px; font-weight: 900; letter-spacing: -2px; margin: 0; }
+        .hero-title { font-size: 48px; font-weight: 900; letter-spacing: -2px; margin: 0; word-break: break-word; }
         .cyan-cursor { color: #0ea5e9; animation: blink 1s infinite; }
-        .kpi-layer { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; max-width: 1400px; margin: 0 auto 40px; padding: 0 40px; }
-        .kpi-box { background: #fff; padding: 30px; border-radius: 20px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; position: relative; }
+        
+        .kpi-layer { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; max-width: 1400px; margin: 0 auto 40px; padding: 0 40px; box-sizing: border-box; }
+        .kpi-box { background: #fff; padding: 30px; border-radius: 20px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; position: relative; box-sizing: border-box; }
         .kpi-label { font-size: 10px; color: #94a3b8; letter-spacing: 2px; margin-bottom: 10px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
-        .kpi-data { font-size: 28px; font-weight: 900; }
+        .kpi-data { font-size: 28px; font-weight: 900; word-break: break-all; }
         .reset-rev { font-size: 8px; color: #f87171; cursor: pointer; border: 1px solid #fecaca; padding: 2px 5px; border-radius: 4px; }
         .reset-rev:hover { background: #fee2e2; }
-        .hq-console { display: grid; grid-template-columns: 1fr; gap: 40px; max-width: 1400px; margin: 0 auto; padding: 0 40px; }
+        
+        .hq-console { display: grid; grid-template-columns: 1fr; gap: 40px; max-width: 1400px; margin: 0 auto; padding: 0 40px; box-sizing: border-box; }
         .card-title { font-size: 12px; color: #94a3b8; margin-bottom: 25px; letter-spacing: 2px; font-weight: 900; display: flex; justify-content: space-between; align-items: center; }
-        .sub-card { background: #fff; border: 1px solid #e2e8f0; padding: 35px; border-radius: 24px; margin-bottom: 25px; }
+        .sub-card { background: #fff; border: 1px solid #e2e8f0; padding: 35px; border-radius: 24px; margin-bottom: 25px; box-sizing: border-box; }
+        
         .map-viz { height: 300px; background: #f8fafc; border-radius: 20px; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; border: 1px solid #e2e8f0; }
         .modern-form { display: flex; flex-direction: column; gap: 20px; }
         .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .input-group { display: flex; flex-direction: column; gap: 8px; }
         .input-group label { font-size: 10px; font-weight: 900; color: #94a3b8; letter-spacing: 1px; }
-        .input-group input, .input-group select { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 18px; color: #111; font-size: 13px; outline: none; border-radius: 12px; font-family: 'JetBrains Mono', monospace; transition: 0.2s; }
-        .price-wrapper { display: flex; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+        .input-group input, .input-group select { background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px 18px; color: #111; font-size: 13px; outline: none; border-radius: 12px; font-family: 'JetBrains Mono', monospace; transition: 0.2s; width: 100%; box-sizing: border-box; }
+        
+        .price-wrapper { display: flex; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-sizing: border-box; width: 100%; }
         .price-symbol { padding-left: 15px; color: #0ea5e9; font-weight: 900; }
         .price-wrapper input { background: transparent; border: none; width: 100%; }
-        .exec-btn { background: #111; color: #0ea5e9; border: 1px solid #0ea5e9; padding: 18px; font-weight: 900; font-size: 12px; cursor: pointer; transition: 0.3s; border-radius: 15px; letter-spacing: 2px; margin-top: 10px; }
-        .feed { background: #fff; border: 1px solid #e2e8f0; padding: 35px; border-radius: 24px; }
-        .feed-item { padding: 20px 0; border-bottom: 1px solid #f1f5f9; transition: 0.2s; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+        
+        .exec-btn { background: #111; color: #0ea5e9; border: 1px solid #0ea5e9; padding: 18px; font-weight: 900; font-size: 12px; cursor: pointer; transition: 0.3s; border-radius: 15px; letter-spacing: 2px; margin-top: 10px; width: 100%; box-sizing: border-box; }
+        .feed { background: #fff; border: 1px solid #e2e8f0; padding: 35px; border-radius: 24px; box-sizing: border-box; }
+        .feed-item { padding: 20px 0; border-bottom: 1px solid #f1f5f9; transition: 0.2s; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; box-sizing: border-box; width: 100%; }
         .item-name { font-weight: 900; font-size: 14px; }
-        .img-thumb { width: 45px; height: 45px; border-radius: 8px; object-fit: cover; background: #f1f5f9; }
+        .img-thumb { width: 45px; height: 45px; border-radius: 8px; object-fit: cover; background: #f1f5f9; flex-shrink: 0; }
+        
         .lead-badge { font-size: 9px; padding: 4px 8px; border-radius: 6px; font-weight: 900; text-transform: uppercase; }
         .status-new { background: #dcfce7; color: #166534; }
         .status-quoted { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
         .status-contacted { background: #fef9c3; color: #854d0e; }
         .status-closed { background: #f1f5f9; color: #475569; }
+        
         .control-btn { border: 1px solid #e2e8f0; background: #fff; padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 800; cursor: pointer; }
         .control-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
         .term-btn { background: #fee2e2; border: none; color: #991b1b; padding: 6px 12px; font-size: 10px; font-weight: 900; cursor: pointer; border-radius: 8px; }
+        
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @media (min-width: 1024px) { .hq-console { grid-template-columns: 1.2fr 0.8fr; } }
+
+        /* REGOLE MOBILE EXTRA PER EVITARE SFORAMENTI SUL TELEFONO */
+        @media (max-width: 768px) {
+          .hq-nav { padding: 0 20px; }
+          .exit-terminal { font-size: 9px; }
+          .hq-hero { padding: 40px 20px 20px; }
+          .hero-title { font-size: 32px; }
+          .kpi-layer { padding: 0 20px; gap: 15px; }
+          .kpi-box { padding: 20px; }
+          .hq-console { padding: 0 20px; gap: 25px; }
+          .sub-card, .feed { padding: 20px; border-radius: 16px; }
+          .form-row { grid-template-columns: 1fr; gap: 15px; }
+          .feed-item > div { flex-wrap: wrap; gap: 10px; }
+        }
       `}</style>
 
       <nav className="hq-nav">
@@ -388,11 +412,11 @@ async function syncHqData() {
             <div style={{marginBottom: '40px', maxHeight: '450px', overflowY: 'auto', borderBottom: '2px solid #f1f5f9'}}>
                 {leads.map(lead => (
                     <div key={lead.id} className="feed-item" style={{borderLeft: lead.status === 'CLOSED' ? '4px solid #94a3b8' : lead.status === 'QUOTED' ? '4px solid #0ea5e9' : '4px solid #10b981', paddingLeft: '15px', marginBottom: '10px'}}>
-                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px', width: '100%'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px', width: '100%', flexWrap: 'wrap', gap: '5px'}}>
                             <span className="item-name">{lead.customer_name}</span>
                             <span className={`lead-badge ${lead.status === 'NEW' ? 'status-new' : lead.status === 'QUOTED' ? 'status-quoted' : lead.status === 'CONTACTED' ? 'status-contacted' : 'status-closed'}`}>{lead.status}</span>
                         </div>
-                        <div style={{fontSize: '11px', color: '#64748b', fontFamily: 'JetBrains Mono', width: '100%'}}>
+                        <div style={{fontSize: '11px', color: '#64748b', fontFamily: 'JetBrains Mono', width: '100%', wordBreak: 'break-word'}}>
                             ASSET: {lead.product_name} | VALUE: ₱{Number(lead.deal_value).toLocaleString()}
                             <div style={{color: '#94a3b8', marginTop: '4px'}}>TX_HASH: {lead.id?.split('-')[0].toUpperCase()}_AZP</div>
                         </div>
@@ -401,11 +425,11 @@ async function syncHqData() {
                         {(lead.status === 'NEW' || lead.status === 'CONTACTED') && (
                           <div style={{marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%', boxSizing: 'border-box'}}>
                             <span style={{ fontSize: '9px', fontWeight: '900', color: '#0ea5e9', display: 'block', marginBottom: '8px', letterSpacing: '1px' }}>GENERATE_OFFICIAL_QUOTE (12% VAT INCLUDED)</span>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                               <input 
                                 type="number" 
                                 placeholder="Base Price (PHP)" 
-                                style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #e2e8f0', flex: 1, fontFamily: 'monospace' }}
+                                style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #e2e8f0', flex: 1, minWidth: '120px', fontFamily: 'monospace' }}
                                 id={`quote-input-${lead.id}`}
                               />
                               <button 
@@ -441,10 +465,10 @@ async function syncHqData() {
             <div className="feed-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
                 {shipments.map((s) => (
                     <div key={s.id} className="feed-item">
-                        <div style={{display: 'flex', gap: '15px', alignItems: 'center', width: '100%'}}>
+                        <div style={{display: 'flex', gap: '15px', alignItems: 'center', width: '100%', flexWrap: 'wrap'}}>
                           <img src={s.image_url || 'https://via.placeholder.com/45'} className="img-thumb" alt="asset" />
-                          <div style={{flex: 1}}>
-                            <div style={{display:'flex', justifyBetween:'space-between', alignItems:'center', marginBottom:'4px', width: '100%'}}>
+                          <div style={{flex: '1 1 200px'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px', width: '100%', flexWrap: 'wrap', gap: '5px'}}>
                                 <span className="item-name">{s.name}</span>
                                 <select style={{fontSize: '8px', border: '1px solid #e2e8f0', borderRadius: '4px'}} value={s.status} onChange={(e) => updateCargoStatus(s.id, e.target.value)}>
                                   <option value="PROCESSING">PROCESSING</option>
@@ -454,7 +478,7 @@ async function syncHqData() {
                                 </select>
                             </div>
                             <div style={{fontSize: '10px', color: '#94a3b8', marginBottom: '8px'}}>NODE: {s.provider || 'CENTRAL_HUB'}</div>
-                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', width: '100%'}}>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', width: '100%', flexWrap: 'wrap', gap: '10px'}}>
                                 <div className="specs" style={{fontSize: '11px', color: '#64748b', fontFamily: 'JetBrains Mono'}}><span>QTY: {s.quantity}</span> | <span>VAL: ₱{(s.price * s.quantity).toLocaleString()}</span></div>
                                 <button onClick={() => deleteAsset(s.id)} className="term-btn">TERM</button>
                             </div>

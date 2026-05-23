@@ -104,9 +104,9 @@ export default function AzphurB2B() {
   const renderDashboard = () => (
     <div className="fade-in">
       {/* SEZIONE KPI */}
-      <div className="asset-section" style={{ marginBottom: '40px', borderLeft: '8px solid #0ea5e9' }}>
+      <div className="asset-section kpi-section-override" style={{ marginBottom: '40px', borderLeft: '8px solid #0ea5e9' }}>
         <h3 className="section-subtitle">STRATEGIC_CONTROL_CENTER</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
+        <div className="control-center-grid">
           <div style={{ padding: '15px', background: '#f8fafc', borderRadius: '12px' }}>
             <p className="kpi-label">PHASE_02_CHARGE_TX</p>
             <p style={{ fontSize: '12px', fontWeight: '800', color: '#111', margin: 0 }}>PAYMENT_GATEWAY_LIVE</p>
@@ -174,7 +174,6 @@ export default function AzphurB2B() {
                 <tr key={tx.id} className="fade-in">
                   <td className="mono-id">{tx.id ? tx.id.split('-')[0].toUpperCase() : 'TX_LIVE'}</td>
                   <td style={{ color: '#22c55e' }} className="status-text">● {tx.status ? tx.status.toUpperCase() : 'COMPLETED'}</td>
-                  {/* FIX REVENUE COLOR */}
                   <td className="heavy-text" style={{ color: '#111' }}>₱{Number(tx.amount_gross || 0).toLocaleString()}</td>
                   <td style={{ fontSize: '11px', color: '#94a3b8' }}>{new Date(tx.created_at).toLocaleTimeString()}</td>
                 </tr>
@@ -196,10 +195,8 @@ export default function AzphurB2B() {
               {leads.map((lead, i) => (
                 <tr key={i}>
                   <td className="mono-id">{lead.id ? lead.id.split('-')[0].toUpperCase() : 'LEAD'}</td>
-                  {/* FIX INTEREST COLOR */}
                   <td className="bold-text" style={{ color: '#111' }}>{lead.interest || 'SOLAR_INSTALL'}</td>
                   <td style={{ color: '#0ea5e9' }} className="status-text">● {i === 0 ? 'SUPPLIER_ASSIGNED' : 'ANALYZING_RANKING'}</td>
-                  {/* FIX EST_VALUE COLOR */}
                   <td className="heavy-text" style={{ color: '#111' }}>₱{Number(lead.budget || 0).toLocaleString()}</td>
                 </tr>
               ))}
@@ -223,10 +220,8 @@ export default function AzphurB2B() {
               ].map((row, i) => (
                 <tr key={i}>
                   <td className="mono-id">{row.id}</td>
-                  {/* FIX LOCATION COLOR */}
                   <td className="bold-text" style={{ color: '#111' }}>{row.loc}</td>
                   <td style={{ color: row.color }} className="status-text">● {row.status}</td>
-                  {/* FIX LIVE OUTPUT COLOR */}
                   <td className="heavy-text" style={{ color: '#111' }}>{row.output}</td>
                 </tr>
               ))}
@@ -242,30 +237,63 @@ export default function AzphurB2B() {
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;600;700;800;900&display=swap');
         body { margin: 0; background-color: #fdfbf7; color: #111; }
-        .b2b-container { background-color: #fdfbf7; min-height: 100vh; font-family: 'Inter', sans-serif; display: flex; }
-        .sidebar { width: 280px; height: 100vh; border-right: 1px solid #e5e7eb; padding: 40px 24px; position: fixed; background-color: #fff; display: flex; flex-direction: column; z-index: 100; }
+        .b2b-container { background-color: #fdfbf7; min-height: 100vh; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; }
+        
+        /* SIDEBAR DEFAULT DESKTOP */
+        .sidebar { width: 280px; height: 100vh; border-right: 1px solid #e5e7eb; padding: 40px 24px; position: fixed; background-color: #fff; display: flex; flex-direction: column; z-index: 100; top: 0; left: 0; }
         .logo-wrapper { display: flex; align-items: center; gap: 12px; margin-bottom: 50px; text-decoration: none; }
         .sidebar-brand-img { height: 30px; width: auto; }
         .sidebar-logo-text { color: #0ea5e9; font-weight: 900; font-size: 22px; letter-spacing: 4px; }
-        .nav-btn { text-align: left; padding: 14px 18px; border-radius: 12px; border: none; cursor: pointer; background: transparent; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: 1px; transition: 0.2s; }
+        .nav-group { display: flex; flex-direction: column; gap: 8px; }
+        .nav-btn { text-align: left; padding: 14px 18px; border-radius: 12px; border: none; cursor: pointer; background: transparent; color: #64748b; font-size: 11px; font-weight: 800; letter-spacing: 1px; transition: 0.2s; white-space: nowrap; }
         .nav-btn.active { background: #e0f2fe; color: #0ea5e9; }
-        .main-stage { margin-left: 280px; width: calc(100% - 280px); padding: 60px; }
-        .main-header { margin-bottom: 50px; border-bottom: 1px solid #e2e8f0; padding-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* MAIN STAGE DEFAULT DESKTOP */
+        .main-stage { margin-left: 280px; width: calc(100% - 280px); padding: 60px; box-sizing: border-box; }
+        .main-header { margin-bottom: 50px; border-bottom: 1px solid #e2e8f0; padding-bottom: 30px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
         .main-title { font-size: 42px; font-weight: 900; margin: 0; color: #0ea5e9; letter-spacing: -1.5px; }
+        
+        .control-center-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
         .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 40px; }
         .kpi-card { background-color: #fff; padding: 25px; border-radius: 20px; border: 1px solid #e2e8f0; }
         .kpi-label { font-size: 10px; color: #94a3b8; font-weight: 800; letter-spacing: 1px; }
         .kpi-value { font-size: 26px; font-weight: 900; margin: 0; }
+        .kpi-sub { margin: 5px 0 0 0; }
         .asset-section { background-color: #fff; border-radius: 24px; border: 1px solid #e2e8f0; padding: 35px; }
         .section-subtitle { font-size: 11px; color: #94a3b8; margin-bottom: 25px; font-weight: 900; letter-spacing: 2px; }
-        .asset-table { width: 100%; border-collapse: collapse; }
+        
+        /* TABELLE RESPONSIVE */
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .asset-table { width: 100%; border-collapse: collapse; min-width: 500px; }
         .asset-table th { text-align: left; color: #cbd5e1; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; font-size: 10px; font-weight: 900; }
         .asset-table td { padding: 20px 0; border-bottom: 1px solid #f8fafc; font-size: 14px; color: #111; }
         .mono-id { font-family: monospace; font-size: 12px; color: #94a3b8; }
         .bold-text { font-weight: 700; color: #111; }
         .heavy-text { font-weight: 900; color: #111; }
+        .status-text { font-weight: 700; font-size: 13px; }
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* RESPONSIVE LAYOUT PER TELEFONI (SOTTO I 768px) */
+        @media (max-width: 768px) {
+          .b2b-container { flex-direction: column; }
+          
+          /* Trasformiamo la sidebar in una barra superiore orizzontale */
+          .sidebar { width: 100%; height: auto; position: relative; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 20px; box-sizing: border-box; }
+          .logo-wrapper { margin-bottom: 20px; justify-content: center; }
+          .nav-group { flex-direction: row !important; overflow-x: auto; padding-bottom: 5px; -webkit-overflow-scrolling: touch; gap: 4px !important; }
+          .nav-btn { padding: 10px 14px; font-size: 10px; }
+          
+          /* Spazio principale ridimensionato per mobile */
+          .main-stage { margin-left: 0; width: 100%; padding: 24px; }
+          .main-header { flex-direction: column; align-items: flex-start; gap: 20px; margin-bottom: 30px; }
+          .main-title { font-size: 32px; }
+          
+          /* Griglie in colonna singola su mobile */
+          .control-center-grid { grid-template-columns: 1fr; gap: 12px; }
+          .kpi-grid { grid-template-columns: 1fr; gap: 16px; }
+          .asset-section { padding: 20px; border-radius: 16px; }
+        }
       `}</style>
 
       <aside className="sidebar">
@@ -273,7 +301,7 @@ export default function AzphurB2B() {
           <img src="/logo-azphur.avif" alt="Logo" className="sidebar-brand-img" />
           <span className="sidebar-logo-text">AZPHUR</span>
         </Link>
-        <nav className="nav-group" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <nav className="nav-group">
           {['Dashboard', 'ESG Reporting', 'Contracts', 'Support'].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`nav-btn ${activeTab === tab ? 'active' : ''}`}>
               {tab.toUpperCase()}
@@ -285,11 +313,11 @@ export default function AzphurB2B() {
       <main className="main-stage">
         <header className="main-header">
           <h1 className="main-title">{activeTab.toUpperCase()}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '40px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
             <Link href="/" style={{ background: '#111', color: '#fff', padding: '8px 16px', borderRadius: '100px', fontSize: '10px', fontWeight: '900', textDecoration: 'none' }}>← HOME</Link>
             <div>
               <p style={{ fontSize: '9px', color: '#94a3b8', fontWeight: '900', margin: 0 }}>LIVE_NETWORK_LOAD</p>
-              <div style={{ fontSize: '28px', fontWeight: '900', color: '#111' }}>{realTimeMW} <span style={{fontSize: '14px', color: '#0ea5e9'}}>MW</span></div>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#111' }}>{realTimeMW} <span style={{fontSize: '14px', color: '#0ea5e9'}}>MW</span></div>
             </div>
           </div>
         </header>

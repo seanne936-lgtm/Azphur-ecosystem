@@ -60,7 +60,6 @@ export default function TitanStore() {
 
     if (!error) {
       // 2. NOTIFICA ESTERNA (MAKE.COM / WEBHOOK)
-      // Sostituisci 'IL_TUO_URL_DI_MAKE' con il link che hai copiato da Make
       fetch('https://hook.eu1.make.com/udkzyhx9od1e1o4k7wfwvxa3bsesgafn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -74,7 +73,7 @@ export default function TitanStore() {
         })
       }).catch(err => console.error("Errore notifica Make:", err));
 
-      // 3. ISTRUZIONI BONIFICO (SISTEMATO ALERT)
+      // 3. ISTRUZIONI BONIFICO
       alert(`✅ STRATEGIC LEAD CAPTURED!
       
 PAYMENT PROTOCOL:
@@ -224,41 +223,75 @@ We will verify the credit and update the status on your Dashboard.`);
 
       <style jsx>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;600;700;900&display=swap');
-        .titan-store { background: #fff; color: #171a20; min-height: 100vh; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-        .tesla-nav { position: fixed; top: 0; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; z-index: 100; background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); }
+        .titan-store { background: #fff; color: #171a20; min-height: 100vh; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; box-sizing: border-box; }
+        
+        .tesla-nav { position: fixed; top: 0; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; z-index: 100; background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); box-sizing: border-box; }
         .tesla-brand-wrapper { display: flex; align-items: center; gap: 12px; text-decoration: none; flex: 1; }
         .tesla-brand-img { height: 28px; width: auto; }
         .tesla-logo { font-weight: 900; letter-spacing: 6px; color: #000; font-size: 14px; }
         .nav-center { display: flex; gap: 5px; flex: 2; justify-content: center; }
         .nav-right { flex: 1; display: flex; justify-content: flex-end; }
-        .cart-pill { font-size: 10px; font-weight: 800; letter-spacing: 1px; margin-right: 20px; white-space: nowrap; }
+        .cart-pill { font-size: 10px; font-weight: 800; letter-spacing: 1px; white-space: nowrap; }
         .nav-link { font-size: 12px; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 4px; transition: 0.2s; letter-spacing: 1px; color: #393c41; }
         .nav-link.active { color: #000; background: rgba(0,0,0,0.05); }
-        .content-wrapper { padding-top: 100px; }
+        
+        .content-wrapper { padding-top: 100px; box-sizing: border-box; }
         .fade-in { animation: fadeIn 0.8s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .store-hero { height: 40vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        
+        .store-hero { padding: 60px 20px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; }
         .main-heading { font-size: clamp(40px, 8vw, 80px); font-weight: 700; letter-spacing: -4px; margin: 0; line-height: 0.9; }
         .thin { font-weight: 100; }
-        .products-section { padding: 40px; max-width: 1200px; margin: 0 auto; }
-        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px; }
-        .tesla-card { background: #f4f4f4; border-radius: 12px; padding: 40px; text-align: center; }
-        .product-visual { height: 200px; margin: 30px 0; background-size: contain; background-repeat: no-repeat; background-position: center; }
-        .amount { font-size: 24px; font-weight: 700; display: block; margin-bottom: 20px; }
-        .tesla-btn-primary { width: 100%; background: #3e6ae1; color: #fff; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .sub-heading { font-size: clamp(14px, 2vw, 18px); color: #393c41; margin-top: 10px; }
+        
+        .products-section { padding: 40px; max-width: 1200px; margin: 0 auto; box-sizing: border-box; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; width: 100%; box-sizing: border-box; }
+        .tesla-card { background: #f4f4f4; border-radius: 12px; padding: 40px 30px; text-align: center; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+        .product-visual { height: 200px; margin: 30px 0; background-size: contain; background-repeat: no-repeat; background-position: center; width: 100%; }
+        
+        .price-box { display: flex; align-items: center; justify-content: center; gap: 2px; margin-bottom: 20px; }
+        .currency { font-size: 20px; font-weight: 700; }
+        .amount { font-size: 24px; font-weight: 700; display: inline-block; }
+        
+        .tesla-btn-primary { width: 100%; background: #3e6ae1; color: #fff; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.3s; box-sizing: border-box; }
         .tesla-btn-primary:hover { background: #171a20; }
-        .tech-hero { height: 40vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-        .section-title { font-size: clamp(30px, 5vw, 50px); font-weight: 800; letter-spacing: -2px; line-height: 1; }
+        
+        .tech-hero, .support-hero { padding: 60px 20px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; box-sizing: border-box; }
+        .section-title { font-size: clamp(30px, 5vw, 50px); font-weight: 800; letter-spacing: -2px; line-height: 1.1; margin: 0; }
         .blue-text { color: #3e6ae1; }
-        .tech-grid, .support-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; max-width: 1000px; margin: 40px auto; padding: 0 20px; }
-        .support-card { background: #171a20; color: #fff; padding: 40px; border-radius: 12px; text-align: left; }
-        .secondary-btn { margin-top: 20px; background: #fff; border: none; padding: 10px 20px; border-radius: 4px; font-size: 11px; font-weight: 800; cursor: pointer; }
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); }
-        .modal-content { background: #fff; padding: 40px; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+        
+        .tech-grid, .support-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; max-width: 1000px; margin: 40px auto; padding: 0 20px; box-sizing: border-box; width: 100%; }
+        .tech-item { padding: 20px 10px; }
+        .tech-item h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; letter-spacing: 1px; }
+        .tech-item p { font-size: 14px; color: #393c41; line-height: 1.5; margin: 0; }
+        
+        .support-card { background: #171a20; color: #fff; padding: 40px; border-radius: 12px; text-align: left; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+        .support-card h4 { font-size: 16px; margin: 0 0 10px 0; letter-spacing: 1px; }
+        .support-card p { font-size: 14px; color: #aaae group; line-height: 1.5; margin: 0 0 20px 0; color: #cccccc; }
+        .secondary-btn { background: #fff; border: none; padding: 12px 24px; border-radius: 4px; font-size: 11px; font-weight: 800; cursor: pointer; width: fit-content; align-self: flex-start; }
+        
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); padding: 20px; box-sizing: border-box; }
+        .modal-content { background: #fff; padding: 40px 30px; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); box-sizing: border-box; }
         .modal-title { font-size: 24px; font-weight: 800; margin-bottom: 10px; letter-spacing: -1px; }
-        .modal-desc { font-size: 14px; color: #666; margin-bottom: 25px; }
-        .modal-content input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 14px; }
-        .close-btn { width: 100%; background: transparent; border: none; margin-top: 15px; cursor: pointer; font-size: 11px; font-weight: 700; color: #999; letter-spacing: 1px; }
+        .modal-desc { font-size: 14px; color: #666; margin-bottom: 25px; line-height: 1.4; }
+        .modal-content input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 14px; box-sizing: border-box; }
+        .close-btn { width: 100%; background: transparent; border: none; margin-top: 15px; cursor: pointer; font-size: 11px; font-weight: 700; color: #999; letter-spacing: 1px; box-sizing: border-box; }
+
+        /* RESPONSIVE MEDIA QUERIES PER TELEFONI E TABLET */
+        @media (max-width: 768px) {
+          .tesla-nav { padding: 15px 20px; flex-direction: row; flex-wrap: wrap; gap: 10px; }
+          .tesla-brand-wrapper { flex: none; }
+          .nav-center { order: 3; flex: 1 1 100%; justify-content: space-between; margin-top: 5px; background: rgba(0,0,0,0.02); padding: 4px; border-radius: 8px; }
+          .nav-link { font-size: 11px; padding: 6px 12px; text-align: center; flex: 1; }
+          .nav-right { flex: none; order: 2; }
+          .cart-pill { margin-right: 0; font-size: 9px; }
+          .content-wrapper { padding-top: 130px; }
+          .products-section { padding: 20px; }
+          .grid-container { grid-template-columns: 1fr; gap: 20px; }
+          .tesla-card { padding: 30px 20px; }
+          .tech-grid, .support-cards { gap: 25px; margin: 20px auto; padding: 0 10px; }
+          .support-card { padding: 30px 20px; }
+        }
       `}</style>
     </div>
   );
