@@ -1,51 +1,23 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-
-interface InventoryItem {
-  id: number; 
-  name: string;
-  price: number;
-  quantity: number;
-  status: string;
-  provider?: string;
-  type?: string;
-  eta?: string;
-  origin?: string;
-  destination?: string;
-  created_at?: string;
-  customer_email?: string;
-}
-
-interface Shipment {
-  realId: number; 
-  id: string;
-  provider: string;
-  origin: string;
-  destination: string;
-  type: string;
-  weight: string;
-  status: 'Processing' | 'In Transit' | 'Delivered' | 'On Hold';
-  eta: string;
-  progress: number;
-  price: string;
-}
 
 export default function S2BCombinedPortal() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'Inventory' | 'Shipments' | 'Providers'>('Shipments');
-  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userRole, setUserRole] = useState<'ADMIN' | 'CUSTOMER'>('CUSTOMER');
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [newOrder, setNewOrder] = useState({
-    id: "", provider: "", origin: "", destination: "", type: "", weight: "", eta: "", price: "", customer_email: ""
+    customer_email: "", provider: "", origin: "", destination: "", type: "", price: ""
   });
+
+  const statusCycle = ['PROCESSING', 'IN_TRANSIT', 'DELIVERED', 'ON_HOLD'];
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -55,67 +27,65 @@ export default function S2BCombinedPortal() {
       } else {
         const adminEmails = ['admin@azphur.com', 'tuofratello@email.com']; 
         const userEmail = session.user.email || '';
-        if (adminEmails.includes(userEmail)) {
-          setUserRole('ADMIN');
-          fetchCloudShipments('ADMIN', userEmail);
-        } else {
-          setUserRole('CUSTOMER');
-          fetchCloudShipments('CUSTOMER', userEmail);
-        }
+        const role = adminEmails.includes(userEmail) ? 'ADMIN' : 'CUSTOMER';
+        setUserRole(role);
+        fetchCloudShipments(role, userEmail);
       }
     };
     checkAuth();
   }, [router]);
 
-  const fetchCloudShipments = async (role: 'ADMIN' | 'CUSTOMER', email: string) => {
+  const fetchCloudShipments = async (role: string, email: string) => {
     setLoading(true);
     try {
       let query = supabase.from('inventory').select('*');
-      if (role !== 'ADMIN') {
-        query = query.eq('customer_email', email);
-      }
-      const { data } = await query.order('created_at', { ascending: false });
+      if (role !== 'ADMIN') query = query.eq('customer_email', email);
+      const { data, error } = await query.order('created_at', { ascending: false });
+      
+      if (error) throw error;
 
       if (data) {
-        const mappedData: Shipment[] = data.map((item: InventoryItem) => {
-          let portalStatus: Shipment['status'] = 'Processing';
-          const dbStatus = item.status?.toUpperCase().replace('_', ' ');
-          if (dbStatus === 'DELIVERED') portalStatus = 'Delivered';
-          else if (dbStatus === 'IN TRANSIT') portalStatus = 'In Transit';
-          else if (dbStatus === 'ON HOLD') portalStatus = 'On Hold';
-
-          return {
-            realId: item.id,
-            id: item.id.toString().slice(-6),
-            provider: item.provider || 'Global Supplier',
-            origin: item.origin || 'International Port',
-            destination: item.destination || 'Manila Hub',
-            type: item.name,
-            weight: 'TBD',
-            status: portalStatus,
-            eta: item.eta || 'TBD',
-            progress: 0,
-            price: item.price?.toString() || "0"
-          };
-        });
-        setShipments(mappedData);
+        setShipments(data.map((item: any) => ({
+          realId: item.id,
+          id: item.id.toString(),
+          provider: item.provider || 'Global Supplier',
+          origin: item.origin || 'Intl Port',
+          destination: item.destination || 'Manila Hub',
+          type: item.name,
+          status: item.status || 'PROCESSING',
+          price: item.price || 0
+        })));
       }
+    } catch (err) {
+      console.error("Errore fetch:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const updateCargoStatus = async (realId: number, currentStatus: string) => {
+  const handleStatusUpdate = async (shipId: string, currentStatus: string) => {
     if (userRole !== 'ADMIN') return;
-    const states: Shipment['status'][] = ['Processing', 'In Transit', 'Delivered', 'On Hold'];
-    const currentIndex = states.indexOf(currentStatus as any);
-    const nextStatus = states[(currentIndex + 1) % states.length];
-    await supabase.from('inventory').update({ status: nextStatus.toUpperCase().replace(' ', '_') }).eq('id', realId);
-    const { data: { session } } = await supabase.auth.getSession();
-    fetchCloudShipments(userRole, session?.user?.email || '');
+    const currentIndex = statusCycle.indexOf(currentStatus.toUpperCase());
+    const nextIndex = (currentIndex + 1) % statusCycle.length;
+    const nextStatus = statusCycle[nextIndex];
+    setShipments(prev => prev.map(s => s.id === shipId ? { ...s, status: nextStatus } : s));
+    const { error } = await supabase.from('inventory').update({ status: nextStatus }).match({ id: shipId });
+    if (error) {
+      const { data: { session } } = await supabase.auth.getSession();
+      fetchCloudShipments(userRole, session?.user?.email || '');
+      alert("Errore nel salvataggio dello stato.");
+    }
   };
 
-  // FUNZIONE AGGIORNATA PER CREARE IL CARGO SENZA ERRORI DI SINTASSI DATA
+  const filteredData = shipments.filter(item => {
+    const cleanSearch = searchTerm.toLowerCase().replace('az-', '');
+    return (
+      item.id.toLowerCase().includes(cleanSearch) ||
+      item.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.type.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
+
   const handleCloudSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -126,214 +96,216 @@ export default function S2BCombinedPortal() {
       provider: newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
-      // Se eta è vuoto o "TBD", mandiamo null per evitare errori di tipo "date" nel DB
-      eta: (newOrder.eta && newOrder.eta !== "TBD") ? newOrder.eta : null,
       customer_email: newOrder.customer_email
     };
-
-    const { data, error } = await supabase
-      .from('inventory')
-      .insert([payload])
-      .select();
-
-    if (error) {
-      console.error("ERRORE HQ:", error.message);
-      alert("Errore HQ: " + error.message);
-      return;
-    }
-
-    if (data) {
+    const { error } = await supabase.from('inventory').insert([payload]);
+    if (!error) {
       setIsModalOpen(false);
-      setNewOrder({ id: "", provider: "", origin: "", destination: "", type: "", weight: "", eta: "", price: "", customer_email: "" });
+      setNewOrder({ customer_email: "", provider: "", origin: "", destination: "", type: "", price: "" });
       const { data: { session } } = await supabase.auth.getSession();
-      fetchCloudShipments('ADMIN', session?.user?.email || '');
-    }
-  };
-
-  const filteredShipments = shipments.filter(ship => 
-    ship.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    ship.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    ship.type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Delivered': return { bg: '#00ff8810', text: '#00ff88', border: '#00ff8820' };
-      case 'In Transit': return { bg: '#22d3ee10', text: '#22d3ee', border: '#22d3ee20' };
-      case 'On Hold': return { bg: '#ef444410', text: '#ef4444', border: '#ef444420' };
-      case 'Processing': return { bg: '#eab30810', text: '#eab308', border: '#eab30820' };
-      default: return { bg: '#333', text: '#fff', border: '#444' };
+      fetchCloudShipments(userRole, session?.user?.email || '');
     }
   };
 
   return (
     <div className="portal-container">
-      
-      {/* SIDEBAR - Adattiva */}
       <aside className="sidebar">
         <div className="sidebar-content">
-          <button onClick={() => router.push('/')} className="back-btn">&larr; HOME</button>
-          <div className="logo-section">
-            <span className="logo-text">AZPHUR</span>
-            <span className="logo-subtext">LOGISTICS</span>
+          <div className="logo-group" onClick={() => router.push('/')}>
+            <img src="/logo-azphur.avif" alt="AZPHUR" className="main-logo" />
+            <div className="status-orb"></div>
           </div>
           <nav className="nav-links">
             {['Shipments', 'Inventory', 'Providers'].map(item => (
               <div key={item} onClick={() => setActiveTab(item as any)}
                 className={`nav-item ${activeTab === item ? 'active' : ''}`}>
-                {item.toUpperCase()}
+                <span className="nav-dot">•</span> {item.toUpperCase()}
               </div>
             ))}
           </nav>
+          <button onClick={() => router.push('/')} className="back-btn">EXIT_HQ</button>
         </div>
       </aside>
 
       <main className="main-content">
-        <div className="header-section">
-          <div>
-            <h1 className="main-title">S2B <span style={{ color: '#22d3ee' }}>GATEWAY</span></h1>
-            <p className="access-label">
-                MODE: <span style={{color: userRole === 'ADMIN' ? '#22d3ee' : '#eab308'}}>{userRole}</span>
-            </p>
+        <div className="header-wrapper">
+          <div className="title-section">
+            <span className="phase-label">OPERATIONAL_CORE_v2.06</span>
+            <h1 className="main-title-cyan">LOGISTICS GATEWAY</h1>
           </div>
-          {userRole === 'ADMIN' && (
-            <button onClick={() => setIsModalOpen(true)} className="add-cargo-btn">+ NEW</button>
-          )}
+          <div className="actions-section">
+            <div className="search-container">
+              <input 
+                placeholder="Search AZ-Ref (es. AZ-6)..." 
+                className="smooth-search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            {userRole === 'ADMIN' && (
+              <button onClick={() => setIsModalOpen(true)} className="modern-add-btn">
+                + REGISTER_NEW_CARGO
+              </button>
+            )}
+          </div>
         </div>
 
-        <input 
-          placeholder="Search cargo..." 
-          className="search-input"
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-
-        <div className="data-container">
-          {/* VIEW PER DESKTOP (Tabella) */}
-          <div className="desktop-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Cargo Ref</th>
-                  <th>Route</th>
-                  <th>Valuation</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!loading && filteredShipments.map((ship, index) => {
-                  const colors = getStatusColor(ship.status);
-                  return (
+        {activeTab === 'Shipments' && (
+          <div className="data-container">
+            <div className="desktop-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>REF / ASSET_INFO</th>
+                    <th>LOGISTICS_ROUTE</th>
+                    <th>STATUS {userRole === 'ADMIN' && "(CLICK TO CHANGE)"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!loading && filteredData.map((ship, index) => (
                     <tr key={index}>
-                      <td>
+                      <td className="ref-id-cell">
                         <div className="ref-id">AZ-{ship.id}</div>
-                        <div className="item-type">{ship.type}</div>
-                      </td>
-                      <td>
-                        <div className="route-text">{ship.origin} &rarr; {ship.destination}</div>
-                        <div className="provider-text">{ship.provider}</div>
-                      </td>
-                      <td className="price-text">₱{Number(ship.price).toLocaleString()}</td>
-                      <td>
-                        <div onClick={() => updateCargoStatus(ship.realId, ship.status)}
-                          className="status-badge" style={{ backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
-                          {ship.status.toUpperCase()}
+                        <div className="asset-sub-info">
+                          <span className="sub-type">{ship.type}</span>
+                          <span className="sub-price">₱{Number(ship.price).toLocaleString()}</span>
                         </div>
                       </td>
+                      <td>
+                        <div className="route-text">{ship.origin} → {ship.destination}</div>
+                        <div className="provider-text">{ship.provider}</div>
+                      </td>
+                      <td>
+                        <span 
+                          onClick={() => handleStatusUpdate(ship.id, ship.status)}
+                          className={`status-badge st-${ship.status.toLowerCase().replace(' ', '_')} ${userRole === 'ADMIN' ? 'clickable' : 'readonly'}`}
+                        >
+                          {ship.status.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+              {filteredData.length === 0 && !loading && <div className="empty-state">NO_ASSETS_FOUND</div>}
+            </div>
           </div>
+        )}
 
-          {/* VIEW PER MOBILE (Cards) */}
-          <div className="mobile-list">
-            {loading ? <p className="loading-text">SYNCING...</p> : filteredShipments.map((ship, index) => {
-               const colors = getStatusColor(ship.status);
-               return (
-                 <div key={index} className="mobile-card">
-                   <div className="card-header">
-                     <span className="ref-id">AZ-{ship.id}</span>
-                     <div onClick={() => updateCargoStatus(ship.realId, ship.status)}
-                          className="status-badge" style={{ backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
-                          {ship.status.toUpperCase()}
-                     </div>
-                   </div>
-                   <div className="card-body">
-                     <p><strong>Item:</strong> {ship.type}</p>
-                     <p><strong>Route:</strong> {ship.origin} &rarr; {ship.destination}</p>
-                     <p><strong>Price:</strong> ₱{Number(ship.price).toLocaleString()}</p>
-                   </div>
-                 </div>
-               );
-            })}
-          </div>
-        </div>
+        {(activeTab === 'Inventory' || activeTab === 'Providers') && (
+            <div className="info-card">
+              <h3>{activeTab.toUpperCase()}</h3>
+              <p>Database node sync active...</p>
+            </div>
+        )}
       </main>
 
       {isModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>REGISTER CARGO</h3>
-            <form onSubmit={handleCloudSubmit}>
-              <input placeholder="Customer Email" required onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
-              <input placeholder="Provider" required onChange={e => setNewOrder({...newOrder, provider: e.target.value})} />
-              <input placeholder="Origin" required onChange={e => setNewOrder({...newOrder, origin: e.target.value})} />
-              <input placeholder="Destination" required onChange={e => setNewOrder({...newOrder, destination: e.target.value})} />
-              <input placeholder="Hardware Description" required onChange={e => setNewOrder({...newOrder, type: e.target.value})} />
-              <input type="number" placeholder="Value (PHP)" required onChange={e => setNewOrder({...newOrder, price: e.target.value})} />
-              <button type="submit" className="submit-btn">PUSH TO HQ</button>
-              <button type="button" onClick={() => setIsModalOpen(false)} className="abort-btn">ABORT</button>
+            <div className="modal-header">
+              <h2 className="modal-title">REGISTER_NEW_CARGO</h2>
+              <p className="modal-subtitle">Initialize asset deployment in the logistics grid.</p>
+            </div>
+            <form onSubmit={handleCloudSubmit} className="modern-form">
+              <div className="form-group">
+                <label>CUSTOMER_EMAIL</label>
+                <input required type="email" placeholder="client@access.com" value={newOrder.customer_email} onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label>PROVIDER</label>
+                <input required type="text" placeholder="Supplier Node ID" value={newOrder.provider} onChange={e => setNewOrder({...newOrder, provider: e.target.value})} />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>ORIGIN</label>
+                  <input required type="text" placeholder="Loading Point" value={newOrder.origin} onChange={e => setNewOrder({...newOrder, origin: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>DESTINATION</label>
+                  <input required type="text" placeholder="Target Hub" value={newOrder.destination} onChange={e => setNewOrder({...newOrder, destination: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>HARDWARE_DESCRIPTION</label>
+                <input required type="text" placeholder="Asset Item Name" value={newOrder.type} onChange={e => setNewOrder({...newOrder, type: e.target.value})} />
+              </div>
+              <div className="form-group">
+                <label>VALUE (PHP)</label>
+                <input required type="number" placeholder="0.00" value={newOrder.price} onChange={e => setNewOrder({...newOrder, price: e.target.value})} />
+              </div>
+              
+              <div className="modal-actions">
+                <button type="submit" className="execute-btn">EXECUTE_DEPLOYMENT</button>
+                <button type="button" className="abort-btn" onClick={() => setIsModalOpen(false)}>ABORT_MISSION</button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
       <style jsx>{`
-        .portal-container { background-color: #050505; min-height: 100vh; color: #fff; display: flex; flex-direction: column; }
-        .sidebar { width: 100%; background-color: #0a0a0a; border-bottom: 1px solid #111; padding: 15px; }
-        .sidebar-content { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
-        .back-btn { background: none; border: 1px solid #1a1a1a; color: #555; padding: 8px; border-radius: 8px; font-size: 10px; cursor: pointer; }
-        .logo-section { display: none; }
-        .nav-links { display: flex; gap: 10px; }
-        .nav-item { padding: 8px 12px; border-radius: 8px; font-size: 10px; cursor: pointer; color: #444; }
-        .nav-item.active { background: #22d3ee10; color: #22d3ee; }
+        /* TABLE INFO STYLING */
+        .ref-id-cell { display: flex; flex-direction: column; gap: 4px; }
+        .asset-sub-info { display: flex; flex-direction: column; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+        .sub-type { color: #64748b; font-weight: 700; text-transform: uppercase; }
+        .sub-price { color: #0ea5e9; font-weight: 800; }
 
-        .main-content { padding: 20px; width: 100%; }
-        .header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .main-title { font-size: 24px; font-weight: 900; font-style: italic; }
-        .access-label { font-size: 9px; color: #444; }
-        .add-cargo-btn { background: #fff; color: #000; padding: 10px 15px; border-radius: 10px; font-weight: bold; font-size: 12px; border: none; }
-        .search-input { width: 100%; padding: 12px; background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 10px; color: #fff; margin-bottom: 20px; }
+        /* MODAL STYLING */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        .modal-content { background: #fff; width: 100%; max-width: 500px; border-radius: 24px; padding: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #e2e8f0; }
+        .modal-header { margin-bottom: 24px; }
+        .modal-title { font-size: 20px; font-weight: 900; color: #111; letter-spacing: -0.5px; margin: 0; }
+        .modal-subtitle { font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 600; }
+        
+        .modern-form { display: flex; flex-direction: column; gap: 16px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 10px; font-weight: 800; color: #94a3b8; letter-spacing: 0.5px; }
+        .form-group input { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; outline: none; transition: 0.2s; }
+        .form-group input:focus { border-color: #22d3ee; background: #fff; box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.1); }
+        
+        .modal-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+        .execute-btn { background: #111; color: #22d3ee; border: 1px solid #22d3ee; padding: 16px; border-radius: 12px; font-weight: 900; font-size: 12px; cursor: pointer; transition: 0.2s; }
+        .execute-btn:hover { background: #22d3ee; color: #111; }
+        .abort-btn { background: transparent; color: #94a3b8; border: none; padding: 10px; font-weight: 800; font-size: 11px; cursor: pointer; }
+        .abort-btn:hover { color: #ef4444; }
 
-        .desktop-table { display: none; }
-        .mobile-list { display: flex; flex-direction: column; gap: 15px; }
-        .mobile-card { background: #0a0a0a; border: 1px solid #1a1a1a; padding: 15px; border-radius: 15px; }
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .card-body p { font-size: 12px; color: #888; margin: 5px 0; }
-        .card-body strong { color: #fff; }
-        .ref-id { color: #22d3ee; font-weight: 900; }
-        .status-badge { padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 900; }
+        /* BADGES */
+        .status-badge { padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 900; letter-spacing: 1px; transition: 0.2s; display: inline-block; min-width: 100px; text-align: center; }
+        .status-badge.clickable { cursor: pointer; }
+        .st-processing { background: #fff7ed; color: #f97316; border: 1px solid #ffedd5; }
+        .st-in_transit { background: #fefce8; color: #ca8a04; border: 1px solid #fef08a; }
+        .st-delivered { background: #f0fdf4; color: #22c55e; border: 1px solid #dcfce7; }
+        .st-on_hold { background: #fef2f2; color: #ef4444; border: 1px solid #fee2e2; }
 
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; justify-content: center; align-items: center; padding: 20px; z-index: 100; }
-        .modal-content { background: #0a0a0a; padding: 25px; border-radius: 20px; border: 1px solid #22d3ee; width: 100%; max-width: 400px; }
-        .modal-content input { width: 100%; padding: 12px; background: #000; border: 1px solid #1a1a1a; border-radius: 8px; color: #fff; margin-bottom: 10px; }
-        .submit-btn { width: 100%; padding: 15px; background: #22d3ee; border: none; border-radius: 10px; font-weight: 900; cursor: pointer; }
-        .abort-btn { width: 100%; background: none; border: none; color: #444; margin-top: 10px; cursor: pointer; }
+        .portal-container { background: #fcfdfe; min-height: 100vh; display: flex; flex-direction: column; }
+        .sidebar { background: #fff; border-bottom: 1px solid #eef2f6; padding: 15px 30px; }
+        .sidebar-content { display: flex; align-items: center; justify-content: space-between; }
+        .main-logo { height: 42px; width: auto; }
+        .nav-links { display: flex; gap: 25px; }
+        .nav-item { font-size: 13px; font-weight: 800; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .nav-item.active { color: #111; }
+        .main-content { padding: 40px; max-width: 1400px; margin: 0 auto; width: 100%; }
+        .header-wrapper { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 40px; }
+        .main-title-cyan { font-size: 38px; font-weight: 900; color: #22d3ee; letter-spacing: -2px; margin: 0; }
+        .smooth-search { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 12px 20px; border-radius: 12px; width: 250px; outline: none; }
+        .modern-add-btn { background: #111; color: #22d3ee; border: 1px solid #22d3ee; padding: 12px 24px; border-radius: 12px; font-weight: 800; cursor: pointer; }
+        
+        .desktop-table { background: #fff; border-radius: 20px; border: 1px solid #eef2f6; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; }
+        th { padding: 20px; text-align: left; font-size: 11px; color: #94a3b8; font-weight: 800; background: #fafafa; border-bottom: 1px solid #eef2f6; }
+        td { padding: 20px; border-bottom: 1px solid #f8fafc; color: #111; vertical-align: middle; }
+        .ref-id { font-family: 'JetBrains Mono', monospace; font-weight: 800; color: #0891b2; font-size: 15px; }
+        .route-text { font-weight: 700; font-size: 14px; }
+        .provider-text { font-size: 11px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
 
         @media (min-width: 768px) {
           .portal-container { flex-direction: row; }
-          .sidebar { width: 260px; height: 100vh; position: fixed; border-right: 1px solid #111; border-bottom: none; }
-          .sidebar-content { flex-direction: column; align-items: flex-start; justify-content: flex-start; height: 100%; }
-          .logo-section { display: block; margin: 30px 0; }
-          .nav-links { flex-direction: column; width: 100%; }
-          .main-content { margin-left: 260px; padding: 50px; }
-          .desktop-table { display: block; background: #0a0a0a; border-radius: 20px; border: 1px solid #1a1a1a; overflow: hidden; }
-          .mobile-list { display: none; }
-          table { width: 100%; border-collapse: collapse; }
-          th { background: #0f0f0f; padding: 20px; text-align: left; font-size: 10px; color: #444; }
-          td { padding: 20px; border-bottom: 1px solid #111; }
-          .main-title { font-size: 32px; }
+          .sidebar { width: 280px; height: 100vh; border-right: 1px solid #eef2f6; border-bottom: none; }
+          .sidebar-content { flex-direction: column; height: 100%; padding: 40px 30px; align-items: flex-start; }
+          .nav-links { flex-direction: column; width: 100%; margin: 60px 0; }
+          .back-btn { margin-top: auto; width: 100%; padding: 12px; background: #f1f5f9; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; }
         }
       `}</style>
     </div>

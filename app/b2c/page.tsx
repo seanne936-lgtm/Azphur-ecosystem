@@ -2,35 +2,30 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase'; 
+import { supabase } from '@/lib/supabase';
 
 export default function TitanStore() {
+  const [activeSection, setActiveSection] = useState<'TITAN' | 'SYSTEMS' | 'SUPPORT'>('TITAN');
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cartCount, setCartCount] = useState(0);
-  const [isPaying, setIsPaying] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [cardData, setCardData] = useState({ number: "", expiry: "", cvv: "" });
   const [mounted, setMounted] = useState(false);
+
+  // Lead Form State
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fallbackKits = [
     { 
-      id: "KIT-RES-1", 
-      name: "Titan Home Core", 
-      tier: "ESSENTIAL",
-      price: 185000, 
-      savings: "4,500",
-      specs: "5.2kW Generation + 5kWh Storage",
-      desc: "Perfect for independent households looking to eliminate monthly bills."
+      id: "KIT-01", name: "TITAN CORE", tier: "ESSENTIAL", price: 185000, 
+      specs: ["5.2kW PV", "5kWh Storage", "AI Sync"],
+      desc: "Autonomy for residential properties."
     },
     { 
-      id: "KIT-ULTRA", 
-      name: "Titan Ultra Max", 
-      tier: "PREMIUM",
-      price: 420000, 
-      savings: "12,000",
-      specs: "12kW Generation + 20kWh Storage",
-      desc: "Full estate independence with zero-grid reliance and AI management."
+      id: "KIT-02", name: "TITAN ULTRA", tier: "PREMIUM", price: 420000, 
+      specs: ["12.0kW PV", "20kWh Storage", "Full Backup"],
+      desc: "Zero-grid reliance for luxury estates."
     }
   ];
 
@@ -39,177 +34,231 @@ export default function TitanStore() {
     async function loadData() {
       try {
         const { data, error } = await supabase.from('products').select('*');
-        if (data && data.length > 0 && !error) {
-          setProducts(data);
-        } else {
-          setProducts(fallbackKits);
-        }
-      } catch (e) {
-        setProducts(fallbackKits);
-      } finally {
-        setLoading(false);
-      }
+        if (data && data.length > 0 && !error) setProducts(data);
+        else setProducts(fallbackKits);
+      } catch (e) { setProducts(fallbackKits); }
+      finally { setLoading(false); }
     }
     loadData();
   }, []);
 
-  const validateCard = (num: string) => {
-    const value = num.replace(/\D/g, "");
-    return value.length === 16; 
-  };
-
-  const handlePayment = (e: React.FormEvent) => {
+  const handleLeadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateCard(cardData.number)) {
-      alert("❌ SECURITY ALERT: Invalid card number format.");
-      return;
+    setIsSubmitting(true);
+
+    // 1. SALVATAGGIO SU SUPABASE (ESECUZIONE PROTOCOLLO)
+    const { error } = await supabase.from('leads').insert([
+      {
+        customer_name: formData.name,
+        customer_email: formData.email,
+        customer_phone: formData.phone,
+        product_name: selectedProduct?.name || 'TITAN_GENERIC',
+        deal_value: Number(selectedProduct?.price) || 0,
+        status: 'NEW'
+      }
+    ]);
+
+    if (!error) {
+      // 2. NOTIFICA ESTERNA (MAKE.COM / WEBHOOK)
+      // Sostituisci 'IL_TUO_URL_DI_MAKE' con il link che hai copiato da Make
+      fetch('https://hook.eu1.make.com/udkzyhx9od1e1o4k7wfwvxa3bsesgafn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          product: selectedProduct?.name,
+          value: selectedProduct?.price,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(err => console.error("Errore notifica Make:", err));
+
+      // 3. ISTRUZIONI BONIFICO (SISTEMATO ALERT)
+      alert(`✅ STRATEGIC LEAD CAPTURED!
+      
+PAYMENT PROTOCOL:
+To confirm the order of ${selectedProduct?.name}, make the bank transfer.
+
+send the recip of the transavtion at azphur@gmail.com
+
+We will verify the credit and update the status on your Dashboard.`);
+
+      setIsModalOpen(false);
+      setFormData({ name: '', email: '', phone: '' });
+    } else {
+      console.error("Supabase Error:", error);
+      alert(`Error capturing lead: ${error.message}`);
     }
-    setCartCount(prev => prev + 1);
-    setIsPaying(false);
-    alert("✅ TRANSACTION VERIFIED: Your Titan System is now being prepared.");
+    setIsSubmitting(false);
   };
 
   if (!mounted) return null;
 
   return (
-    <div style={{ backgroundColor: '#020202', minHeight: '100vh', color: '#fff', fontFamily: 'sans-serif', overflowX: 'hidden' }}>
-      
-      {/* NAVBAR */}
-      <nav className="store-nav">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Link href="/" className="logo">AZPHUR</Link>
-            <span className="nav-divider">/</span>
-            <span className="nav-subtitle">TITAN RETAIL</span>
+    <div className="titan-store">
+      <nav className="tesla-nav">
+        <Link href="/" className="tesla-brand-wrapper">
+          <img src="/logo-azphur.avif" alt="Logo" className="tesla-brand-img" />
+          <span className="tesla-logo">AZPHUR</span>
+        </Link>
+        <div className="nav-center">
+          {['TITAN', 'SYSTEMS', 'SUPPORT'].map((item: any) => (
+            <span 
+              key={item} 
+              className={`nav-link ${activeSection === item ? 'active' : ''}`}
+              onClick={() => setActiveSection(item)}
+            >
+              {item}
+            </span>
+          ))}
         </div>
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-            <div className="cart-badge">CART: {cartCount}</div>
-            <Link href="/" className="exit-link">EXIT</Link>
+        <div className="nav-right">
+          <div className="cart-pill">SECURE_LAYER_ACTIVE</div>
         </div>
       </nav>
 
-      {/* HERO */}
-      <div className="store-hero">
-        <h3 className="hero-sub">PHASE 03: HOUSEHOLD INDEPENDENCE</h3>
-        <h1 className="hero-main">TITAN <span style={{ color: '#22d3ee' }}>SERIES.</span></h1>
-        <p className="hero-desc">
-          {loading ? "INITIALIZING PRODUCT DATABASE..." : "Stop buying energy. Start owning the source."}
-        </p>
-      </div>
-
-      {/* DYNAMIC GRID */}
-      <div className="products-grid">
-        {products.map(kit => (
-          <div key={kit.id} className="product-card">
-            <div className="bg-letter">{kit.tier?.[0] || 'T'}</div>
+      <main className="content-wrapper">
+        {activeSection === 'TITAN' && (
+          <div className="fade-in">
+            <section className="store-hero">
+              <h1 className="main-heading">TITAN <span className="thin">SERIES</span></h1>
+              <p className="sub-heading">Next-generation solar infrastructure.</p>
+            </section>
             
-            <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <span className="tier-tag">{kit.tier || 'TITAN'}</span>
-                <h3 className="product-name">{kit.name}</h3>
-                <p className="product-desc">{kit.desc}</p>
-                
-                <div className="savings-box">
-                    <div className="savings-label">ESTIMATED SAVINGS</div>
-                    <div className="savings-value">₱{kit.savings}<span style={{ fontSize: '12px', color: '#444' }}> / mo</span></div>
-                </div>
-
-                <div className="specs-list">
-                    • {kit.specs} <br />
-                    • AI Grid Synchronization <br />
-                    • 10 Year Titan Warranty
-                </div>
-
-                <div className="card-footer">
-                    <div>
-                        <div className="footer-label">FULL DEPLOYMENT</div>
-                        <div className="footer-price">₱{Number(kit.price).toLocaleString()}</div>
+            <section className="products-section">
+              <div className="grid-container">
+                {products.map(kit => (
+                  <div key={kit.id} className="tesla-card">
+                    <div className="card-header">
+                      <h2 className="product-title">{kit.name}</h2>
+                      <p className="product-subtitle">{kit.tier}</p>
+                    </div>
+                    <div className="product-visual" style={{ backgroundImage: `url(${kit.image_url || ''})` }}></div>
+                    <div className="price-box">
+                        <span className="currency">₱</span>
+                        <span className="amount">{Number(kit.price).toLocaleString()}</span>
                     </div>
                     <button 
-                        onClick={() => { setSelectedProduct(kit); setIsPaying(true); }}
-                        className={`order-btn ${kit.tier === 'PREMIUM' ? 'premium' : ''}`}
+                      onClick={() => { setSelectedProduct(kit); setIsModalOpen(true); }} 
+                      className="tesla-btn-primary"
                     >
-                        ORDER
+                      ORDER NOW
                     </button>
-                </div>
-            </div>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* PAYMENT MODAL */}
-      {isPaying && (
+        {activeSection === 'SYSTEMS' && (
+          <div className="fade-in system-page">
+            <section className="tech-hero">
+              <h1 className="section-title">ENGINEERED FOR <br/><span className="blue-text">PERFORMANCE</span></h1>
+              <div className="tech-grid">
+                <div className="tech-item">
+                  <h3>CRYSTALLINE_PV</h3>
+                  <p>Highest efficiency solar cells designed for tropical irradiance levels.</p>
+                </div>
+                <div className="tech-item">
+                  <h3>LFP_STORAGE</h3>
+                  <p>Lithium Iron Phosphate nodes with 10,000+ cycle life expectancy.</p>
+                </div>
+                <div className="tech-item">
+                  <h3>AZ_OS_GENESIS</h3>
+                  <p>AI-driven management system that predicts weather patterns to optimize discharge.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeSection === 'SUPPORT' && (
+          <div className="fade-in support-page">
+            <section className="support-hero">
+              <h1 className="section-title">24/7 MISSION <br/><span className="thin">CONTROL</span></h1>
+              <div className="support-cards">
+                <div className="support-card">
+                  <h4>REMOTE_DIAGNOSTICS</h4>
+                  <p>Real-time monitoring of every Titan node worldwide.</p>
+                  <button className="secondary-btn">OPEN TICKET</button>
+                </div>
+                <div className="support-card">
+                  <h4>INSTALLATION_HUB</h4>
+                  <p>Find certified Azphur engineers in your sector.</p>
+                  <button className="secondary-btn">LOCATE HUB</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+      </main>
+
+      {isModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h2 className="modal-title">SECURE GATEWAY</h2>
-            <p className="modal-subtitle">UNIT: {selectedProduct?.name.toUpperCase()}</p>
-            
-            <form onSubmit={handlePayment} className="payment-form">
-              <div className="input-group">
-                  <label>CREDIT CARD NUMBER</label>
-                  <input 
-                    required placeholder="0000 0000 0000 0000" maxLength={16}
-                    onChange={e => setCardData({...cardData, number: e.target.value})}
-                  />
-              </div>
-              <button type="submit" className="auth-btn">
-                AUTHORIZE ₱{Number(selectedProduct?.price).toLocaleString()}
+            <h3 className="modal-title">RESERVE {selectedProduct?.name}</h3>
+            <p className="modal-desc">Enter your details to initiate the transaction protocol.</p>
+            <form onSubmit={handleLeadSubmit}>
+              <input 
+                type="text" placeholder="Full Name" required 
+                value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})}
+              />
+              <input 
+                type="email" placeholder="Corporate Email" required 
+                value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
+              />
+              <input 
+                type="tel" placeholder="Phone Number" required 
+                value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}
+              />
+              <button type="submit" disabled={isSubmitting} className="tesla-btn-primary">
+                {isSubmitting ? 'PROCESSING...' : 'CONFIRM RESERVATION'}
               </button>
-              <button type="button" onClick={() => setIsPaying(false)} className="abort-btn">ABORT TRANSACTION</button>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="close-btn">CANCEL</button>
             </form>
           </div>
         </div>
       )}
 
       <style jsx>{`
-        .store-nav { padding: 20px; display: flex; justify-content: space-between; alignItems: center; border-bottom: 1px solid #111; }
-        .logo { text-decoration: none; color: #22d3ee; font-weight: 900; font-size: 18px; letter-spacing: 2px; }
-        .nav-divider { color: #333; font-size: 18px; }
-        .nav-subtitle { font-size: 9px; font-weight: bold; color: #fff; letter-spacing: 1px; }
-        .cart-badge { font-size: 9px; font-weight: bold; border: 1px solid #22d3ee; color: #22d3ee; padding: 6px 12px; border-radius: 30px; }
-        .exit-link { text-decoration: none; color: #444; font-size: 9px; font-weight: bold; }
-
-        .store-hero { padding: 60px 20px; textAlign: center; background: radial-gradient(circle at center, #0a0a0a 0%, #020202 100%); }
-        .hero-sub { color: #22d3ee; fontSize: 9px; letter-spacing: 4px; font-weight: bold; margin-bottom: 15px; }
-        .hero-main { font-size: 38px; font-weight: 900; margin: 0; letter-spacing: -1px; font-style: italic; line-height: 1; }
-        .hero-desc { color: #555; max-width: 500px; margin: 20px auto; fontSize: 14px; line-height: 1.6; }
-
-        .products-grid { display: grid; grid-template-columns: 1fr; gap: 20px; padding: 0 20px 60px; max-width: 1400px; margin: 0 auto; }
-        .product-card { background-color: #050505; border-radius: 30px; border: 1px solid #111; padding: 30px; position: relative; overflow: hidden; transition: 0.3s; }
-        .bg-letter { position: absolute; top: 10px; right: 20px; color: #111; font-size: 60px; font-weight: 900; z-index: 0; opacity: 0.3; }
-        .tier-tag { font-size: 9px; font-weight: bold; color: #22d3ee; letter-spacing: 2px; }
-        .product-name { font-size: 24px; font-weight: 900; margin: 10px 0; }
-        .product-desc { color: #555; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
-        .savings-box { background-color: #000; padding: 15px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #0f0f0f; }
-        .savings-label { font-size: 9px; color: #22d3ee; margin-bottom: 5px; font-weight: bold; }
-        .savings-value { font-size: 20px; font-weight: 900; }
-        .specs-list { font-size: 12px; color: #888; margin-bottom: 30px; line-height: 1.8; }
-        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
-        .footer-label { font-size: 8px; color: #444; font-weight: bold; }
-        .footer-price { font-size: 18px; font-weight: 900; }
-        .order-btn { background: #fff; color: #000; border: none; padding: 12px 20px; border-radius: 12px; font-weight: 900; cursor: pointer; font-size: 11px; }
-        .order-btn.premium { background: #22d3ee; }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 20px; backdrop-filter: blur(10px); }
-        .modal-content { background: #000; padding: 30px; border-radius: 30px; border: 1px solid #22d3ee; width: 100%; max-width: 400px; }
-        .modal-title { text-align: center; font-size: 18px; font-weight: 900; font-style: italic; margin-bottom: 5px; }
-        .modal-subtitle { text-align: center; font-size: 9px; color: #444; margin-bottom: 25px; }
-        .payment-form { display: flex; flex-direction: column; gap: 15px; }
-        .input-group label { font-size: 8px; color: #22d3ee; font-weight: bold; display: block; margin-bottom: 5px; }
-        .input-group input { width: 100%; padding: 15px; background: #050505; border: 1px solid #111; border-radius: 12px; color: #fff; letter-spacing: 2px; text-align: center; font-size: 14px; }
-        .auth-btn { background: #22d3ee; color: #000; padding: 15px; border-radius: 15px; font-weight: 900; cursor: pointer; border: none; font-size: 13px; }
-        .abort-btn { background: none; border: none; color: #444; cursor: pointer; font-size: 10px; font-weight: bold; margin-top: 5px; }
-
-        @media (min-width: 768px) {
-          .store-nav { padding: 30px 50px; }
-          .logo { font-size: 20px; }
-          .nav-subtitle { font-size: 10px; }
-          .hero-main { font-size: 64px; letter-spacing: -3px; }
-          .hero-desc { font-size: 16px; }
-          .products-grid { grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 40px; padding: 0 50px 100px; }
-          .product-name { font-size: 30px; }
-          .modal-content { padding: 50px; }
-          .modal-title { font-size: 22px; }
-          .order-btn { padding: 15px 35px; font-size: 13px; }
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;600;700;900&display=swap');
+        .titan-store { background: #fff; color: #171a20; min-height: 100vh; font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+        .tesla-nav { position: fixed; top: 0; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; z-index: 100; background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); }
+        .tesla-brand-wrapper { display: flex; align-items: center; gap: 12px; text-decoration: none; flex: 1; }
+        .tesla-brand-img { height: 28px; width: auto; }
+        .tesla-logo { font-weight: 900; letter-spacing: 6px; color: #000; font-size: 14px; }
+        .nav-center { display: flex; gap: 5px; flex: 2; justify-content: center; }
+        .nav-right { flex: 1; display: flex; justify-content: flex-end; }
+        .cart-pill { font-size: 10px; font-weight: 800; letter-spacing: 1px; margin-right: 20px; white-space: nowrap; }
+        .nav-link { font-size: 12px; font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 4px; transition: 0.2s; letter-spacing: 1px; color: #393c41; }
+        .nav-link.active { color: #000; background: rgba(0,0,0,0.05); }
+        .content-wrapper { padding-top: 100px; }
+        .fade-in { animation: fadeIn 0.8s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .store-hero { height: 40vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .main-heading { font-size: clamp(40px, 8vw, 80px); font-weight: 700; letter-spacing: -4px; margin: 0; line-height: 0.9; }
+        .thin { font-weight: 100; }
+        .products-section { padding: 40px; max-width: 1200px; margin: 0 auto; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 30px; }
+        .tesla-card { background: #f4f4f4; border-radius: 12px; padding: 40px; text-align: center; }
+        .product-visual { height: 200px; margin: 30px 0; background-size: contain; background-repeat: no-repeat; background-position: center; }
+        .amount { font-size: 24px; font-weight: 700; display: block; margin-bottom: 20px; }
+        .tesla-btn-primary { width: 100%; background: #3e6ae1; color: #fff; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.3s; }
+        .tesla-btn-primary:hover { background: #171a20; }
+        .tech-hero { height: 40vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        .section-title { font-size: clamp(30px, 5vw, 50px); font-weight: 800; letter-spacing: -2px; line-height: 1; }
+        .blue-text { color: #3e6ae1; }
+        .tech-grid, .support-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 40px; max-width: 1000px; margin: 40px auto; padding: 0 20px; }
+        .support-card { background: #171a20; color: #fff; padding: 40px; border-radius: 12px; text-align: left; }
+        .secondary-btn { margin-top: 20px; background: #fff; border: none; padding: 10px 20px; border-radius: 4px; font-size: 11px; font-weight: 800; cursor: pointer; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); }
+        .modal-content { background: #fff; padding: 40px; border-radius: 20px; width: 100%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+        .modal-title { font-size: 24px; font-weight: 800; margin-bottom: 10px; letter-spacing: -1px; }
+        .modal-desc { font-size: 14px; color: #666; margin-bottom: 25px; }
+        .modal-content input { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 14px; }
+        .close-btn { width: 100%; background: transparent; border: none; margin-top: 15px; cursor: pointer; font-size: 11px; font-weight: 700; color: #999; letter-spacing: 1px; }
       `}</style>
     </div>
   );
