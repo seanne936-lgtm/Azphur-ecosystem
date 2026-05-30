@@ -154,7 +154,7 @@ export default function AdminDashboard() {
       const { error } = await supabase
         .from('leads')
         .update({ 
-          status: 'QUOTED',
+          status: 'QUOTED', // Mantenuto fisso in MAIUSCOLO
           deal_value: finalDealValue,
           quote_details: {
             items: [{ name: productName, qty: 1, base: baseValue }],
@@ -167,6 +167,9 @@ export default function AdminDashboard() {
 
       if (!error) {
         syncHqData();
+      } else {
+        console.error("Supabase Error on Quote:", error);
+        alert("DATABASE_ERROR: " + error.message);
       }
     } catch (err) {
       console.error("Quote Generation Error:", err);
@@ -181,11 +184,16 @@ export default function AdminDashboard() {
   }
 
   async function updateLeadStatus(id, newStatus) {
+    // BLINDATURA: Forza lo status in MAIUSCOLO prima di mandarlo a Supabase per evitare il Check Constraint Error
+    const sanitizedStatus = newStatus ? newStatus.toUpperCase() : '';
     try {
-      const { error } = await supabase.from('leads').update({ status: newStatus }).eq('id', id);
+      const { error } = await supabase.from('leads').update({ status: sanitizedStatus }).eq('id', id);
       if (!error) {
-        setLeads(prev => prev.map(l => l.id === id ? { ...l, status: newStatus } : l));
+        setLeads(prev => prev.map(l => l.id === id ? { ...l, status: sanitizedStatus } : l));
         syncHqData();
+      } else {
+        console.error("Supabase Error on Status Update:", error);
+        alert("DATABASE_ERROR: " + error.message);
       }
     } catch (err) {
       console.error("Status Update Error:", err);
@@ -205,7 +213,7 @@ export default function AdminDashboard() {
   async function dispatchToProvider(leadId, providerName) {
     if(!providerName) return;
     alert(`DISPATCH_ORDER: Executing routing to ${providerName}...`);
-    await updateLeadStatus(leadId, 'CONTACTED');
+    await updateLeadStatus(leadId, 'CONTACTED'); // Forza la chiamata con lo stato corretto
   }
 
   async function handleAddAsset(e) {
@@ -299,7 +307,7 @@ export default function AdminDashboard() {
         
         .control-btn { border: 1px solid #e2e8f0; background: #fff; padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 800; cursor: pointer; }
         .control-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
-        .term-btn { background: #fee2e2; border: none; color: #991b1b; padding: 6px 12px; font-size: 10px; font-weight: 900; cursor: pointer; border-radius: 8px; }
+        .term-btn { background: #fee2e2; border: none; color: #991b1b; padding: 6px 12px; font-size: 10px; font-weight: 900; cursor: border-radius: 8px; }
         
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @media (min-width: 1024px) { .hq-console { grid-template-columns: 1.2fr 0.8fr; } }
@@ -471,7 +479,7 @@ export default function AdminDashboard() {
                 ) : (
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {allowedEmails.map((partner) => (
-                      <li key={partner.id} style={{ display: 'flex', justifyBetween: 'center', alignItems: 'center', padding: '8px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '700', fontFamily: 'JetBrains Mono' }}>
+                      <li key={partner.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '700', fontFamily: 'JetBrains Mono' }}>
                         <span style={{ color: '#166534' }}>●</span> &nbsp; {partner.email}
                       </li>
                     ))}
