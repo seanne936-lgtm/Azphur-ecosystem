@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 interface TickerStats {
   co2: number;
@@ -69,10 +70,12 @@ const TopTicker: React.FC = () => {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [staffCode, setStaffCode] = useState<string>("");
   const [liveMs, setLiveMs] = useState<number>(421);
   const [scrollPercent, setScrollPercent] = useState<number>(0);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
 
   // Array dinamico per la sezione About Us
   const aboutData: AboutItem[] = [
@@ -103,6 +106,15 @@ export default function Home() {
   ];
 
   useEffect(() => {
+    // Controllo se esiste una sessione attiva all'avvio della pagina principale
+    async function checkUserSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        setCurrentUserEmail(session.user.email.toLowerCase().trim());
+      }
+    }
+    checkUserSession();
+
     async function getCount() {
       const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
       if (count !== null) setInventoryCount(count);
@@ -128,6 +140,21 @@ export default function Home() {
       window.removeEventListener("scroll", handleScroll);
     };
   }, []);
+
+  // Funzione di Logout per distruggere la sessione Supabase
+  async function handleLogout() {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (!error) {
+        setCurrentUserEmail('');
+        router.refresh();
+      } else {
+        console.error("Errore durante il logout:", error.message);
+      }
+    } catch (err) {
+      console.error("Errore di rete durante logout:", err);
+    }
+  }
 
   const isAuthorized: boolean = staffCode.trim().toUpperCase() === 'AZ-001';
 
@@ -159,6 +186,8 @@ export default function Home() {
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         .btn-cyan-outline { background: none; border: 1px solid #22d3ee; color: #0891b2; padding: 8px 20px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; flex-shrink: 0; }
         .btn-cyan-outline:hover { background: #22d3ee; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 211, 238, 0.2); }
+        .btn-red-outline { background: none; border: 1px solid #ef4444; color: #ef4444; padding: 8px 20px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; flex-shrink: 0; }
+        .btn-red-outline:hover { background: #ef4444; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
 
         .hero-apple-style { 
           padding: 100px 20px 40px; text-align: center; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; width: 100%;
@@ -338,7 +367,17 @@ export default function Home() {
             <span className="sig-dot"></span>
             <span>UPLINK_ACTIVE // {liveMs}ms</span>
           </div>
-          <button className="btn-cyan-outline" onClick={() => window.location.href='/login'}>ENTER_PORTAL</button>
+          {/* Se l'utente è loggato mostra la sua email e il tasto LOGOUT, altrimenti mostra ENTER PORTAL */}
+          {currentUserEmail ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <span style={{ fontSize: '10px', fontWeight: '800', color: '#0891b2', background: 'rgba(34, 211, 238, 0.1)', padding: '6px 12px', borderRadius: '100px' }}>
+                {currentUserEmail}
+              </span>
+              <button className="btn-red-outline" onClick={handleLogout}>LOGOUT 🚪</button>
+            </div>
+          ) : (
+            <button className="btn-cyan-outline" onClick={() => window.location.href='/login'}>ENTER_PORTAL</button>
+          )}
         </div>
       </nav>
 

@@ -17,6 +17,10 @@ export default function AdminDashboard() {
   const [co2Saved, setCo2Saved] = useState(14200.45);
   const [loading, setLoading] = useState(true);
   
+  // STATI AGGIUNTI PER LA GESTIONE DEI BUSINESS MAN (WHITELIST)
+  const [allowedEmails, setAllowedEmails] = useState([]);
+  const [newAllowedEmail, setNewAllowedEmail] = useState('');
+
   const [newItem, setNewItem] = useState({ 
     name: '', 
     quantity: 1, 
@@ -39,6 +43,7 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'providers' }, () => syncHqData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => syncHqData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'charging_stations' }, () => syncHqData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allowed_partners' }, () => syncHqData()) // Ascolta anche i nuovi partner abilitati
       .subscribe();
 
     const interval = setInterval(() => setCo2Saved(p => p + 0.01), 3000);
@@ -76,6 +81,13 @@ export default function AdminDashboard() {
         .select('*');
       if (stationData) setStations(stationData);
 
+      // Lettura dei Businessman abilitati nella Whitelist
+      const { data: partnerData } = await supabase
+        .from('allowed_partners')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (partnerData) setAllowedEmails(partnerData);
+
       const { data: leadData } = await supabase
         .from('leads')
         .select('*')
@@ -108,6 +120,26 @@ export default function AdminDashboard() {
       console.error("Link Terminal Error:", err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // LOGICA PER AGGIUNGERE UN APPLICANTE ALLA LISTA BUSINESSMAN
+  async function handleAllowPartner(e) {
+    e.preventDefault();
+    if (!newAllowedEmail) return;
+    try {
+      const { error } = await supabase
+        .from('allowed_partners')
+        .insert([{ email: newAllowedEmail.toLowerCase().trim() }]);
+      
+      if (!error) {
+        setNewAllowedEmail('');
+        syncHqData();
+      } else {
+        alert("PROVISIONING_ERROR: " + error.message);
+      }
+    } catch (err) {
+      console.error("Whitelist Error:", err);
     }
   }
 
@@ -272,7 +304,6 @@ export default function AdminDashboard() {
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @media (min-width: 1024px) { .hq-console { grid-template-columns: 1.2fr 0.8fr; } }
 
-        /* REGOLE MOBILE EXTRA PER EVITARE SFORAMENTI SUL TELEFONO */
         @media (max-width: 768px) {
           .hq-nav { padding: 0 20px; }
           .exit-terminal { font-size: 9px; }
@@ -405,6 +436,52 @@ export default function AdminDashboard() {
               <button type="submit" className="exec-btn">EXECUTE_DEPLOYMENT</button>
             </form>
           </div>
+
+          {/* BLOCCO INTEGRATO: PROVISIONING / WHITELIST PER I BUSINESS MAN FILIPPINI */}
+          <div className="sub-card" style={{ borderLeft: '6px solid #0ea5e9' }}>
+            <h3 className="card-title">
+              ADMIN_PARTNER_PROVISIONING 
+              <span style={{ color: '#0ea5e9' }}>[{allowedEmails.length}]</span>
+            </h3>
+            <form onSubmit={handleAllowPartner} className="modern-form">
+              <div className="input-group">
+                <label>BUSINESS_MAN_EMAIL</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input 
+                    type="email" 
+                    placeholder="partner@manilaenterprise.com" 
+                    value={newAllowedEmail} 
+                    onChange={e => setNewAllowedEmail(e.target.value)} 
+                    required 
+                  />
+                  <button type="submit" className="control-btn" style={{ background: '#0ea5e9', color: '#fff', borderColor: '#0ea5e9', padding: '0 20px', height: '48px', borderRadius: '12px', fontWeight: '900' }}>
+                    AUTHORIZE
+                  </button>
+                </div>
+              </div>
+            </form>
+            
+            <div style={{ marginTop: '25px' }}>
+              <label style={{ fontSize: '9px', fontWeight: '900', color: '#94a3b8', display: 'block', marginBottom: '10px', letterSpacing: '1px' }}>
+                ACTIVE_BUSINESS_WHITELIST
+              </label>
+              <div style={{ maxHeight: '180px', overflowY: 'auto', background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                {allowedEmails.length === 0 ? (
+                  <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'JetBrains Mono' }}>NO_PARTNERS_AUTHORIZED_YET</span>
+                ) : (
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {allowedEmails.map((partner) => (
+                      <li key={partner.id} style={{ display: 'flex', justifyBetween: 'center', alignItems: 'center', padding: '8px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '700', fontFamily: 'JetBrains Mono' }}>
+                        <span style={{ color: '#166534' }}>●</span> &nbsp; {partner.email}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* FINE BLOCCO PROVISIONING */}
+
         </div>
 
         <div className="hq-panel feed">

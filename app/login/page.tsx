@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // Stato per sbloccare la scelta dei pannelli all'admin
   const router = useRouter();
 
   useEffect(() => {
@@ -21,12 +22,52 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const emailNormalized = email.toLowerCase().trim();
+
+      // Inizializza l'accesso con Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email: emailNormalized, 
+        password 
+      });
+
       if (error) {
         alert("ACCESS_DENIED: " + error.message);
         setLoading(false);
-      } else if (data.session) {
-        router.push('/s2b');
+        return;
+      } 
+      
+      if (data.session && data.user) {
+        const user = data.user;
+        const userEmail = user.email ? user.email.toLowerCase().trim() : '';
+
+        // ========================================================
+        // 1. RAMIFICAZIONE SUPER ADMIN (INSERISCI LA TUA MAIL QUI)
+        // ========================================================
+        // Modifica 'admin@azphur.com' inserendo la tua mail amministratore esatta!
+        if (userEmail === "admin@azphur.com" || userEmail === "tuofratello@email.com") {
+          setIsAdmin(true);
+          setLoading(false);
+          return; // FONDAMENTALE: blocca qui il codice e mostra i due tasti di scelta!
+        }
+
+        // ========================================================
+        // 2. RAMIFICAZIONE BUSINESSMAN (Controllo sulla tabella nuova)
+        // ========================================================
+        const { data: isPartner, error: partnerError } = await supabase
+          .from('allowed_partners')
+          .select('email')
+          .eq('email', userEmail)
+          .maybeSingle(); // Usa maybeSingle per evitare l'eccezione se non trova record
+
+        if (isPartner) {
+          router.push('/b2b'); // È un partner autorizzato, dritto alle Filippine!
+        } else {
+          // ========================================================
+          // 3. RAMIFICAZIONE CUSTOMER / S2B LOGISTICS STANDARD
+          // ========================================================
+          router.push('/s2b'); // Utente normale, va alla logistica
+        }
+        
         router.refresh(); 
       }
     } catch (err) {
@@ -53,10 +94,9 @@ export default function LoginPage() {
             onClick={() => router.push('/')} 
           />
           <div className="status-orb"></div>
-          <span className="op-status-tag">SECURE_GATEWAY_v2</span>
+          <span className="op-status-tag">UNIVERSAL_GATEWAY_v3</span>
         </div>
         
-        {/* TASTO EXIT POTENZIATO */}
         <div className="nav-items">
           <Link href="/" className="exit-btn-container">
             <span className="exit-icon">←</span>
@@ -70,35 +110,59 @@ export default function LoginPage() {
         <div className="login-box">
           <div className="login-header">
             <span className="phase-label">SYSTEM_AUTHENTICATION</span>
-            <h2 className="text-cyan">S2B Logistics Portal</h2>
-            <p className="login-desc">Enter credentials to initialize secure uplink.</p>
+            <h2 className="text-cyan">AZPHUR Universal Portal</h2>
+            <p className="login-desc">Enter authorization credentials to initialize your ecosystem profile uplink.</p>
           </div>
 
-          <form onSubmit={handleLogin} className="login-form">
-            <div className="input-group">
-              <label>CLIENT_EMAIL</label>
-              <input 
-                type="email" 
-                placeholder="operator@azphur.com" 
-                required 
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            
-            <div className="input-group">
-              <label>SECURITY_CODE</label>
-              <input 
-                type="password" 
-                placeholder="••••••••" 
-                required 
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+          {isAdmin ? (
+            <div className="admin-routing-panel fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+              <span className="phase-label" style={{ color: '#0891b2', fontWeight: '900' }}>⚠️ ADMIN_ACCESS_GRANTED // SELECT_DESTINATION</span>
+              
+              <button 
+                onClick={() => { router.push('/b2b'); router.refresh(); }} 
+                className="login-btn" 
+                style={{ background: '#1d1d1f', color: '#fff', border: '2px solid #22d3ee', width: '100%' }}
+              >
+                GO TO B2B ENTERPRISE ⚡
+              </button>
 
-            <button type="submit" disabled={loading} className="login-btn">
-              {loading ? 'VERIFYING...' : 'INITIALIZE_SESSION →'}
-            </button>
-          </form>
+              <button 
+                onClick={() => { router.push('/s2b'); router.refresh(); }} 
+                className="login-btn" 
+                style={{ background: '#22d3ee', color: '#1d1d1f', width: '100%', marginTop: '0px' }}
+              >
+                GO TO S2B LOGISTICS →
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleLogin} className="login-form">
+              <div className="input-group">
+                <label>ACCOUNT_EMAIL</label>
+                <input 
+                  type="email" 
+                  placeholder="operator@azphur.com" 
+                  required 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              
+              <div className="input-group" style={{ marginTop: '20px' }}>
+                <label>SECURITY_CODE</label>
+                <input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  required 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
+              <button type="submit" disabled={loading} className="login-btn" style={{ width: '100%', marginTop: '25px' }}>
+                {loading ? 'VERIFYING...' : 'INITIALIZE_SESSION →'}
+              </button>
+            </form>
+          )}
           
           <div className="system-ops-label" style={{ marginTop: '30px', marginBottom: 0 }}>
              ENCRYPTION: AES-256 // STATUS: {mounted ? 'LINK_ACTIVE' : 'READY'}
@@ -127,7 +191,6 @@ export default function LoginPage() {
         .status-orb { width: 8px; height: 8px; background: #22d3ee; border-radius: 50%; margin-left: 10px; box-shadow: 0 0 10px #22d3ee; }
         .op-status-tag { font-size: 7px; color: #0891b2; border: 1px solid #22d3ee; padding: 2px 6px; border-radius: 3px; margin-left: 15px; font-weight: 900; }
 
-        /* --- STILE TASTO EXIT --- */
         .exit-btn-container {
           position: relative;
           display: flex;
@@ -162,8 +225,6 @@ export default function LoginPage() {
         .exit-btn-container:hover .exit-text { color: #1d1d1f; }
         .exit-btn-container:hover .exit-shimmer { left: 100%; }
 
-        /* --- FINE TASTO EXIT --- */
-
         .center-content { flex: 1; display: flex; justify-content: center; align-items: center; padding: 40px 20px; z-index: 1; }
 
         .login-box {
@@ -193,6 +254,9 @@ export default function LoginPage() {
         .login-btn:hover { background: #0891b2; color: white; transform: translateY(-2px); }
 
         .system-ops-label { font-size: 9px; font-weight: 900; color: #0891b2; letter-spacing: 2px; text-align: center; }
+
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         @media (max-width: 768px) {
           .nav-minimal { padding: 30px; }

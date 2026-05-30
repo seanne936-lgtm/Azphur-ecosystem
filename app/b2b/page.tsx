@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation'; // IMPORTANTE: Aggiunto per il reindirizzamento
 
 // Interfacce Rigorose
 interface Lead {
@@ -11,6 +12,7 @@ interface Lead {
   budget: string | number;
   created_at: string;
   matching_status?: string;
+  customer_email?: string; // Presente nel DB
 }
 
 interface AssetRow {
@@ -33,27 +35,82 @@ interface Transaction {
   amount_gross: number;
   status: string;
   created_at: string;
+  // Rimosso customer_email perché non presente nel DB delle transazioni
 }
 
 export default function AzphurB2B() {
+  const router = useRouter(); // INIZIALIZZATO IL ROUTER
   const [activeTab, setActiveTab] = useState<string>('Dashboard');
   const [realTimeMW, setRealTimeMW] = useState<number>(842.15);
   const [mounted, setMounted] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true); // NUOVO STATO PER LA BLINDATURA ATOMICA
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   
   const [totalRevenue, setTotalRevenue] = useState<number>(0);
   const [realTransactions, setRealTransactions] = useState<Transaction[]>([]);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>(''); // Memorizza l'utente corrente per i filtri
+
+  // Nuovi stati per il form di simulazione Lead
+  const [newInterest, setNewInterest] = useState<string>('SOLAR_INSTALL');
+  const [newBudget, setNewBudget] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
-    setMounted(true);
-    fetchLeads();
-    fetchStations();
-    fetchRealTransactions();
+    // ==========================================
+    // CONTROLLO DI ACCESSO BLINDATO PER B2B
+    // ==========================================
+    const checkProtection = async () => {
+      setAuthLoading(true); // Attiva lo scudo di controllo
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Se non c'Ã¨ una sessione attiva, fuori subito
+      if (!session || !session.user) {
+        router.push('/login');
+        return;
+      }
+
+      const userEmail = session.user.email ? session.user.email.toLowerCase().trim() : '';
+      setCurrentUserEmail(userEmail); // Salva la sessione per i filtri successivi
+
+      // Se Ã¨ il Super Admin, l'accesso Ã¨ garantito direttamente
+      if (userEmail === 'admin@azphur.com') {
+        setMounted(true);
+        initData(userEmail, true);
+        setAuthLoading(false); // Disattiva lo scudo: accesso concesso
+        return;
+      }
+
+      // Se non Ã¨ l'admin, controlliamo se Ã¨ un Business Man autorizzato nella whitelist
+      const { data: isPartner } = await supabase
+        .from('allowed_partners')
+        .select('email')
+        .eq('email', userEmail)
+        .maybeSingle();
+
+      if (isPartner) {
+        setMounted(true);
+        initData(userEmail, false);
+        setAuthLoading(false); // Disattiva lo scudo: accesso concesso
+      } else {
+        // Se non Ã¨ registrato come partner ed Ã¨ un cliente comune, respinto!
+        router.push('/login');
+      }
+    };
+
+    // Funzione interna per caricare i dati originari senza romperli passando i filtri di visibilità
+    const initData = (email: string, isAdmin: boolean) => {
+      fetchLeads(email, isAdmin);
+      fetchStations();
+      fetchRealTransactions(); // Rimosso filtro email qui per evitare errori sul DB
+    };
+
+    checkProtection();
 
     const channel = supabase
       .channel('realtime_revenue')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, (payload) => {
+        // Aggiorna sempre in tempo reale le transazioni generali
         setTotalRevenue(prev => prev + (Number(payload.new.amount_gross) || 0));
         fetchRealTransactions(); 
       })
@@ -67,10 +124,11 @@ export default function AzphurB2B() {
       clearInterval(timer);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUserEmail]);
 
   async function fetchRealTransactions() {
     try {
+      // Nessun filtro .eq('customer_email') qui, così non va in errore!
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -85,9 +143,16 @@ export default function AzphurB2B() {
     } catch (err) { console.log("Fin sync offline"); }
   }
 
-  async function fetchLeads() {
+  async function fetchLeads(email = currentUserEmail, isAdmin = currentUserEmail === 'admin@azphur.com') {
     try {
-      const { data, error } = await supabase.from('leads').select('*').order('created_at', { ascending: false }).limit(5);
+      let query = supabase.from('leads').select('*').order('created_at', { ascending: false }).limit(5);
+      
+      // BLINDATURA DATI LEADS: Qui la colonna c'è, quindi filtriamo solo per i non-admin
+      if (!isAdmin && email) {
+        query = query.eq('customer_email', email);
+      }
+
+      const { data, error } = await query;
       if (!error && data) setLeads(data as Lead[]);
     } catch (err) { console.log("Lead sync offline"); }
   }
@@ -99,10 +164,91 @@ export default function AzphurB2B() {
     } catch (err) { console.log("Map sync offline"); }
   }
 
+  // Funzione per gestire l'inserimento del nuovo Lead su Supabase legandolo al proprietario
+  async function handleCreateLead(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newBudget || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .insert([
+          {
+            interest: newInterest,
+            budget: Number(newBudget) || 0,
+            created_at: new Date().toISOString(),
+            customer_email: currentUserEmail // Inserisce l'email correttamente nella tabella leads
+          }
+        ]);
+
+      if (!error) {
+        setNewBudget('');
+        const isAdmin = currentUserEmail === 'admin@azphur.com';
+        await fetchLeads(currentUserEmail, isAdmin); // Aggiorna la tabella filtrata in tempo reale
+      } else {
+        console.error("Error while inserting:", error.message);
+      }
+    } catch (err) {
+      console.error("Errore di rete:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  // INTERFACCIA DI BLOCCO SE L'UTENTE STA ANCORA EFFETTUANDO IL CONTROLLO DI SICUREZZA
+  if (authLoading) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fdfbf7', fontFamily: 'sans-serif', fontWeight: 'bold', letterSpacing: '2px', color: '#0ea5e9' }}>
+        SECURE_GATEWAY: VERIFYING_AUTH_CREDENTIALS...
+      </div>
+    );
+  }
+
   if (!mounted) return null;
 
   const renderDashboard = () => (
     <div className="fade-in">
+      {/* NUOVA SEZIONE: SIMULATORE DI EVENTI / CREAZIONE LEAD */}
+      <div className="asset-section" style={{ marginBottom: '40px', borderLeft: '8px solid #0ea5e9' }}>
+        <h3 className="section-subtitle">ENTERPRISE PROCUREMENT INTAKE</h3>
+        <form onSubmit={handleCreateLead} className="control-center-grid" style={{ alignItems: 'end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: '10px', fontWeight: '800', color: '#64748b', letterSpacing: '0.5px' }}>INTEREST_TYPE</label>
+            <select 
+              value={newInterest} 
+              onChange={(e) => setNewInterest(e.target.value)}
+              style={{ padding: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '13px', fontWeight: '700', color: '#111', outline: 'none' }}
+            >
+              <option value="SOLAR_INSTALL">SOLAR_INSTALL</option>
+              <option value="WIND_TURBINE_HUB">WIND_TURBINE_HUB</option>
+              <option value="EV_CHARGING_STATION">EV_CHARGING_STATION</option>
+              <option value="MICROGRID_SETUP">MICROGRID_SETUP</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: '10px', fontWeight: '800', color: '#64748b', letterSpacing: '0.5px' }}>EST_BUDGET (PHP)</label>
+            <input 
+              type="number" 
+              placeholder="e.g. 500000"
+              value={newBudget}
+              onChange={(e) => setNewBudget(e.target.value)}
+              style={{ padding: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '13px', fontWeight: '700', color: '#111', outline: 'none' }}
+              required
+            />
+          </div>
+          <div>
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              style={{ width: '100%', padding: '14px', background: '#111', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '11px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer', transition: '0.2s', opacity: isSubmitting ? 0.6 : 1 }}
+            >
+              {isSubmitting ? 'DISPATCHING...' : 'SUBMIT REQUEST ⚡'}
+            </button>
+          </div>
+        </form>
+      </div>
+
       {/* SEZIONE KPI */}
       <div className="asset-section kpi-section-override" style={{ marginBottom: '40px', borderLeft: '8px solid #0ea5e9' }}>
         <h3 className="section-subtitle">STRATEGIC_CONTROL_CENTER</h3>
@@ -130,7 +276,7 @@ export default function AzphurB2B() {
           { label: "CO2 AVOIDED (ESG)", value: "42.8 Tons", color: "#10b981", sub: "Verified Carbon Offset" },
           { label: "PPA TARIFF RATE", value: "₱5.80 /kWh", color: "#0ea5e9", sub: "Fixed Tier-1 Agreement" },
           { label: "MATCHING EFFICIENCY", value: "92%", color: "#111", sub: "Lead to Supplier Speed" },
-          { label: "REAL TX REVENUE", value: `₱${totalRevenue.toLocaleString()}`, color: "#0ea5e9", sub: "Live Phase 2 Earnings" }
+          { label: "REAL TX REVENUE", value: `₱${totalRevenue.toLocaleString()}`, color: "#0ea5e9", sub: "Live System Earnings" }
         ].map((kpi, i) => (
           <div key={i} className="kpi-card">
             <p className="kpi-label">{kpi.label}</p>
