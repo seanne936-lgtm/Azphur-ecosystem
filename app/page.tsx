@@ -401,7 +401,7 @@ export default function Home() {
             </div>
             <div className="monitor-item">
               <span className="m-label">SUPPLIER_NODES</span>
-              <span className="m-value">{inventoryCount || '82'}</span>
+              <span className="m-value">{inventoryCount || '0'}</span>
             </div>
             <div className="monitor-item">
               <span className="m-label">REVENUE_FLOW</span>
