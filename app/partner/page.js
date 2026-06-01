@@ -10,9 +10,9 @@ export default function PartnerDashboard() {
   const [selectedPartner, setSelectedPartner] = useState('');
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true); // Stato per evitare flash visivi durante il controllo sessione
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
-  // DATI DI EMERGENZA (HARDCODED PER IL PITCH)
+  // DATI DI EMERGENZA O FALLBACK INTERNO
   const demoInventory = [
     { id: 'AZ-INV-001', name: 'Tier-1 Solar Panel 550W', quantity: 42, status: 'ARRIVED', image_url: 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=200' },
     { id: 'AZ-INV-002', name: 'Hybrid Inverter 10kW', quantity: 12, status: 'IN_TRANSIT', image_url: 'https://images.unsplash.com/photo-1620055375841-866a8365673d?w=200' },
@@ -24,13 +24,11 @@ export default function PartnerDashboard() {
     checkActiveSession();
   }, []);
 
-  // CONTROLLO SESSIONE PROTETTA AUTOMATICA
   async function checkActiveSession() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Recupera il ruolo o nodo assegnato all'utente loggato dalla tabella user_profiles
         const { data: profile, error } = await supabase
           .from('user_profiles')
           .select('role_or_node')
@@ -38,7 +36,6 @@ export default function PartnerDashboard() {
           .single();
 
         if (!error && profile) {
-          // Se l'utente non è un admin globale, carica direttamente la dashboard del suo nodo
           if (profile.role_or_node !== 'ADMIN') {
             setSelectedPartner(profile.role_or_node);
             fetchPartnerCargo(profile.role_or_node);
@@ -51,7 +48,6 @@ export default function PartnerDashboard() {
       console.error("Auth session check error:", err);
     }
     
-    // Se non c'è sessione o l'utente è ADMIN, carica la lista dei provider per la selezione manuale (fallback)
     fetchProviders();
     setCheckingAuth(false);
   }
@@ -59,7 +55,6 @@ export default function PartnerDashboard() {
   async function fetchProviders() {
     const { data, error } = await supabase.from('providers').select('name');
     if (error || !data || data.length === 0) {
-      // Se il DB fallisce, mostriamo questi nodi pronti all'uso
       setProviders([{ name: 'LUZON_LOGISTICS_HUB' }, { name: 'VISAYAS_ENERGY_NODE' }]);
     } else {
       setProviders(data);
@@ -68,33 +63,72 @@ export default function PartnerDashboard() {
 
   async function fetchPartnerCargo(name) {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('provider', name);
-    
-    // Se il database è vuoto o dà errore, carichiamo i dati Demo
-    if (error || !data || data.length === 0) {
-      setTimeout(() => {
-        setShipments(demoInventory);
-        setLoading(false);
-      }, 800); // Piccolo delay per simulare il caricamento reale
-    } else {
-      setShipments(data);
+    try {
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('provider', name);
+      
+      if (!error && data && data.length > 0) {
+        // Se ci sono dati reali nel DB, usiamo quelli (mappando lo status che di base mettiamo ARRIVED se manca)
+        const mappedData = data.map(item => ({
+          ...item,
+          status: item.status || 'ARRIVED',
+          image_url: item.image_url || 'https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?w=200' // Immagine di backup se non c'è nel DB
+        }));
+        setShipments(mappedData);
+      } else {
+        // FALLBACK CON LOCAL STORAGE: se il DB è vuoto, controlla se c'è una sessione modificata memorizzata localmente
+        const localSaved = localStorage.getItem(`az_inv_${name}`);
+        if (localSaved) {
+          setShipments(JSON.parse(localSaved));
+        } else {
+          setShipments(demoInventory);
+        }
+      }
+    } catch (err) {
+      const localSaved = localStorage.getItem(`az_inv_${name}`);
+      setShipments(localSaved ? JSON.parse(localSaved) : demoInventory);
+    } finally {
       setLoading(false);
     }
   }
 
   async function handleStatusChange(id, newStatus) {
-    // Aggiornamento locale per velocità durante il pitch
     const updated = shipments.map(s => s.id === id ? { ...s, status: newStatus } : s);
     setShipments(updated);
     
-    // Prova ad aggiornare anche DB, ma non blocca l'interfaccia
+    // Salva localmente per sicurezza immediata (anti-refresh)
+    if (selectedPartner) {
+      localStorage.setItem(`az_inv_${selectedPartner}`, JSON.stringify(updated));
+    }
+    
+    // Scrive su Supabase
     await supabase.from('inventory').update({ status: newStatus }).eq('id', id);
   }
 
-  // LOGOUT DALLA SESSIONE
+  async function handleQuantityChange(id, delta) {
+    const updated = shipments.map(s => {
+      if (s.id === id) {
+        const newQty = Math.max(0, Number(s.quantity || 0) + delta);
+        return { ...s, quantity: newQty };
+      }
+      return s;
+    });
+    setShipments(updated);
+
+    // Salva nello storage del browser, così se fai F5 il valore modificato resta!
+    if (selectedPartner) {
+      localStorage.setItem(`az_inv_${selectedPartner}`, JSON.stringify(updated));
+    }
+
+    // Invia l'aggiornamento a Supabase sulla colonna 'quantity' che hai nello schema
+    const targetItem = updated.find(s => s.id === id);
+    if (targetItem) {
+      await supabase.from('inventory').update({ quantity: targetItem.quantity }).eq('id', id);
+    }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     setSelectedPartner('');
@@ -122,14 +156,18 @@ export default function PartnerDashboard() {
         .info-card h4 { font-size: 11px; font-weight: 900; color: #1d1d1f; margin: 0 0 10px; border-bottom: 1px solid #f0f9fa; padding-bottom: 8px; }
         .info-card ul { list-style: none; padding: 0; margin: 0; }
         .info-card li { font-size: 10px; color: #5c5e62; padding: 4px 0; display: flex; align-items: center; gap: 6px; }
-        .info-card li::before { content: "•"; color: #22d3ee; font-size: 10px; }
+        .info-card li::before { content: "â€¢"; color: #22d3ee; font-size: 10px; }
         .cargo-card { background: #fff; border: 4px solid #1d1d1f; padding: 25px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .status-select { background: #1d1d1f; color: #fff; border: none; padding: 10px; border-radius: 6px; font-size: 10px; font-weight: 800; font-family: monospace; cursor: pointer; }
+        
+        .qty-btn { background: #22d3ee; border: 1px solid #1d1d1f; color: #1d1d1f; font-weight: 900; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 12px; line-height: 1; margin: 0 5px; transition: 0.1s; display: inline-flex; align-items: center; justify-content: center; }
+        .qty-btn:hover { background: #1d1d1f; color: #22d3ee; }
+        .qty-container { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 10px; }
       `}</style>
 
       <nav className="nav-partner">
         <img src="/logo-azphur.avif" alt="AZPHUR" className="main-logo" onClick={() => window.location.href='/'} />
-        <Link href="/" className="btn-back">← BACK_TO_HQ</Link>
+        <Link href="/" className="btn-back">â† BACK_TO_HQ</Link>
       </nav>
 
       <div className="container">
@@ -189,14 +227,18 @@ export default function PartnerDashboard() {
                 shipments.map(s => (
                   <div key={s.id} className="cargo-card">
                     <div style={{display: 'flex', gap: '25px', alignItems: 'center'}}>
-                      <img src={s.image_url} style={{width: '70px', height: '70px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #eee'}} />
+                      <img src={s.image_url} style={{width: '70px', height: '70px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #eee'}} alt="" />
                       <div>
                         <h3 style={{margin: 0, fontSize: '18px', fontWeight: 900}}>{s.name}</h3>
-                        <p style={{margin: '5px 0 0', fontSize: '10px', color: '#86868b', fontFamily: 'monospace'}}>SKU: {s.id}</p>
+                        <p style={{margin: '5px 0 0', fontSize: '10px', color: '#86868b', fontFamily: 'monospace'}}>SKU: {s.id} {s.brand ? `| BRAND: ${s.brand}` : ''}</p>
                       </div>
                     </div>
                     <div style={{textAlign: 'right'}}>
-                      <p style={{fontSize: '14px', fontWeight: 900, margin: '0 0 10px'}}>QTY: {s.quantity}</p>
+                      <div className="qty-container">
+                        <button type="button" className="qty-btn" onClick={() => handleQuantityChange(s.id, -1)}>-</button>
+                        <p style={{fontSize: '14px', fontWeight: 900, margin: 0, minWidth: '60px', textAlign: 'center'}}>QTY: {s.quantity}</p>
+                        <button type="button" className="qty-btn" onClick={() => handleQuantityChange(s.id, 1)}>+</button>
+                      </div>
                       <select className="status-select" value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)}>
                         <option value="PROCESSING">PROCESSING</option>
                         <option value="IN_TRANSIT">IN_TRANSIT</option>

@@ -307,7 +307,7 @@ export default function AdminDashboard() {
         
         .control-btn { border: 1px solid #e2e8f0; background: #fff; padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 800; cursor: pointer; }
         .control-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
-        .term-btn { background: #fee2e2; border: none; color: #991b1b; padding: 6px 12px; font-size: 10px; font-weight: 900; cursor: border-radius: 8px; }
+        .term-btn { background: #fee2e2; border: none; color: #991b1b; padding: 6px 12px; font-size: 10px; font-weight: 900; cursor: pointer; border-radius: 8px; }
         
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @media (min-width: 1024px) { .hq-console { grid-template-columns: 1.2fr 0.8fr; } }
@@ -546,7 +546,7 @@ export default function AdminDashboard() {
                 ))}
             </div>
             
-            <h3 className="card-title">LIVE_INVENTORY_DATABASE</h3>
+            <h3 className="card-title">WORLD WIDE ASSET TRACKER</h3>
             <div className="feed-container" style={{maxHeight: '400px', overflowY: 'auto'}}>
                 {shipments.map((s) => (
                     <div key={s.id} className="feed-item">
