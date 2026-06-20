@@ -12,6 +12,8 @@ export default function S2BCombinedPortal() {
   const [userRole, setUserRole] = useState<'ADMIN' | 'CUSTOMER'>('CUSTOMER');
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  // AGGIUNTO: Stato globale di caricamento per evitare il flash del login se l'utente è già loggato
+  const [globalLoading, setGlobalLoading] = useState(true);
 
   const [newOrder, setNewOrder] = useState({
     customer_email: "", provider: "", origin: "", destination: "", type: "", price: ""
@@ -20,19 +22,77 @@ export default function S2BCombinedPortal() {
   const statusCycle = ['PROCESSING', 'IN_TRANSIT', 'DELIVERED', 'ON_HOLD'];
 
   useEffect(() => {
-    const checkAuth = async () => {
+    let isMounted = true;
+
+    // 1. Controllo immediato della sessione attiva al caricamento della pagina
+    const checkInitialSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!isMounted) return;
+
       if (!session) {
+        setGlobalLoading(false);
         router.push('/login');
       } else {
-        const adminEmails = ['admin@azphur.com', 'tuofratello@email.com']; 
-        const userEmail = session.user.email || '';
-        const role = adminEmails.includes(userEmail) ? 'ADMIN' : 'CUSTOMER';
-        setUserRole(role);
-        fetchCloudShipments(role, userEmail);
+        await handleUserSession(session);
       }
     };
-    checkAuth();
+
+    const handleUserSession = async (session: any) => {
+      const adminEmails = ['admin@azphur.com', 'tuofratello@email.com']; 
+      const userEmail = session.user.email || '';
+      const emailClean = userEmail.toLowerCase().trim();
+
+      const isAdmin = adminEmails.includes(emailClean);
+
+      // CORRETTO: Controllo incrociato sulla tabella del Modulo 1 con email normalizzata
+      if (!isAdmin) {
+        try {
+          const { data, error } = await supabase
+            .from('module_01_customers')
+            .select('email')
+            .eq('email', emailClean)
+            .maybeSingle();
+
+          if (error || !data) {
+            await supabase.auth.signOut();
+            router.push('/login'); // Reindirizza a /login in modo coerente invece di '/'
+            return;
+          }
+        } catch (err) {
+          await supabase.auth.signOut();
+          router.push('/login');
+          return;
+        }
+      }
+      
+      const role = isAdmin ? 'ADMIN' : 'CUSTOMER';
+      setUserRole(role);
+      await fetchCloudShipments(role, emailClean);
+      
+      if (isMounted) {
+        setGlobalLoading(false);
+      }
+    };
+
+    checkInitialSession();
+
+    // 2. Gestore della sessione in tempo reale per cambi di stato successivi
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+      
+      if (event === 'SIGNED_OUT') {
+        setGlobalLoading(false);
+        router.push('/login');
+      } else if (event === 'SIGNED_IN' && session) {
+        await handleUserSession(session);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [router]);
 
   const fetchCloudShipments = async (role: string, email: string) => {
@@ -96,7 +156,7 @@ export default function S2BCombinedPortal() {
       provider: newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
-      customer_email: newOrder.customer_email
+      customer_email: newOrder.customer_email.toLowerCase().trim() // Normalizzato anche qui per sicurezza
     };
     const { error } = await supabase.from('inventory').insert([payload]);
     if (!error) {
@@ -106,6 +166,14 @@ export default function S2BCombinedPortal() {
       fetchCloudShipments(userRole, session?.user?.email || '');
     }
   };
+
+  if (globalLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#fcfdfe', fontFamily: 'monospace', color: '#64748b' }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 'bold', letterSpacing: '1px' }}>VERIFYING_SECURE_SESSION...</h2>
+      </div>
+    );
+  }
 
   return (
     <div className="portal-container">

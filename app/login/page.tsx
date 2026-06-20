@@ -24,7 +24,7 @@ export default function LoginPage() {
     try {
       const emailNormalized = email.toLowerCase().trim();
 
-      // Inizializza l'accesso con Supabase Auth
+      // Inizializza l'accesso con Supabase Auth (il SECURITY_CODE fa da password standard)
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email: emailNormalized, 
         password 
@@ -41,34 +41,62 @@ export default function LoginPage() {
         const userEmail = user.email ? user.email.toLowerCase().trim() : '';
 
         // ========================================================
-        // 1. RAMIFICAZIONE SUPER ADMIN (INSERISCI LA TUA MAIL QUI)
+        // 1. RAMIFICAZIONE SUPER ADMIN
         // ========================================================
-        // Modifica 'admin@azphur.com' inserendo la tua mail amministratore esatta!
         if (userEmail === "admin@azphur.com" || userEmail === "tuofratello@email.com") {
           setIsAdmin(true);
           setLoading(false);
-          return; // FONDAMENTALE: blocca qui il codice e mostra i due tasti di scelta!
+          return; // FONDAMENTALE: blocca qui il codice e mostra i tasti di scelta!
         }
 
         // ========================================================
-        // 2. RAMIFICAZIONE BUSINESSMAN (Controllo sulla tabella nuova)
+        // 2. RAMIFICAZIONE CUSTOMER MODULO 05 (EV MOBILITY)
+        // ========================================================
+        const { data: isEvCustomer, error: evError } = await supabase
+          .from('module_05_customers')
+          .select('email')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (isEvCustomer) {
+          router.push('/EV'); // CORRETTO: Punta alla cartella esatta 'EV'
+          return;
+        }
+
+        // ========================================================
+        // 3. RAMIFICAZIONE BUSINESSMAN MODULO 03 (ALLOWED PARTNERS)
         // ========================================================
         const { data: isPartner, error: partnerError } = await supabase
           .from('allowed_partners')
           .select('email')
           .eq('email', userEmail)
-          .maybeSingle(); // Usa maybeSingle per evitare l'eccezione se non trova record
+          .maybeSingle(); 
 
         if (isPartner) {
-          router.push('/b2b'); // È un partner autorizzato, dritto alle Filippine!
-        } else {
-          // ========================================================
-          // 3. RAMIFICAZIONE CUSTOMER / S2B LOGISTICS STANDARD
-          // ========================================================
-          router.push('/s2b'); // Utente normale, va alla logistica
+          router.push('/b2b'); // Partner autorizzato, va al modulo Enterprise
+          return;
         }
-        
-        router.refresh(); 
+
+        // ========================================================
+        // 4. RAMIFICAZIONE LOGISTICS STANDARD (MODULO 1 / S2B) - CORRETTA
+        // ========================================================
+        const { data: isMod1Customer } = await supabase
+          .from('module_01_customers')
+          .select('email')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (isMod1Customer) {
+          router.push('/s2b'); // Utente valido per il modulo 1
+          return;
+        }
+
+        // ========================================================
+        // 5. BLOCCO DI SICUREZZA INTERMEDIO
+        // ========================================================
+        alert("ACCESS_DENIED: Il tuo account non è abilitato per accedere a nessun modulo operativo.");
+        await supabase.auth.signOut();
+        setLoading(false);
       }
     } catch (err) {
       alert("SYSTEM_ERROR_LOGIN");
@@ -79,8 +107,8 @@ export default function LoginPage() {
   return (
     <div className="app-canvas login-screen">
       <style dangerouslySetInnerHTML={{ __html: `
-        body, html { background-color: #f0f9fa !important; margin: 0; padding: 0; }
-        .app-canvas { background-color: #f0f9fa !important; min-height: 100vh; display: flex; flex-direction: column; }
+        body, html { background-color: #f0f9fa !important; margin: 0; padding: 0; overflow-x: hidden; width: 100%; box-sizing: border-box; }
+        .app-canvas { background-color: #f0f9fa !important; min-height: 100vh; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; }
       `}} />
 
       <div className="glow-sphere"></div>
@@ -100,7 +128,7 @@ export default function LoginPage() {
         <div className="nav-items">
           <Link href="/" className="exit-btn-container">
             <span className="exit-icon">←</span>
-            <span className="exit-text">EXIT_TO_INTERFACE</span>
+            <span className="exit-text">EXIT</span>
             <div className="exit-shimmer"></div>
           </Link>
         </div>
@@ -115,21 +143,29 @@ export default function LoginPage() {
           </div>
 
           {isAdmin ? (
-            <div className="admin-routing-panel fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+            <div className="admin-routing-panel fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
               <span className="phase-label" style={{ color: '#0891b2', fontWeight: '900' }}>⚠️ ADMIN_ACCESS_GRANTED // SELECT_DESTINATION</span>
               
               <button 
-                onClick={() => { router.push('/b2b'); router.refresh(); }} 
+                onClick={() => { router.push('/b2b'); }} 
                 className="login-btn" 
-                style={{ background: '#1d1d1f', color: '#fff', border: '2px solid #22d3ee', width: '100%' }}
+                style={{ background: '#1d1d1f', color: '#fff', border: '2px solid #22d3ee', width: '100%', margin: 0 }}
               >
                 GO TO B2B ENTERPRISE ⚡
               </button>
 
               <button 
-                onClick={() => { router.push('/s2b'); router.refresh(); }} 
+                onClick={() => { router.push('/EV'); }} 
                 className="login-btn" 
-                style={{ background: '#22d3ee', color: '#1d1d1f', width: '100%', marginTop: '0px' }}
+                style={{ background: '#0891b2', color: '#fff', border: '2px solid #1d1d1f', width: '100%', margin: 0 }}
+              >
+                GO TO EV MOBILITY (MOD_05) 🔋
+              </button>
+
+              <button 
+                onClick={() => { router.push('/s2b'); }} 
+                className="login-btn" 
+                style={{ background: '#22d3ee', color: '#1d1d1f', width: '100%', margin: 0 }}
               >
                 GO TO S2B LOGISTICS →
               </button>
@@ -171,7 +207,7 @@ export default function LoginPage() {
       </div>
 
       <style jsx>{`
-        .login-screen { position: relative; overflow: hidden; color: #1d1d1f; }
+        .login-screen { position: relative; overflow-x: hidden; color: #1d1d1f; width: 100%; box-sizing: border-box; }
         
         .glow-sphere { 
           position: fixed; top: 10%; left: 50%; transform: translateX(-50%); 
@@ -183,13 +219,13 @@ export default function LoginPage() {
         .nav-minimal { 
           display: flex; justify-content: space-between; align-items: center; 
           padding: 40px 60px; max-width: 1400px; width: 100%; margin: 0 auto; 
-          position: relative; z-index: 10; 
+          position: relative; z-index: 10; box-sizing: border-box;
         }
 
         .main-logo { height: 35px; width: auto; cursor: pointer; }
         .logo-group { display: flex; align-items: center; }
-        .status-orb { width: 8px; height: 8px; background: #22d3ee; border-radius: 50%; margin-left: 10px; box-shadow: 0 0 10px #22d3ee; }
-        .op-status-tag { font-size: 7px; color: #0891b2; border: 1px solid #22d3ee; padding: 2px 6px; border-radius: 3px; margin-left: 15px; font-weight: 900; }
+        .status-orb { width: 8px; height: 8px; background: #22d3ee; border-radius: 50%; margin-left: 10px; box-shadow: 0 0 10px #22d3ee; flex-shrink: 0; }
+        .op-status-tag { font-size: 7px; color: #0891b2; border: 1px solid #22d3ee; padding: 2px 6px; border-radius: 3px; margin-left: 15px; font-weight: 900; white-space: nowrap; }
 
         .exit-btn-container {
           position: relative;
@@ -204,6 +240,7 @@ export default function LoginPage() {
           overflow: hidden;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           backdrop-filter: blur(5px);
+          white-space: nowrap;
         }
 
         .exit-icon { font-size: 14px; color: #0891b2; transition: transform 0.3s ease; }
@@ -225,13 +262,14 @@ export default function LoginPage() {
         .exit-btn-container:hover .exit-text { color: #1d1d1f; }
         .exit-btn-container:hover .exit-shimmer { left: 100%; }
 
-        .center-content { flex: 1; display: flex; justify-content: center; align-items: center; padding: 40px 20px; z-index: 1; }
+        .center-content { flex: 1; display: flex; justify-content: center; align-items: center; padding: 40px 20px; z-index: 1; width: 100%; box-sizing: border-box; }
 
         .login-box {
           background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); 
           padding: 50px 40px; border-radius: 12px; border: 4px solid #1d1d1f; 
           width: 100%; max-width: 450px; text-align: left;
           box-shadow: 0 10px 40px rgba(34, 211, 238, 0.15);
+          box-sizing: border-box;
         }
 
         .phase-label { font-size: 8px; font-weight: 900; color: #86868b; letter-spacing: 1.5px; margin-bottom: 12px; display: block; }
@@ -242,6 +280,7 @@ export default function LoginPage() {
         .input-group input {
           width: 100%; padding: 15px; background: white; border: 2px solid #e5e7eb;
           border-radius: 8px; color: #1d1d1f; font-size: 14px; transition: 0.3s;
+          box-sizing: border-box;
         }
         .input-group input:focus { border-color: #22d3ee; box-shadow: 0 0 15px rgba(34, 211, 238, 0.1); outline: none; }
 
@@ -249,7 +288,7 @@ export default function LoginPage() {
           background: #22d3ee; color: #1d1d1f; padding: 18px; border-radius: 8px; 
           font-weight: 900; border: 2px solid #1d1d1f; cursor: pointer;
           font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
-          transition: 0.3s; margin-top: 10px;
+          transition: 0.3s; margin-top: 10px; width: 100%; box-sizing: border-box;
         }
         .login-btn:hover { background: #0891b2; color: white; transform: translateY(-2px); }
 
@@ -258,9 +297,19 @@ export default function LoginPage() {
         .fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* Media Query dedicate all'ottimizzazione Mobile responsive */
         @media (max-width: 768px) {
-          .nav-minimal { padding: 30px; }
-          .login-box { padding: 40px 25px; }
+          .nav-minimal { padding: 20px 24px; }
+          .main-logo { height: 26px; }
+          .op-status-tag { margin-left: 8px; font-size: 6px; padding: 2px 4px; }
+          .exit-btn-container { padding: 8px 14px; gap: 6px; }
+          .exit-text { font-size: 8px; letter-spacing: 1px; }
+          .center-content { padding: 20px 16px; }
+          .login-box { padding: 35px 20px; border-width: 3px; }
+          .text-cyan { font-size: 21px; }
+          .login-desc { font-size: 12px; }
+          .input-group input { padding: 12px; font-size: 13px; }
+          .login-btn { padding: 15px; font-size: 10px; }
         }
       `}</style>
     </div>
