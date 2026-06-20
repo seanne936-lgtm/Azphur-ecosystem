@@ -52,7 +52,7 @@ const TopTicker: React.FC = () => {
       </div>
       <style jsx>{`
         .top-ticker-lux { 
-          position: fixed; top: 0; width: 100%; min-height: 45px; 
+          position: fixed; top: 0; left: 0; width: 100%; min-height: 45px; 
           background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px);  
           z-index: 2000; border-bottom: 1px solid rgba(34, 211, 238, 0.2); 
           display: flex; align-items: center; justify-content: center; 
@@ -72,6 +72,7 @@ const TopTicker: React.FC = () => {
 export default function EVMobilityPage() {
   const router = useRouter();
   const [liveMs, setLiveMs] = useState<number>(421);
+  const [scrollPercent, setScrollPercent] = useState<number>(0);
   
   // RIGID HYDRATION AND SECURITY STATES
   const [isClient, setIsClient] = useState<boolean>(false);
@@ -158,45 +159,37 @@ export default function EVMobilityPage() {
     }
   };
 
-useEffect(() => {
+  useEffect(() => {
     setIsClient(true);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Se non c'è una sessione attiva, pulisci tutto e mostra il login
-      if (!session?.user?.email) {
-        setIsAuthenticated(false);
-        setCurrentUserEmail('');
-        setGlobalLoading(false);
-        return;
-      }
+      setGlobalLoading(true);
 
-      const emailClean = session.user.email.toLowerCase().trim();
-      
-      // 1. Verifichiamo SUBITO l'accesso al Modulo 5
-      const hasModule5Access = await verifyCustomerAccess(emailClean);
-      
-      if (hasModule5Access) {
-        setCurrentUserEmail(emailClean);
-        setIsAuthenticated(true);
+      if (session?.user?.email) {
+        const emailClean = session.user.email.toLowerCase().trim();
         
-        setVehicles([
-          { id: "EV-CAR-01", model: "AZPHUR Pod S", plate: "NEX-2026", battery: 84, status: "AVAILABLE", distance: "350m away" },
-          { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2km away" },
-          { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
-        ]);
-        await fetchRealSubStations();
-        setGlobalLoading(false);
+        const hasModule5Access = await verifyCustomerAccess(emailClean);
+        
+        if (hasModule5Access) {
+          setCurrentUserEmail(emailClean);
+          setIsAuthenticated(true);
+          
+          setVehicles([
+            { id: "EV-CAR-01", model: "AZPHUR Pod S", plate: "NEX-2026", battery: 84, status: "AVAILABLE", distance: "350m away" },
+            { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2km away" },
+            { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
+          ]);
+          await fetchRealSubStations();
+          setGlobalLoading(false);
+        } else {
+          setIsAuthenticated(false);
+          setCurrentUserEmail('');
+          router.push('/s2b');
+          setGlobalLoading(false);
+        }
       } else {
-        // 2. BLOCCO RIGIDO: L'utente appartiene a un altro modulo.
-        // Forziamo IMMEDIATAMENTE gli stati di autenticazione a false prima di fare qualsiasi operazione asincrona
         setIsAuthenticated(false);
         setCurrentUserEmail('');
-        
-        // Eseguiamo il logout su Supabase
-        await supabase.auth.signOut();
-        
-        // Reindirizziamo al portale corretto
-        router.push('/s2b');
         setGlobalLoading(false);
       }
     });
@@ -212,64 +205,72 @@ useEffect(() => {
       setLiveMs(() => Math.floor(Math.random() * 80) + 380);
     }, 1500);
 
+    const handleScroll = () => {
+      const totalScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (totalScroll > 0) {
+        setScrollPercent((window.scrollY / totalScroll) * 100);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+
     return () => {
       subscription.unsubscribe();
       supabase.removeChannel(channel);
       clearInterval(msInterval);
+      window.removeEventListener("scroll", handleScroll);
     };
   }, [router]);
 
-const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
     setAuthError('');
     
     try {
       const emailClean = email.trim().toLowerCase();
-      
-      // 1. Facciamo prima l'autenticazione centralizzata su Supabase
-      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: emailClean,
-        password: password
-      });
-
-      if (signInError) {
-        setAuthError("INVALID_CREDENTIALS: Incorrect security code.");
-        setAuthLoading(false);
-        return;
-      }
-
-      // 2. Ora che siamo autenticati, verifichiamo i permessi sulle tabelle
       const isAdmin = adminEmails.includes(emailClean);
+      
       if (!isAdmin) {
         const hasModule5 = await verifyCustomerAccess(emailClean);
         
         if (!hasModule5) {
-          // Controlliamo se rimandarlo al modulo 1
           const hasModule1 = await verifyModule01Access(emailClean);
-          
-          // Forziamo il logout immediato su Supabase perché le credenziali erano giuste, ma il modulo è sbagliato
-          await supabase.auth.signOut();
-          setIsAuthenticated(false);
-
           if (hasModule1) {
-            setAuthError("ACCESS_DENIED: Questo account appartiene al modulo logistica (Mod 1). Effettua il login dal portale corretto.");
+            const { error: authError } = await supabase.auth.signInWithPassword({
+              email: emailClean,
+              password: password
+            });
+            if (!authError) {
+              router.push('/s2b');
+              return;
+            } else {
+              setAuthError("INVALID_CREDENTIALS: Incorrect security code.");
+              setAuthLoading(false);
+              return;
+            }
           } else {
             setAuthError("ACCESS_DENIED: Profile not configured for the AZPHUR ecosystem modules.");
+            setAuthLoading(false);
+            return;
           }
-          setAuthLoading(false);
-          return;
         }
       }
 
-      // Se tutto è valido, l'onAuthStateChange aggiornerà lo stato automaticamente
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: emailClean,
+        password: password
+      });
+
+      if (authError) {
+        setAuthError("INVALID_CREDENTIALS: Incorrect security code.");
+      }
     } catch (err) {
       setAuthError('An unexpected authentication anomaly occurred.');
     } finally {
       setAuthLoading(false);
     }
   };
-    
+
   const handleLogout = async () => {
     try {
       setGlobalLoading(true);
@@ -291,7 +292,6 @@ const handleLogin = async (e: React.FormEvent) => {
     v.plate.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // 1. Schermata di caricamento globale
   if (!isClient || globalLoading) {
     return (
       <div className="loading-screen">
@@ -309,8 +309,6 @@ const handleLogin = async (e: React.FormEvent) => {
     );
   }
 
-  // 2. PROTEZIONE TOTALE: Se l'utente NON è autenticato, mostra SOLO ed ESCLUSIVAMENTE il form di login.
-  // Il codice della dashboard sotto non viene nemmeno letto dal browser.
   if (!isAuthenticated) {
     return (
       <div className="az-premium-canvas">
@@ -338,7 +336,7 @@ const handleLogin = async (e: React.FormEvent) => {
           .error-banner { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; font-size: 10px; font-weight: 700; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
           .encryption-tag { font-size: 8px; font-family: 'JetBrains Mono', monospace; color: #94a3b8; text-align: center; margin-top: 15px; display: block; font-weight: bold; }
         `}</style>
-
+        
         <TopTicker />
 
         <nav className="nav-minimal-lux">
@@ -392,13 +390,15 @@ const handleLogin = async (e: React.FormEvent) => {
     );
   }
 
-  // 3. RENDERIZZAZIONE DELLA DASHBOARD (Scatta SOLO se isAuthenticated è TRUE)
   return (
     <div className="az-premium-canvas">
+      <div className="scroll-progress-indicator" style={{ width: `${scrollPercent}%` }}></div>
+
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;800&display=swap');
         html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; box-sizing: border-box; }
         .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; width: 100%; box-sizing: border-box; padding-top: 55px; }
+        .scroll-progress-indicator { position: fixed; top: 0; left: 0; height: 3px; background: #22d3ee; z-index: 2001; transition: width 0.1s ease-out; box-shadow: 0 0 8px #22d3ee; }
         .nav-minimal-lux { display: flex; justify-content: space-between; align-items: center; padding: 30px 40px 20px; max-width: 1400px; margin: 0 auto; position: relative; z-index: 10; box-sizing: border-box; width: 100%; }
         .logo-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
         .main-logo { height: 35px; cursor: pointer; }
@@ -445,19 +445,50 @@ const handleLogin = async (e: React.FormEvent) => {
         .action-btn-go:hover { background: #111; }
         .action-btn-go.sharing { background: #10b981; }
         .action-btn-go:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+        
         .map-canvas { flex: 1; background: #edf2f7; position: relative; display: flex; flex-direction: column; }
         .map-overlay-stats { position: absolute; top: 20px; left: 20px; display: flex; gap: 10px; z-index: 50; flex-wrap: wrap; right: 20px; }
         .mini-stat-pill { background: #1e293b; color: white; padding: 6px 14px; border-radius: 100px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .map-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; padding: 40px 0; }
-        .archipelago-visualizer { width: 100%; max-width: 300px; height: 350px; position: relative; opacity: 0.65; margin: 0 auto; }
+        .archipelago-visualizer { width: 100%; max-width: 300px; height: 350px; position: relative; opacity: 0.85; margin: 0 auto; }
+        .map-lines { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
         .map-node { position: absolute; display: flex; align-items: center; gap: 8px; }
         .map-node .lbl { font-size: 9px; font-weight: 800; color: #475569; background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; white-space: nowrap; }
+        
         .map-node.mnl { top: 25%; left: 20%; }
         .map-node.ceb { top: 50%; left: 55%; }
         .map-node.dvo { bottom: 25%; left: 35%; }
+        
         .ping { width: 8px; height: 8px; background: #3e6ae1; border-radius: 50%; display: inline-block; position: relative; }
         .map-node.ceb .ping { background: #10b981; }
         .ping::after { content: ''; position: absolute; width: 24px; height: 24px; background: inherit; border-radius: 50%; top: -8px; left: -8px; opacity: 0.3; animation: radarPulse 1.5s infinite ease-out; }
+
+        .live-stream-ticker { 
+          width: 100%; 
+          height: 120px; 
+          background: linear-gradient(90deg, rgba(253, 251, 247, 0.75) 0%, rgba(255, 254, 252, 0.85) 50%, rgba(253, 251, 247, 0.75) 100%); 
+          backdrop-filter: blur(25px); 
+          overflow: hidden; 
+          display: flex; 
+          align-items: center; 
+          position: relative; 
+          border-top: 1px solid rgba(34, 211, 238, 0.35); 
+          border-bottom: 1px solid rgba(34, 211, 238, 0.35); 
+          margin-top: 40px; 
+          box-shadow: inset 0 0 30px rgba(34, 211, 238, 0.03), 0 10px 30px rgba(0, 0, 0, 0.02); 
+          box-sizing: border-box; 
+        }
+        .marquee-content { display: flex; align-items: center; white-space: nowrap; animation: marquee 35s linear infinite; z-index: 2; }
+        .marquee-item { display: flex; align-items: center; gap: 15px; margin-right: 80px; font-family: monospace; font-size: 11px; font-weight: 800; color: #1d1d1f; letter-spacing: 1px; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .marquee-item:hover { transform: scale(1.04); cursor: pointer; }
+        .marquee-item span { color: #0891b2; font-weight: 900; }
+        .ticker-thumb { width: 70px; height: 45px; object-fit: cover; border-radius: 8px; border: 2px solid #1d1d1f; box-shadow: 4px 4px 0px #22d3ee; }
+
+        @keyframes marquee { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); } }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        @keyframes radarPulse { 0% { transform: scale(0.2); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
+
         @media (max-width: 900px) {
           .nav-minimal-lux { padding: 20px; flex-direction: column; gap: 20px; text-align: center; }
           .logo-group { justify-content: center; }
@@ -590,6 +621,10 @@ const handleLogin = async (e: React.FormEvent) => {
 
               <div className="map-placeholder">
                 <div className="archipelago-visualizer">
+                  <svg className="map-lines" viewBox="0 0 300 350">
+                    <line x1="60" y1="87" x2="165" y2="175" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4" />
+                    <line x1="165" y1="175" x2="105" y2="262" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4" />
+                  </svg>
                   <div className="map-node mnl"><span className="ping"></span><span className="lbl">Luzon Hub</span></div>
                   <div className="map-node ceb"><span className="ping"></span><span className="lbl">Visayas Hub</span></div>
                   <div className="map-node dvo"><span className="ping"></span><span className="lbl">Mindanao Hub</span></div>
