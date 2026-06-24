@@ -28,24 +28,34 @@ interface MapProps {
   stations: Station[];
 }
 
-// Sotto-componente per aggiornare la visuale della mappa in modo sicuro
+// Sotto-componente ottimizzato: previene loop infiniti su mobile
 const ChangeView = ({ center }: { center: [number, number] }) => {
   const map = useMap();
   
   useEffect(() => {
-    // Controllo di sicurezza: evita il crash se center è undefined o incompleto
     if (!center || !Array.isArray(center) || center[0] === undefined || center[1] === undefined) {
       return;
     }
     
     if (map && typeof map.setView === 'function') {
       try {
-        map.setView(center, map.getZoom() || 13);
+        // Usa una stringa fissa di controllo per evitare di triggerare cambi continui se le coordinate sono identiche
+        const currentCenter = map.getCenter();
+        const isSame = currentCenter.lat.toFixed(4) === center[0].toFixed(4) && 
+                       currentCenter.lng.toFixed(4) === center[1].toFixed(4);
+        
+        if (!isSame) {
+          map.setView(center, 13);
+          // FIX PER MOBILE: Forza il rinfresco dei quadranti grafici se la mappa è rimasta nera
+          setTimeout(() => {
+            map.invalidateSize();
+          }, 200);
+        }
       } catch (e) {
         console.error("Errore Leaflet durante il setView:", e);
       }
     }
-  }, [center, map]);
+  }, [center[0], center[1], map]); // Ascolta i singoli numeri, non l'array intero!
   
   return null;
 };
@@ -57,11 +67,13 @@ export default function MapComponent({ center, stations }: MapProps) {
   }
 
   return (
-    <div style={{ height: "100%", width: "100%", borderRadius: "inherit" }}>
+    // FIX MOBILE: Definiamo un'altezza minima fissa (minHeight) interna, così non collasserà MAI a zero
+    <div style={{ height: "100%", minHeight: "350px", width: "100%", borderRadius: "inherit", overflow: "hidden" }}>
       <MapContainer 
         center={center} 
         zoom={13} 
-        style={{ height: "100%", width: "100%" }}
+        style={{ height: "100%", minHeight: "350px", width: "100%" }}
+        scrollWheelZoom={false}
       >
         <ChangeView center={center} />
         
@@ -83,8 +95,6 @@ export default function MapComponent({ center, stations }: MapProps) {
 
         {/* Marker dinamici delle colonnine */}
         {stations.map((station) => {
-          // Genera coordinate fittizie stabili basate sull'ID se mancano quelle reali nel DB,
-          // altrimenti con Math.random() i pin si muoverebbero a ogni secondo!
           const stringToSeed = station.id || station.name;
           let hash = 0;
           for (let i = 0; i < stringToSeed.length; i++) {
