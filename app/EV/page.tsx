@@ -3,6 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+// Import dinamico del componente Mappa per evitare crash SSR sul server
+const MapComponent = dynamic(() => import('../components/Map'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ color: '#22d3ee', fontFamily: 'monospace', padding: '20px', textAlign: 'center', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#edf2f7', width: '100%' }}>
+      📡 INITIALIZING_SATELLITE_TILES...
+    </div>
+  )
+});
 
 interface TickerStats {
   co2: number;
@@ -25,6 +36,8 @@ interface StationMock {
   total_bays: number;
   kw_power: number;
   price_per_kwh: number;
+  distance_km?: number;
+  address?: string;
 }
 
 const TopTicker: React.FC = () => {
@@ -74,41 +87,38 @@ export default function EVMobilityPage() {
   const [liveMs, setLiveMs] = useState<number>(421);
   const [scrollPercent, setScrollPercent] = useState<number>(0);
   
-  // RIGID HYDRATION AND SECURITY STATES
   const [isClient, setIsClient] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [globalLoading, setGlobalLoading] = useState<boolean>(true);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   
-  // Login Form
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string>('');
 
-  // Module 5 Data
   const [activeService, setActiveService] = useState<'CHARGING' | 'SHARING'>('CHARGING');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [vehicles, setVehicles] = useState<VehicleMock[]>([]);
   const [stations, setStations] = useState<StationMock[]>([]);
+  
+  const [geoStatus, setGeoStatus] = useState<string>("INITIALIZING_GPS_STREAM...");
+  const FALLBACK_LAT = 14.5547;
+  const FALLBACK_LNG = 121.0244;
+
+  const [mapCenter, setMapCenter] = useState<[number, number]>([FALLBACK_LAT, FALLBACK_LNG]);
 
   const adminEmails = ['admin@azphur.com', 'tuofratello@email.com'];
 
-  // DB Cross-verification function (Module 5)
   const verifyCustomerAccess = async (userEmail: string): Promise<boolean> => {
     const emailClean = userEmail.toLowerCase().trim();
-    
-    if (adminEmails.includes(emailClean)) {
-      return true;
-    }
-
+    if (adminEmails.includes(emailClean)) return true;
     try {
       const { data, error } = await supabase
         .from('module_05_customers')
         .select('email')
         .eq('email', emailClean)
         .maybeSingle();
-
       if (error) throw error;
       return !!data;
     } catch (err) {
@@ -117,7 +127,6 @@ export default function EVMobilityPage() {
     }
   };
 
-  // Controllo se l'utente appartiene al Modulo 1
   const verifyModule01Access = async (userEmail: string): Promise<boolean> => {
     const emailClean = userEmail.toLowerCase().trim();
     try {
@@ -133,29 +142,81 @@ export default function EVMobilityPage() {
     }
   };
 
-  // Fetch real sub-stations from DB
-  const fetchRealSubStations = async () => {
+  const fetchRealSubStations = async (lat?: number, lng?: number) => {
+    const currentLat = lat || FALLBACK_LAT;
+    const currentLng = lng || FALLBACK_LNG;
+
     try {
-      const { data, error } = await supabase
-        .from('sub_stations')
-        .select('*')
-        .order('name', { ascending: true });
+      const response = await fetch(`/api/v1/stations/nerby?lat=${currentLat}&lng=${currentLng}`);
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        await triggerDatabaseFallback();
+        return;
+      }
 
-      if (error) throw error;
+      const result = await response.json();
 
-      if (data) {
-        const formatted = data.map((item: any) => ({
+      if (response.ok && result.success && result.stations) {
+        const formatted = result.stations.map((item: any) => ({
           id: item.id,
           name: item.name,
-          available_bays: item.available_bays,
-          total_bays: item.total_bays,
-          kw_power: item.kw_power,
-          price_per_kwh: Number(item.price_per_kwh)
+          available_bays: item.available_bays || 0,
+          total_bays: item.total_bays || 0,
+          kw_power: item.kw_power || item.power_kv || 0,
+          price_per_kwh: Number(item.price_per_kwh || 0),
+          distance_km: item.distance_km,
+          address: item.address
         }));
         setStations(formatted);
+      } else {
+        await triggerDatabaseFallback();
       }
     } catch (err) {
-      console.error("Error fetching sub_stations:", err);
+      console.error("Error fetching sub_stations via API:", err);
+      await triggerDatabaseFallback();
+    }
+  };
+
+  const triggerDatabaseFallback = async () => {
+    const { data, error } = await supabase
+      .from('sub_stations')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    if (data) {
+      const formatted = data.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        available_bays: item.available_bays,
+        total_bays: item.total_bays,
+        kw_power: item.kw_power,
+        price_per_kwh: Number(item.price_per_kwh)
+      }));
+      setStations(formatted);
+    }
+  };
+
+  const triggerLocationAcquisition = () => {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      setGeoStatus("REQUESTING_SATELLITE_LINK... [RECOMMENDED FOR OPTIMAL EXPERIENCE]");
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setGeoStatus("COORDINATES_LOCKED_SUCCESSFULLY");
+          // QUI: Invece di fetchare solo, imposterai anche setMapCenter
+          fetchRealSubStations(position.coords.latitude, position.coords.longitude);
+        },
+        (error) => {
+          console.warn("GPS Access Denied. Using Manila core coordinates.");
+          setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK [ALLOW LOCATION FOR OPTIMAL EXPERIENCE]");
+          fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    } else {
+      setGeoStatus("GPS_NOT_SUPPORTED_BY_BROWSER [UPGRADE BROWSER FOR OPTIMAL EXPERIENCE]");
+      fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
     }
   };
 
@@ -167,7 +228,6 @@ export default function EVMobilityPage() {
 
       if (session?.user?.email) {
         const emailClean = session.user.email.toLowerCase().trim();
-        
         const hasModule5Access = await verifyCustomerAccess(emailClean);
         
         if (hasModule5Access) {
@@ -179,7 +239,8 @@ export default function EVMobilityPage() {
             { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2km away" },
             { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
           ]);
-          await fetchRealSubStations();
+          
+          triggerLocationAcquisition();
           setGlobalLoading(false);
         } else {
           setIsAuthenticated(false);
@@ -197,7 +258,7 @@ export default function EVMobilityPage() {
     const channel = supabase
       .channel('realtime-sub-stations')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sub_stations' }, () => {
-        fetchRealSubStations();
+        triggerLocationAcquisition();
       })
       .subscribe();
 
@@ -232,7 +293,6 @@ export default function EVMobilityPage() {
       
       if (!isAdmin) {
         const hasModule5 = await verifyCustomerAccess(emailClean);
-        
         if (!hasModule5) {
           const hasModule1 = await verifyModule01Access(emailClean);
           if (hasModule1) {
@@ -357,7 +417,7 @@ export default function EVMobilityPage() {
           <h2 className="auth-gate-title">SYSTEM_AUTHENTICATION</h2>
           <p className="auth-gate-subtitle">AZPHUR Universal Portal: Enter authorization credentials.</p>
           
-          {authError && <div className="error-banner">⛔ ALERT: {authError}</div>}
+          {authError && <div className="error-banner">❌ ALERT: {authError}</div>}
           
           <form onSubmit={handleLogin}>
             <div className="input-group">
@@ -449,41 +509,8 @@ export default function EVMobilityPage() {
         .map-canvas { flex: 1; background: #edf2f7; position: relative; display: flex; flex-direction: column; }
         .map-overlay-stats { position: absolute; top: 20px; left: 20px; display: flex; gap: 10px; z-index: 50; flex-wrap: wrap; right: 20px; }
         .mini-stat-pill { background: #1e293b; color: white; padding: 6px 14px; border-radius: 100px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .map-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; padding: 40px 0; }
-        .archipelago-visualizer { width: 100%; max-width: 300px; height: 350px; position: relative; opacity: 0.85; margin: 0 auto; }
-        .map-lines { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
-        .map-node { position: absolute; display: flex; align-items: center; gap: 8px; }
-        .map-node .lbl { font-size: 9px; font-weight: 800; color: #475569; background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #e2e8f0; white-space: nowrap; }
+        .map-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; padding: 0; overflow: hidden; }
         
-        .map-node.mnl { top: 25%; left: 20%; }
-        .map-node.ceb { top: 50%; left: 55%; }
-        .map-node.dvo { bottom: 25%; left: 35%; }
-        
-        .ping { width: 8px; height: 8px; background: #3e6ae1; border-radius: 50%; display: inline-block; position: relative; }
-        .map-node.ceb .ping { background: #10b981; }
-        .ping::after { content: ''; position: absolute; width: 24px; height: 24px; background: inherit; border-radius: 50%; top: -8px; left: -8px; opacity: 0.3; animation: radarPulse 1.5s infinite ease-out; }
-
-        .live-stream-ticker { 
-          width: 100%; 
-          height: 120px; 
-          background: linear-gradient(90deg, rgba(253, 251, 247, 0.75) 0%, rgba(255, 254, 252, 0.85) 50%, rgba(253, 251, 247, 0.75) 100%); 
-          backdrop-filter: blur(25px); 
-          overflow: hidden; 
-          display: flex; 
-          align-items: center; 
-          position: relative; 
-          border-top: 1px solid rgba(34, 211, 238, 0.35); 
-          border-bottom: 1px solid rgba(34, 211, 238, 0.35); 
-          margin-top: 40px; 
-          box-shadow: inset 0 0 30px rgba(34, 211, 238, 0.03), 0 10px 30px rgba(0, 0, 0, 0.02); 
-          box-sizing: border-box; 
-        }
-        .marquee-content { display: flex; align-items: center; white-space: nowrap; animation: marquee 35s linear infinite; z-index: 2; }
-        .marquee-item { display: flex; align-items: center; gap: 15px; margin-right: 80px; font-family: monospace; font-size: 11px; font-weight: 800; color: #1d1d1f; letter-spacing: 1px; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        .marquee-item:hover { transform: scale(1.04); cursor: pointer; }
-        .marquee-item span { color: #0891b2; font-weight: 900; }
-        .ticker-thumb { width: 70px; height: 45px; object-fit: cover; border-radius: 8px; border: 2px solid #1d1d1f; box-shadow: 4px 4px 0px #22d3ee; }
-
         @keyframes marquee { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
         @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); } }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
@@ -508,6 +535,7 @@ export default function EVMobilityPage() {
           <img src="/logo-azphur.avif" alt="AZPHUR Logo" className="main-logo" onClick={() => router.push('/')} />
           <div className="status-orb"></div>
           <span className="op-status-tag">EVMOB_MODULE_05</span>
+          <span style={{ fontSize: '7px', color: '#0891b2', marginLeft: '10px', fontFamily: 'monospace' }}>[{geoStatus}]</span>
         </div>
         <div className="nav-items">
           <div className="network-signal">
@@ -569,7 +597,10 @@ export default function EVMobilityPage() {
                         <div className="card-main-info">
                           <div>
                             <h3 className="node-title">{station.name}</h3>
-                            <p className="node-sub">{station.kw_power} kW • Fast Charge</p>
+                            <p className="node-sub">
+                              {station.kw_power} kW • Fast Charge
+                              {station.distance_km !== undefined && ` • ${station.distance_km} KM away`}
+                            </p>
                           </div>
                           <span className={`bay-badge ${station.available_bays > 0 ? 'green' : 'red'}`}>
                             {station.available_bays}/{station.total_bays} AVAIL
@@ -619,17 +650,13 @@ export default function EVMobilityPage() {
                 <div className="mini-stat-pill" style={{ background: '#0f766e' }}>🟢 SYNC: ON</div>
               </div>
 
-              <div className="map-placeholder">
-                <div className="archipelago-visualizer">
-                  <svg className="map-lines" viewBox="0 0 300 350">
-                    <line x1="60" y1="87" x2="165" y2="175" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4" />
-                    <line x1="165" y1="175" x2="105" y2="262" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="4" />
-                  </svg>
-                  <div className="map-node mnl"><span className="ping"></span><span className="lbl">Luzon Hub</span></div>
-                  <div className="map-node ceb"><span className="ping"></span><span className="lbl">Visayas Hub</span></div>
-                  <div className="map-node dvo"><span className="ping"></span><span className="lbl">Mindanao Hub</span></div>
-                </div>
-              </div>
+            <div className="map-placeholder">
+              {/* Il componente della mappa prende il posto del vecchio visualizer statico */}
+              <MapComponent 
+                 center={mapCenter} 
+                  stations={filteredStations} 
+                   />
+               </div>
             </div>
           </div>
         </div>

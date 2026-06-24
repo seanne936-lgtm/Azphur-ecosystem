@@ -82,7 +82,6 @@ export default function Home() {
   const [debugM1, setDebugM1] = useState<string>("Waiting...");
   const [debugM5, setDebugM5] = useState<string>("Waiting...");
 
-  // Array unificato degli amministratori di sistema (coerente con la LoginPage)
   const adminEmails = [
     "admin@azphur.com", 
     "tuofratello@email.com", 
@@ -267,13 +266,12 @@ export default function Home() {
       <div className="scroll-progress-indicator" style={{ width: `${scrollPercent}%` }}></div>
 
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800;900&family=JetBrains+Mono:wght=800&display=swap');
         html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; scroll-behavior: smooth; box-sizing: border-box; }
         .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; overflow-x: hidden; width: 100%; box-sizing: border-box; padding-top: 45px; }
         .scroll-progress-indicator { position: fixed; top: 0; left: 0; height: 3px; background: #22d3ee; z-index: 2001; transition: width 0.1s ease-out; box-shadow: 0 0 8px #22d3ee; }
         .nav-minimal-lux { display: flex; justify-content: space-between; align-items: center; padding: 60px 60px 20px; max-width: 1400px; margin: 0 auto; position: relative; z-index: 10; box-sizing: border-box; width: 100%; }
         .logo-group { display: flex; align-items: center; }
-        .az-brand-label { color: #1d1d1f; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
         .status-orb { width: 8px; height: 8px; background: #22d3ee; border-radius: 50%; margin-left: 12px; box-shadow: 0 0 10px #22d3ee; }
         .op-status-tag { font-size: 7px; color: #0891b2; border: 1px solid #22d3ee; padding: 2px 6px; border-radius: 3px; margin-left: 15px; font-weight: 900; flex-shrink: 0; }
         .nav-items { display: flex; gap: 40px; align-items: center; }
@@ -284,7 +282,6 @@ export default function Home() {
         .btn-red-outline { background: none; border: 1px solid #ef4444; color: #ef4444; padding: 8px 20px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; flex-shrink: 0; }
         .btn-red-outline:hover { background: #ef4444; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
         
-        /* LIVE TICKER CON EFFETTO LUCE CYAN E MARQUEE CONTINUO */
         .live-stream-ticker { 
           width: 100%; height: 120px; 
           background: linear-gradient(90deg, rgba(253, 251, 247, 0.75) 0%, rgba(255, 254, 252, 0.85) 50%, rgba(253, 251, 247, 0.75) 100%); 
@@ -292,18 +289,12 @@ export default function Home() {
           border-top: 1px solid rgba(34, 211, 238, 0.35); border-bottom: 1px solid rgba(34, 211, 238, 0.35); 
           margin-bottom: 80px; box-shadow: inset 0 0 30px rgba(34, 211, 238, 0.03), 0 10px 30px rgba(0, 0, 0, 0.02); box-sizing: border-box; 
         }
-        .live-stream-ticker::before {
-          content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-          background: linear-gradient(90deg, transparent 0%, rgba(34, 211, 238, 0.08) 50%, transparent 100%);
-          background-size: 200% 100%; animation: cyan-glow-sweep 8s linear infinite; pointer-events: none; z-index: 1;
-        }
         .marquee-content { display: flex; align-items: center; white-space: nowrap; animation: marquee 30s linear infinite; z-index: 2; width: max-content; }
         .marquee-item { display: flex; align-items: center; gap: 15px; margin-right: 80px; font-family: monospace; font-size: 11px; font-weight: 800; color: #1d1d1f; letter-spacing: 1px; }
         .marquee-item span { color: #0891b2; font-weight: 900; }
         .ticker-thumb { width: 70px; height: 45px; object-fit: cover; border-radius: 8px; border: 2px solid #1d1d1f; box-shadow: 4px 4px 0px #22d3ee; }
         
         @keyframes marquee { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
-        @keyframes cyan-glow-sweep { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         
         .about-section { max-width: 1100px; margin: 60px auto 100px; padding: 0 20px; display: flex; align-items: center; gap: 60px; text-align: left; box-sizing: border-box; width: 100%; }
         .about-section.reverse-layout { flex-direction: row-reverse; }
@@ -331,13 +322,13 @@ export default function Home() {
 
         .section-header-lux { max-width: 1100px; margin: 80px auto 40px; padding: 0 20px; text-align: left; }
         .section-header-lux h2 { font-size: 36px; font-weight: 900; margin: 0; letter-spacing: -1px; }
+        .cyan-header { color: #22d3ee !important; font-family: 'JetBrains Mono', monospace !important; letter-spacing: 2px !important; text-transform: uppercase; }
         
         .blueprints-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1100px; margin: 0 auto 80px; padding: 0 20px; box-sizing: border-box; width: 100%; }
         .blueprint-card { 
           background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); 
           border: 4px solid #1d1d1f; border-radius: 24px; padding: 30px; 
           transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-          box-shadow: none;
         }
         .blueprint-card:hover { transform: translateY(-4px); border-color: #22d3ee; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.15); }
         .blueprint-title { font-size: 14px; font-weight: 900; color: #1d1d1f; margin-bottom: 12px; font-family: monospace; letter-spacing: 0.5px; }
@@ -370,7 +361,7 @@ export default function Home() {
         .auth-container button { background: #1d1d1f; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-size: 10px; font-weight: 900; cursor: pointer; flex-shrink: 0; transition: 0.3s; }
         .staff-box-lux:hover .auth-container button { background: #22d3ee; }
         .legal-tag { font-size: 9px; font-weight: 900; color: #22d3ee; letter-spacing: 1.5px; }
-        
+
         .hero-apple-style { padding: 100px 20px 40px; text-align: center; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; width: 100%; }
         .shaping-text { color: #22d3ee; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 20px; }
         .hero-title { font-size: clamp(36px, 8vw, 85px); font-weight: 900; line-height: 0.95; letter-spacing: -0.05em; margin: 0; word-break: break-word; max-width: 100%; }
@@ -382,6 +373,25 @@ export default function Home() {
         .m-label { font-size: 8px; font-weight: 900; color: #86868b; letter-spacing: 1px; margin-bottom: 8px; }
         .m-value { font-size: 20px; font-weight: 900; color: #1d1d1f; font-family: monospace; }
         .m-value-green { font-size: 20px; font-weight: 900; color: #0891b2; font-family: monospace; }
+
+        /* LINK DI QUOTAZIONE STILOSO */
+        .quick-access-zone { max-width: 1100px; margin: 0 auto 40px; padding: 0 20px; display: flex; justify-content: flex-start; width: 100%; box-sizing: border-box; }
+        .btn-quotation-lux { 
+          background: #fff; border: 4px solid #1d1d1f; color: #1d1d1f; padding: 12px 24px; 
+          border-radius: 12px; cursor: pointer; font-weight: 900; font-size: 11px; 
+          transition: 0.3s; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px;
+          box-shadow: 6px 6px 0px #22d3ee;
+        }
+        .btn-quotation-lux:hover { transform: translate(-2px, -2px); box-shadow: 10px 10px 0px #22d3ee; border-color: #22d3ee; color: #0891b2; }
+        .blink { animation: blink-ani 1.5s infinite; color: #22d3ee; margin-right: 10px; }
+        @keyframes blink-ani { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* LINK DI REGISTRAZIONE MINI */
+        .btn-signin-link {
+          background: none; border: none; color: #0891b2; font-size: 10px; font-weight: 800;
+          cursor: pointer; transition: 0.2s; letter-spacing: 0.5px; text-decoration: none;
+        }
+        .btn-signin-link:hover { color: #22d3ee; }
 
         @media (max-width: 900px) {
           .nav-minimal-lux { padding: 40px 20px 20px; flex-direction: column; gap: 20px; text-align: center; }
@@ -398,11 +408,11 @@ export default function Home() {
       <nav className="nav-minimal-lux">
         <div className="logo-group">
           <img 
-  src="/logo-azphur.avif" 
-  alt="AZPHUR Logo" 
-  style={{ height: '26px', width: 'auto', cursor: 'pointer' }} 
-  onClick={() => router.push('/')} 
-/>
+            src="/logo-azphur.avif" 
+            alt="AZPHUR Logo" 
+            style={{ height: '26px', width: 'auto', cursor: 'pointer' }} 
+            onClick={() => router.push('/')} 
+          />
           <div className="status-orb"></div>
           <span className="op-status-tag">CORE_v2.06_STABLE</span>
         </div>
@@ -419,7 +429,10 @@ export default function Home() {
               <button className="btn-red-outline" onClick={handleLogout}>LOGOUT 🚪</button>
             </div>
           ) : (
-            <button className="btn-cyan-outline" onClick={() => router.push('/login')}>ENTER_PORTAL</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <button className="btn-signin-link" onClick={() => router.push('/register')}>SIGN_IN</button>
+              <button className="btn-cyan-outline" onClick={() => router.push('/login')}>ENTER_PORTAL</button>
+            </div>
           )}
         </div>
       </nav>
@@ -450,6 +463,13 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {/* TASTO PORTALE SOLAR QUOTATION AGGIUNTO SOPRA I MACROMODULI */}
+        <div className="quick-access-zone">
+          <button onClick={() => router.push('/solar-quote')} className="btn-quotation-lux">
+             <span className="blink">⚡</span> [ DX_LINK // SOLAR_QUOTATION ]
+          </button>
+        </div>
 
         <div className="live-stream-ticker">
           <div className="marquee-content">
@@ -502,6 +522,7 @@ export default function Home() {
         ))}
 
         <section className="modular-grid-apple">
+          {/* M01 - CONTROLLO ACCESSO COMPLETO ATTIVO */}
           <div onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_01 // SUPPLY</span>
@@ -511,6 +532,7 @@ export default function Home() {
             <div className="action-text">MANAGE_LISTINGS →</div>
           </div>
 
+          {/* M02 - CONTROLLO ACCESSO COMPLETO ATTIVO */}
           <div onClick={() => handleModuleNavigation('/b2b')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_02 // BUILD</span>
@@ -520,7 +542,8 @@ export default function Home() {
             <div className="action-text">TRACK_LEADS →</div>
           </div>
 
-          <div onClick={() => handleModuleNavigation('/b2c')} className="quad-card-premium">
+          {/* M03 - ACCESSO LIBERO SENZA BLOCCO LOGIN COME RICHIESTO */}
+          <div onClick={() => router.push('/b2c')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_03 // CHARGE</span>
               <h3 className="text-cyan">Charge Network</h3>
@@ -529,7 +552,8 @@ export default function Home() {
             <div className="action-text">INITIALIZE_NODE →</div>
           </div>
 
-          <div onClick={() => handleModuleNavigation('/partner')} className="quad-card-premium">
+          {/* M04 - ACCESSO LIBERO SENZA BLOCCO LOGIN COME RICHIESTO */}
+          <div onClick={() => router.push('/partner')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_04 // PARTNER</span>
               <h3 className="text-cyan">Partner Portal</h3>
@@ -538,6 +562,7 @@ export default function Home() {
             <div className="action-text">NODE_LOGIN →</div>
           </div>
 
+          {/* M05 - CONTROLLO ACCESSO COMPLETO ATTIVO */}
           <div 
             onClick={() => handleModuleNavigation('/EV', verifyCustomerAccessM5)} 
             className="quad-card-premium card-m5" 
@@ -552,8 +577,9 @@ export default function Home() {
           </div>
         </section>
 
+        {/* SYSTEM_BLUEPRINTS DIVENTA BLUEPRINTS ED È COLORATO IN CYAN STILOSO */}
         <div className="section-header-lux">
-          <h2>SYSTEM_BLUEPRINTS</h2>
+          <h2 className="cyan-header">BLUEPRINTS</h2>
         </div>
         <section className="blueprints-container">
           <div className="blueprint-card">
@@ -585,8 +611,9 @@ export default function Home() {
           </div>
         </section>
 
+        {/* FREQUENT_QUESTIONS DIVENTA Faqs ED È COLORATO IN CYAN STILOSO */}
         <div className="section-header-lux">
-          <h2>FREQUENT_QUESTIONS</h2>
+          <h2 className="cyan-header">Faqs</h2>
         </div>
         <section className="faq-container">
           {faqs.map((faq, i) => (
