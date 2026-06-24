@@ -198,27 +198,40 @@ export default function EVMobilityPage() {
     }
   };
 
-  const triggerLocationAcquisition = () => {
-    if (typeof window !== 'undefined' && navigator.geolocation) {
-      setGeoStatus("REQUESTING_SATELLITE_LINK... [RECOMMENDED FOR OPTIMAL EXPERIENCE]");
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setGeoStatus("COORDINATES_LOCKED_SUCCESSFULLY");
-          // QUI: Invece di fetchare solo, imposterai anche setMapCenter
-          fetchRealSubStations(position.coords.latitude, position.coords.longitude);
-        },
-        (error) => {
-          console.warn("GPS Access Denied. Using Manila core coordinates.");
-          setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK [ALLOW LOCATION FOR OPTIMAL EXPERIENCE]");
-          fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
-        },
-        { enableHighAccuracy: true, timeout: 6000 }
-      );
-    } else {
-      setGeoStatus("GPS_NOT_SUPPORTED_BY_BROWSER [UPGRADE BROWSER FOR OPTIMAL EXPERIENCE]");
-      fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+ const triggerLocationAcquisition = () => {
+  if (typeof window !== 'undefined' && navigator.geolocation) {
+    setGeoStatus("REQUESTING_SATELLITE_LINK... [RECOMMENDED FOR OPTIMAL EXPERIENCE]");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setGeoStatus("COORDINATES_LOCKED_SUCCESSFULLY");
+        
+        // Forza la mappa a spostarsi sulle coordinate reali dell'utente
+        if (typeof setMapCenter === 'function') {
+          setMapCenter([latitude, longitude]);
+        }
+        fetchRealSubStations(latitude, longitude);
+      },
+      (error) => {
+        console.warn("GPS Access Denied. Using Manila core coordinates.");
+        setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK [ALLOW LOCATION FOR OPTIMAL EXPERIENCE]");
+        
+        // FIX: Sposta la mappa sulle coordinate di Manila se il GPS fallisce
+        if (typeof setMapCenter === 'function') {
+          setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
+        }
+        fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+      },
+      { enableHighAccuracy: true, timeout: 6000 }
+    );
+  } else {
+    setGeoStatus("GPS_NOT_SUPPORTED_BY_BROWSER [UPGRADE BROWSER FOR OPTIMAL EXPERIENCE]");
+    if (typeof setMapCenter === 'function') {
+      setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
     }
-  };
+    fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+  }
+};
 
   useEffect(() => {
     setIsClient(true);
