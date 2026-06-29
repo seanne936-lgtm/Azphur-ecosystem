@@ -185,8 +185,8 @@ export default function Home() {
   };
 
   useEffect(() => {
-    async function checkUserSession() {
-      const { data: { session } } = await supabase.auth.getSession();
+    // Ascoltatore in tempo reale della sessione di Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user?.email) {
         const emailClean = session.user.email.toLowerCase().trim();
         setCurrentUserEmail(emailClean);
@@ -197,8 +197,7 @@ export default function Home() {
         setDebugM1("No logged user");
         setDebugM5("No logged user");
       }
-    }
-    checkUserSession();
+    });
 
     async function getCount() {
       const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
@@ -219,6 +218,7 @@ export default function Home() {
     window.addEventListener("scroll", handleScroll);
 
     return () => {
+      subscription.unsubscribe(); // Pulisce l'ascoltatore quando smonti il componente
       clearInterval(msInterval);
       window.removeEventListener("scroll", handleScroll);
     };
