@@ -198,49 +198,84 @@ export default function EVMobilityPage() {
     }
   };
 
- const triggerLocationAcquisition = () => {
-  if (typeof window !== 'undefined' && navigator.geolocation) {
-    setGeoStatus("REQUESTING_SATELLITE_LINK... [RECOMMENDED FOR OPTIMAL EXPERIENCE]");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setGeoStatus("COORDINATES_LOCKED_SUCCESSFULLY");
-        
-        // Forza la mappa a spostarsi sulle coordinate reali dell'utente
-        if (typeof setMapCenter === 'function') {
-          setMapCenter([latitude, longitude]);
-        }
-        fetchRealSubStations(latitude, longitude);
-      },
-      (error) => {
-        console.warn("GPS Access Denied. Using Manila core coordinates.");
-        setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK [ALLOW LOCATION FOR OPTIMAL EXPERIENCE]");
-        
-        // FIX: Sposta la mappa sulle coordinate di Manila se il GPS fallisce
-        if (typeof setMapCenter === 'function') {
-          setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
-        }
-        fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
-      },
-      { enableHighAccuracy: true, timeout: 6000 }
-    );
-  } else {
-    setGeoStatus("GPS_NOT_SUPPORTED_BY_BROWSER [UPGRADE BROWSER FOR OPTIMAL EXPERIENCE]");
-    if (typeof setMapCenter === 'function') {
-      setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
+  const triggerLocationAcquisition = (updateMap = true) => {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      setGeoStatus("REQUESTING_SATELLITE_LINK...");
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setGeoStatus("COORDINATES_LOCKED_SUCCESSFULLY");
+          
+          if (updateMap && typeof setMapCenter === 'function') {
+            setMapCenter([latitude, longitude]);
+          }
+          fetchRealSubStations(latitude, longitude);
+        },
+        (error) => {
+          console.warn("GPS Access Denied. Using fallback coordinates.");
+          setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK");
+          
+          if (updateMap && typeof setMapCenter === 'function') {
+            setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
+          }
+          fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+        },
+        { enableHighAccuracy: false, timeout: 4000 }
+      );
+    } else {
+      setGeoStatus("GPS_NOT_SUPPORTED");
+      if (updateMap && typeof setMapCenter === 'function') {
+        setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
+      }
+      fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
     }
-    fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
-  }
-};
+  };
 
   useEffect(() => {
     setIsClient(true);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setGlobalLoading(true);
+    // 1. VERIFICA IMMEDIATA DELLA SESSIONE ATTUALE (Evita il blocco del caricamento all'avvio)
+    const checkInitialSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email) {
+          const emailClean = session.user.email.toLowerCase().trim();
+          const hasModule5Access = await verifyCustomerAccess(emailClean);
+          
+          if (hasModule5Access) {
+            setCurrentUserEmail(emailClean);
+            setIsAuthenticated(true);
+            setVehicles([
+              { id: "EV-CAR-01", model: "AZPHUR Pod S", plate: "NEX-2026", battery: 84, status: "AVAILABLE", distance: "350m away" },
+              { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2km away" },
+              { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
+            ]);
+            triggerLocationAcquisition(true);
+          } else {
+            router.push('/s2b');
+          }
+        }
+      } catch (err) {
+        console.error("Error checking initial session:", err);
+      } finally {
+        // Forza lo spegnimento della schermata scura di caricamento in ogni caso
+        setGlobalLoading(false);
+      }
+    };
 
+    checkInitialSession();
+
+    // 2. ASCOLTATORE DEI CAMBIAMENTI DI STATO (LOGIN/LOGOUT IN TEMPO REALE)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user?.email) {
         const emailClean = session.user.email.toLowerCase().trim();
+        
+        // Se i dati sono già sincronizzati, spegni il caricamento ed esci per evitare loop
+        if (currentUserEmail === emailClean && isAuthenticated) {
+          setGlobalLoading(false);
+          return;
+        }
+
         const hasModule5Access = await verifyCustomerAccess(emailClean);
         
         if (hasModule5Access) {
@@ -253,25 +288,24 @@ export default function EVMobilityPage() {
             { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
           ]);
           
-          triggerLocationAcquisition();
-          setGlobalLoading(false);
+          triggerLocationAcquisition(true);
         } else {
           setIsAuthenticated(false);
           setCurrentUserEmail('');
           router.push('/s2b');
-          setGlobalLoading(false);
         }
       } else {
         setIsAuthenticated(false);
         setCurrentUserEmail('');
-        setGlobalLoading(false);
       }
+      setGlobalLoading(false);
     });
 
+    // 3. SOTTOSCRIZIONE CANALE REALTIME PER LE STAZIONI
     const channel = supabase
       .channel('realtime-sub-stations')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sub_stations' }, () => {
-        triggerLocationAcquisition();
+        triggerLocationAcquisition(false); 
       })
       .subscribe();
 
@@ -293,7 +327,7 @@ export default function EVMobilityPage() {
       clearInterval(msInterval);
       window.removeEventListener("scroll", handleScroll);
     };
-  }, [router]);
+  }, [router, currentUserEmail, isAuthenticated]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -397,7 +431,7 @@ export default function EVMobilityPage() {
           .nav-items { display: flex; gap: 30px; align-items: center; }
           .network-signal { display: flex; align-items: center; gap: 8px; color: #0891b2; font-size: 8px; font-weight: 800; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
           .sig-dot { width: 4px; height: 4px; background: #22d3ee; border-radius: 50%; animation: blink 1.5s infinite; }
-          .auth-gate-container { max-width: 420px; margin: 80px auto; background: #ffffff; border: 4px solid #1d1d1f; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.05); box-sizing: border-box; }
+          .auth-gate-container { max-width: 420px; margin: 80px auto; background: #ffffff; border: 4px solid #1d1d1f; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.05); box-shadow: 0 20px 40px rgba(0,0,0,0.05); box-sizing: border-box; }
           .auth-gate-title { font-size: 20px; font-family: 'JetBrains Mono', monospace; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 4px; text-transform: uppercase; color: #1d1d1f; }
           .auth-gate-subtitle { font-size: 11px; color: #64748b; margin-bottom: 30px; font-weight: 500; font-family: 'JetBrains Mono', monospace; }
           .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; }
@@ -662,14 +696,12 @@ export default function EVMobilityPage() {
                 <div className="mini-stat-pill">⚡ 42.8 MW</div>
                 <div className="mini-stat-pill" style={{ background: '#0f766e' }}>🟢 SYNC: ON</div>
               </div>
-
-            <div className="map-placeholder">
-              {/* Il componente della mappa prende il posto del vecchio visualizer statico */}
-              <MapComponent 
-                 center={mapCenter} 
-                  stations={filteredStations} 
-                   />
-               </div>
+              <div className="map-placeholder" style={{ height: "100%", minHeight: "350px", width: "100%", position: "relative" }}>
+                 <MapComponent 
+                   center={mapCenter} 
+                   stations={filteredStations} 
+                 />
+              </div>
             </div>
           </div>
         </div>

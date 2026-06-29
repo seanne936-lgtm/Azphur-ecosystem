@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -60,11 +60,40 @@ const ChangeView = ({ center }: { center: [number, number] }) => {
   return null;
 };
 
-export default function MapComponent({ center, stations }: MapProps) {
+// Esporto con React.memo per evitare re-render pesanti quando si cambia tab/pagina
+const MapComponent = React.memo(function MapComponent({ center, stations }: MapProps) {
   // Controllo preventivo: se il centro non è valido, mostra un caricamento pulito
   if (!center || !Array.isArray(center) || center[0] === undefined || center[1] === undefined) {
     return <div style={{ padding: '20px', color: '#0891b2', fontFamily: 'monospace' }}>LOADING_MAP_COORDINATES...</div>;
   }
+
+  // OTTIMIZZAZIONE: Memorizza il calcolo dei marker delle stazioni per evitare ricalcoli costosi all'unmount/remount
+  const renderedMarkers = useMemo(() => {
+    return stations.map((station) => {
+      const stringToSeed = station.id || station.name;
+      let hash = 0;
+      for (let i = 0; i < stringToSeed.length; i++) {
+        hash = stringToSeed.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const pseudoLatOffset = ((hash % 100) / 1000) - 0.05;
+      const pseudoLngOffset = (((hash >> 2) % 100) / 1000) - 0.05;
+
+      const lat = station.latitude || center[0] + pseudoLatOffset;
+      const lng = station.longitude || center[1] + pseudoLngOffset;
+
+      return (
+        <Marker key={station.id} position={[lat, lng]} icon={defaultIcon}>
+          <Popup>
+            <div style={{ fontFamily: 'sans-serif', fontSize: '12px', color: '#1e293b' }}>
+              <strong style={{ fontSize: '13px', color: '#111' }}>{station.name}</strong><br />
+              <span style={{ color: '#3e6ae1', fontWeight: 'bold' }}>⚡ {station.kw_power} kW</span><br />
+              Bays: {station.available_bays}/{station.total_bays} Available
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [stations, center[0], center[1]]);
 
   return (
     // FIX MOBILE: Definiamo un'altezza minima fissa (minHeight) interna, così non collasserà MAI a zero
@@ -87,38 +116,25 @@ export default function MapComponent({ center, stations }: MapProps) {
         <Marker position={center} icon={defaultIcon}>
           <Popup>
             <div style={{ fontFamily: 'monospace', fontSize: '11px' }}>
-              <strong>📍 YOUR_POSITION</strong><br />
+              <strong>📌 YOUR_POSITION</strong><br />
               GPS Uplink Active.
             </div>
           </Popup>
         </Marker>
 
-        {/* Marker dinamici delle colonnine */}
-        {stations.map((station) => {
-          const stringToSeed = station.id || station.name;
-          let hash = 0;
-          for (let i = 0; i < stringToSeed.length; i++) {
-            hash = stringToSeed.charCodeAt(i) + ((hash << 5) - hash);
-          }
-          const pseudoLatOffset = ((hash % 100) / 1000) - 0.05;
-          const pseudoLngOffset = (((hash >> 2) % 100) / 1000) - 0.05;
-
-          const lat = station.latitude || center[0] + pseudoLatOffset;
-          const lng = station.longitude || center[1] + pseudoLngOffset;
-
-          return (
-            <Marker key={station.id} position={[lat, lng]} icon={defaultIcon}>
-              <Popup>
-                <div style={{ fontFamily: 'sans-serif', fontSize: '12px', color: '#1e293b' }}>
-                  <strong style={{ fontSize: '13px', color: '#111' }}>{station.name}</strong><br />
-                  <span style={{ color: '#3e6ae1', fontWeight: 'bold' }}>⚡ {station.kw_power} kW</span><br />
-                  Bays: {station.available_bays}/{station.total_bays} Available
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+        {/* Renderizza i marker memorizzati istantaneamente */}
+        {renderedMarkers}
       </MapContainer>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Shallow comparison personalizzato per React.memo: evita re-render se i dati strutturali sono uguali
+  return (
+    prevProps.center[0] === nextProps.center[0] &&
+    prevProps.center[1] === nextProps.center[1] &&
+    prevProps.stations.length === nextProps.stations.length &&
+    JSON.stringify(prevProps.stations) === JSON.stringify(nextProps.stations)
+  );
+});
+
+export default MapComponent;
