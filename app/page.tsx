@@ -560,9 +560,9 @@ export default function Home() {
 
           <div onClick={() => router.push('/b2c')} className="quad-card-premium">
             <div>
-              <span className="phase-label">MODULE_03 // CHARGE</span>
+              <span className="phase-label">MODULE_03 // STORE</span>
               <h3 className="text-cyan">Charge Network</h3>
-              <p>Real-time EV charging session creation and transaction logging layer. Built to map localized station nodes and scale recurring revenue streams through automated payment gateways.</p>
+              <p>Unified product commercialization and automated fulfillment layer. Built to map global inventory SKUs and scale recurring retail revenue through integrated checkout pipelines.</p>
             </div>
             <div className="action-text">INITIALIZE_NODE →</div>
           </div>
@@ -584,7 +584,7 @@ export default function Home() {
             <div>
               <span className="phase-label" style={{ color: '#3e6ae1' }}>MODULE_05 // GO</span>
               <h3 className="text-cyan text-m5" style={{ color: '#3e6ae1' }}>AZPHUR GO Mobility Hub</h3>
-              <p>On-demand EV routing layer matching local transport logistics with hardware nodes. Access terminal management pipelines for high-frequency dispatch execution directly across regional grids.</p>
+              <p>Real-time EV charging session creation and transaction logging layer. Built to map localized station nodes and scale recurring revenue streams through automated payment gateways.</p>
             </div>
             <div className="action-text action-m5" style={{ color: '#3e6ae1' }}>LAUNCH_TERMINAL →</div>
           </div>
