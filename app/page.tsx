@@ -561,7 +561,7 @@ export default function Home() {
           <div onClick={() => router.push('/b2c')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_03 // STORE</span>
-              <h3 className="text-cyan">Charge Network</h3>
+              <h3 className="text-cyan">Merchant Layer</h3>
               <p>Unified product commercialization and automated fulfillment layer. Built to map global inventory SKUs and scale recurring retail revenue through integrated checkout pipelines.</p>
             </div>
             <div className="action-text">INITIALIZE_NODE →</div>
