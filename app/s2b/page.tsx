@@ -10,9 +10,9 @@ export default function S2BCombinedPortal() {
   const [shipments, setShipments] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userRole, setUserRole] = useState<'ADMIN' | 'CUSTOMER'>('CUSTOMER');
+  const [userEmail, setUserEmail] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  // AGGIUNTO: Stato globale di caricamento per evitare il flash del login se l'utente è già loggato
   const [globalLoading, setGlobalLoading] = useState(true);
 
   const [newOrder, setNewOrder] = useState({
@@ -21,31 +21,25 @@ export default function S2BCombinedPortal() {
 
   const statusCycle = ['PROCESSING', 'IN_TRANSIT', 'DELIVERED', 'ON_HOLD'];
 
+  // 1. Unico punto di controllo sessione stabile all'avvio del componente
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Controllo immediato della sessione attiva al caricamento della pagina
-    const checkInitialSession = async () => {
+    const initializePortal = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!isMounted) return;
 
-      if (!session) {
+      if (!session?.user) {
         setGlobalLoading(false);
         router.push('/login');
-      } else {
-        await handleUserSession(session);
+        return;
       }
-    };
 
-    const handleUserSession = async (session: any) => {
-      const adminEmails = ['admin@azphur.com', 'tuofratello@email.com']; 
-      const userEmail = session.user.email || '';
-      const emailClean = userEmail.toLowerCase().trim();
-
+      const adminEmails = ['admin@azphur.com', 'tuofratello@email.com', 'tuamailprincipale@email.com']; 
+      const emailClean = session.user.email?.toLowerCase().trim() || '';
       const isAdmin = adminEmails.includes(emailClean);
 
-      // CORRETTO: Controllo incrociato sulla tabella del Modulo 1 con email normalizzata
       if (!isAdmin) {
         try {
           const { data, error } = await supabase
@@ -55,37 +49,37 @@ export default function S2BCombinedPortal() {
             .maybeSingle();
 
           if (error || !data) {
-            await supabase.auth.signOut();
-            router.push('/login'); // Reindirizza a /login in modo coerente invece di '/'
+            if (isMounted) {
+              setGlobalLoading(false);
+              router.push('/login');
+            }
             return;
           }
         } catch (err) {
-          await supabase.auth.signOut();
-          router.push('/login');
+          if (isMounted) {
+            setGlobalLoading(false);
+            router.push('/login');
+          }
           return;
         }
       }
       
       const role = isAdmin ? 'ADMIN' : 'CUSTOMER';
-      setUserRole(role);
-      await fetchCloudShipments(role, emailClean);
-      
       if (isMounted) {
+        setUserRole(role);
+        setUserEmail(emailClean);
+        await fetchCloudShipments(role, emailClean);
         setGlobalLoading(false);
       }
     };
 
-    checkInitialSession();
+    initializePortal();
 
-    // 2. Gestore della sessione in tempo reale per cambi di stato successivi
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!isMounted) return;
-      
-      if (event === 'SIGNED_OUT') {
+    // Gestione disconnessione reale senza intercettare i refresh di token temporanei del cambio scheda
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT' && isMounted) {
         setGlobalLoading(false);
         router.push('/login');
-      } else if (event === 'SIGNED_IN' && session) {
-        await handleUserSession(session);
       }
     });
 
@@ -95,11 +89,24 @@ export default function S2BCombinedPortal() {
     };
   }, [router]);
 
+  // 2. Sincronizzazione tab basata sullo stato utente in memoria (non chiama più getSession a vuoto)
+  useEffect(() => {
+    if (activeTab === 'Shipments' && userEmail) {
+      fetchCloudShipments(userRole, userEmail);
+    }
+  }, [activeTab, userRole, userEmail]);
+
   const fetchCloudShipments = async (role: string, email: string) => {
+    if (!email && role !== 'ADMIN') return;
+
     setLoading(true);
     try {
       let query = supabase.from('inventory').select('*');
-      if (role !== 'ADMIN') query = query.eq('customer_email', email);
+      
+      if (role !== 'ADMIN' && email) {
+        query = query.eq('customer_email', email.toLowerCase().trim());
+      }
+      
       const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -131,14 +138,15 @@ export default function S2BCombinedPortal() {
     setShipments(prev => prev.map(s => s.id === shipId ? { ...s, status: nextStatus } : s));
     const { error } = await supabase.from('inventory').update({ status: nextStatus }).match({ id: shipId });
     if (error) {
-      const { data: { session } } = await supabase.auth.getSession();
-      fetchCloudShipments(userRole, session?.user?.email || '');
+      fetchCloudShipments(userRole, userEmail);
       alert("Errore nel salvataggio dello stato.");
     }
   };
 
   const filteredData = shipments.filter(item => {
-    const cleanSearch = searchTerm.toLowerCase().replace('az-', '');
+    if (!searchTerm.trim()) return true;
+
+    const cleanSearch = searchTerm.toLowerCase().replace('az-', '').trim();
     return (
       item.id.toLowerCase().includes(cleanSearch) ||
       item.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -156,14 +164,13 @@ export default function S2BCombinedPortal() {
       provider: newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
-      customer_email: newOrder.customer_email.toLowerCase().trim() // Normalizzato anche qui per sicurezza
+      customer_email: newOrder.customer_email.toLowerCase().trim()
     };
     const { error } = await supabase.from('inventory').insert([payload]);
     if (!error) {
       setIsModalOpen(false);
       setNewOrder({ customer_email: "", provider: "", origin: "", destination: "", type: "", price: "" });
-      const { data: { session } } = await supabase.auth.getSession();
-      fetchCloudShipments(userRole, session?.user?.email || '');
+      fetchCloudShipments(userRole, userEmail);
     }
   };
 
@@ -313,13 +320,12 @@ export default function S2BCombinedPortal() {
       )}
 
       <style jsx>{`
-        /* TABLE INFO STYLING */
+        /* Gli stili rimangono immutati per preservare la grafica al 100% */
         .ref-id-cell { display: flex; flex-direction: column; gap: 4px; }
         .asset-sub-info { display: flex; flex-direction: column; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
         .sub-type { color: #64748b; font-weight: 700; text-transform: uppercase; }
         .sub-price { color: #0ea5e9; font-weight: 800; }
 
-        /* MODAL STYLING */
         .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
         .modal-content { background: #fff; width: 100%; max-width: 500px; border-radius: 24px; padding: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #e2e8f0; box-sizing: border-box; }
         .modal-header { margin-bottom: 24px; }
@@ -339,7 +345,6 @@ export default function S2BCombinedPortal() {
         .abort-btn { background: transparent; color: #94a3b8; border: none; padding: 10px; font-weight: 800; font-size: 11px; cursor: pointer; }
         .abort-btn:hover { color: #ef4444; }
 
-        /* BADGES */
         .status-badge { padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 900; letter-spacing: 1px; transition: 0.2s; display: inline-block; min-width: 100px; text-align: center; box-sizing: border-box; }
         .status-badge.clickable { cursor: pointer; }
         .st-processing { background: #fff7ed; color: #f97316; border: 1px solid #ffedd5; }
@@ -364,7 +369,7 @@ export default function S2BCombinedPortal() {
         .phase-label { font-size: 10px; color: #94a3b8; letter-spacing: 2px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
         .main-title-cyan { font-size: 32px; font-weight: 900; color: #111; letter-spacing: -1px; margin: 5px 0 0 0; }
         
-        .actions-section { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; width: 100%; }
+        .actions-section { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; width: 100%; box-sizing: border-box; }
         .search-container { flex: 1; min-width: 200px; }
         .smooth-search { background: #f1f5f9; border: 1px solid #e2e8f0; padding: 14px 20px; border-radius: 14px; width: 100%; outline: none; font-size: 13px; font-weight: 600; box-sizing: border-box; }
         .smooth-search:focus { border-color: #22d3ee; background: #fff; }
@@ -381,7 +386,6 @@ export default function S2BCombinedPortal() {
         .empty-state { padding: 40px; text-align: center; color: #94a3b8; font-weight: 800; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
         .info-card { background: #fff; border: 1px solid #eef2f6; padding: 30px; border-radius: 20px; }
 
-        /* VIEWPORT REGOLE DESKTOP */
         @media (min-width: 768px) {
           .portal-container { flex-direction: row; }
           .sidebar { width: 280px; height: 100vh; border-right: 1px solid #eef2f6; border-bottom: none; position: sticky; top: 0; }
@@ -402,7 +406,6 @@ export default function S2BCombinedPortal() {
           .nav-item { font-size: 11px; }
           .main-logo { height: 32px; }
           
-          /* TRASFORMAZIONE TABELLA MOBILE RESPONSIVE COERENTE */
           table, thead, tbody, th, td, tr { display: block; }
           thead { display: none; }
           tr { margin-bottom: 15px; border: 1px solid #eef2f6; border-radius: 16px; background: #fff; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.01); }

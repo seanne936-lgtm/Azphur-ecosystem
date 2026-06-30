@@ -76,7 +76,7 @@ export default function Home() {
   const [staffCode, setStaffCode] = useState<string>("");
   const [liveMs, setLiveMs] = useState<number>(421);
   const [scrollPercent, setScrollPercent] = useState<number>(0);
-  const [currentUserEmail, setCurrentUserEmail] = useState<string>('loading...s');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('loading...');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   
   const [debugM1, setDebugM1] = useState<string>("Waiting...");
@@ -185,42 +185,62 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Ascoltatore in tempo reale della sessione di Supabase
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    let isMounted = true;
+
+    const processSession = async (session: any) => {
       if (session?.user?.email) {
         const emailClean = session.user.email.toLowerCase().trim();
-        setCurrentUserEmail(emailClean);
+        if (isMounted) setCurrentUserEmail(emailClean);
         await verifyCustomerAccessM5(emailClean);
         await verifyModule01Access(emailClean);
       } else {
-        setCurrentUserEmail('guest@azphur.com');
-        setDebugM1("No logged user");
-        setDebugM5("No logged user");
+        if (isMounted) {
+          setCurrentUserEmail('guest@azphur.com');
+          setDebugM1("No logged user");
+          setDebugM5("No logged user");
+        }
       }
+    };
+
+    const runImmediateAuthCheck = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      await processSession(session);
+    };
+    runImmediateAuthCheck();
+
+    const handleWindowFocus = () => {
+      runImmediateAuthCheck();
+    };
+    window.addEventListener('focus', handleWindowFocus);
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      await processSession(session);
     });
 
     async function getCount() {
       const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-      if (count !== null) setInventoryCount(count);
+      if (count !== null && isMounted) setInventoryCount(count);
     }
     getCount();
 
     const msInterval = setInterval(() => {
-      setLiveMs(() => Math.floor(Math.random() * 80) + 380);
+      if (isMounted) setLiveMs(() => Math.floor(Math.random() * 80) + 380);
     }, 1500);
 
     const handleScroll = () => {
       const totalScroll = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalScroll > 0) {
+      if (totalScroll > 0 && isMounted) {
         setScrollPercent((window.scrollY / totalScroll) * 100);
       }
     };
     window.addEventListener("scroll", handleScroll);
 
     return () => {
-      subscription.unsubscribe(); // Pulisce l'ascoltatore quando smonti il componente
+      isMounted = false;
+      subscription.unsubscribe();
       clearInterval(msInterval);
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener('focus', handleWindowFocus);
     };
   }, [router]);
 
@@ -230,8 +250,9 @@ export default function Home() {
       return;
     }
 
+    // 🔥 RISOLTO: Se l'utente è un Admin, lo mandiamo direttamente al modulo richiesto anziché rimandarlo al login!
     if (adminEmails.includes(currentUserEmail)) {
-      router.push('/login'); 
+      router.push(path); 
       return;
     }
 
@@ -374,7 +395,6 @@ export default function Home() {
         .m-value { font-size: 20px; font-weight: 900; color: #1d1d1f; font-family: monospace; }
         .m-value-green { font-size: 20px; font-weight: 900; color: #0891b2; font-family: monospace; }
 
-        /* LINK DI QUOTAZIONE STILOSO */
         .quick-access-zone { max-width: 1100px; margin: 0 auto 40px; padding: 0 20px; display: flex; justify-content: flex-start; width: 100%; box-sizing: border-box; }
         .btn-quotation-lux { 
           background: #fff; border: 4px solid #1d1d1f; color: #1d1d1f; padding: 12px 24px; 
@@ -386,7 +406,6 @@ export default function Home() {
         .blink { animation: blink-ani 1.5s infinite; color: #22d3ee; margin-right: 10px; }
         @keyframes blink-ani { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-        /* LINK DI REGISTRAZIONE MINI */
         .btn-signin-link {
           background: none; border: none; color: #0891b2; font-size: 10px; font-weight: 800;
           cursor: pointer; transition: 0.2s; letter-spacing: 0.5px; text-decoration: none;
@@ -464,7 +483,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* TASTO PORTALE SOLAR QUOTATION AGGIUNTO SOPRA I MACROMODULI */}
         <div className="quick-access-zone">
           <button onClick={() => router.push('/solar-quote')} className="btn-quotation-lux">
              <span className="blink">⚡</span> [ DX_LINK // SOLAR_QUOTATION ]
@@ -495,7 +513,7 @@ export default function Home() {
             </div>
             <div className="marquee-item">
               <span>[NODE-GERMANY]</span> EV CHARGE EXPANSION CONTRACT // INGESTED
-              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
+              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=120" className="ticker-thumb" alt="Node Visual" />
             </div>
             <div className="marquee-item">
               <span>[NODE-SINGAPORE]</span> SUBSTATION PROCURED VIA HUB_01 // ACTIVE
@@ -522,7 +540,6 @@ export default function Home() {
         ))}
 
         <section className="modular-grid-apple">
-          {/* M01 - CONTROLLO ACCESSO COMPLETO ATTIVO */}
           <div onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_01 // SUPPLY</span>
@@ -532,7 +549,6 @@ export default function Home() {
             <div className="action-text">MANAGE_LISTINGS →</div>
           </div>
 
-          {/* M02 - CONTROLLO ACCESSO COMPLETO ATTIVO */}
           <div onClick={() => handleModuleNavigation('/b2b')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_02 // BUILD</span>
@@ -542,7 +558,6 @@ export default function Home() {
             <div className="action-text">TRACK_LEADS →</div>
           </div>
 
-          {/* M03 - ACCESSO LIBERO SENZA BLOCCO LOGIN COME RICHIESTO */}
           <div onClick={() => router.push('/b2c')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_03 // CHARGE</span>
@@ -552,7 +567,6 @@ export default function Home() {
             <div className="action-text">INITIALIZE_NODE →</div>
           </div>
 
-          {/* M04 - ACCESSO LIBERO SENZA BLOCCO LOGIN COME RICHIESTO */}
           <div onClick={() => router.push('/partner')} className="quad-card-premium">
             <div>
               <span className="phase-label">MODULE_04 // PARTNER</span>
@@ -562,7 +576,6 @@ export default function Home() {
             <div className="action-text">NODE_LOGIN →</div>
           </div>
 
-          {/* M05 - CONTROLLO ACCESSO COMPLETO ATTIVO */}
           <div 
             onClick={() => handleModuleNavigation('/EV', verifyCustomerAccessM5)} 
             className="quad-card-premium card-m5" 
@@ -577,7 +590,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* SYSTEM_BLUEPRINTS DIVENTA BLUEPRINTS ED È COLORATO IN CYAN STILOSO */}
         <div className="section-header-lux">
           <h2 className="cyan-header">BLUEPRINTS</h2>
         </div>
@@ -611,7 +623,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* FREQUENT_QUESTIONS DIVENTA Faqs ED È COLORATO IN CYAN STILOSO */}
         <div className="section-header-lux">
           <h2 className="cyan-header">Faqs</h2>
         </div>

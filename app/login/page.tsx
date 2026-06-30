@@ -123,6 +123,8 @@ export default function LoginPage() {
         if (isAnAdminUser) {
           setIsAdmin(true);
           setLoading(false);
+          // 🔥 SISTEMATO: Sincronizza lo stato dei cookie del router prima dell'interruzione per stabilizzare la sessione client
+          router.refresh();
           return; 
         }
 
@@ -183,10 +185,12 @@ export default function LoginPage() {
   };
 
   // Funzione di reset sicurezza prima di spostarsi su un modulo dell'ecosistema
-  const navigateToModule = (path: string) => {
+  const navigateToModule = async (path: string) => {
     if (typeof window !== 'undefined') {
       (window as any).IS_ADMIN_LOGGING_IN = false;
     }
+    // 🔥 SISTEMATO: Forza l'aggiornamento e la scrittura del token locale in storage prima del push della pagina
+    await supabase.auth.getSession();
     router.push(path);
   };
 
