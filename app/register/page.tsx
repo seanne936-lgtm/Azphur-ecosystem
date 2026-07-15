@@ -130,7 +130,7 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Portal Selection Dropdown */}
+          {/* Portal Selection Dropdown (MODIFIED: Reduced to 3 options) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Select Access Portal</label>
             <select
@@ -148,8 +148,8 @@ export default function RegisterPage() {
             >
               <option value="modulo_05">🚗 EV Mobility (Module 5)</option>
               <option value="business">💼 Allowed Partners (Module 2 / Investors)</option>
-              <option value="modulo_01">📦 S2B Logistics (Module 1)</option>
-              <option value="solar">☀️ Solar Quotation Portal</option>
+              {/* ACCORPATI: Solar e S2B Logistics (Module 1) in un'unica opzione "solar_logistic" */}
+              <option value="solar_logistic">☀️ Solar & S2B Logistics (Portal & Module 1)</option>
             </select>
           </div>
 

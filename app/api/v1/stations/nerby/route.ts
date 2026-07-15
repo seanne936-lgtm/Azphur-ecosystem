@@ -72,8 +72,9 @@ export async function GET(request: Request) {
     // Calcolo della distanza balistica piana in KM con fallback robusti sulle chiavi
     const nearbyStations = subStations
       .map(station => {
-        const sLat = station.latitude !== undefined && station.latitude !== null ? station.latitude : (station.lat || 0);
-        const sLng = station.longitude !== undefined && station.longitude !== null ? station.longitude : (station.lng || 0);
+        // FIX ACCURACY: Estraiamo con cura i numeri reali sia se scritti come lat/lng sia come latitude/longitude
+        const sLat = station.lat !== undefined && station.lat !== null ? Number(station.lat) : Number(station.latitude || 0);
+        const sLng = station.lng !== undefined && station.lng !== null ? Number(station.lng) : Number(station.longitude || 0);
 
         const ky = 111.13222;
         const kx = 111.13222 * Math.cos(userLat * Math.PI / 180);
@@ -83,6 +84,10 @@ export async function GET(request: Request) {
 
         return { 
           ...station, 
+          lat: sLat,            // Forza il campo 'lat' pulito per il frontend
+          lng: sLng,            // Forza il campo 'lng' pulito per il frontend
+          latitude: sLat,       // Copia di sicurezza per i componenti ereditati
+          longitude: sLng,      // Copia di sicurezza per i componenti ereditati
           distance_km: Math.round(distanceInKm * 10) / 10 
         };
       })

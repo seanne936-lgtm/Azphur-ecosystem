@@ -38,7 +38,23 @@ interface StationMock {
   price_per_kwh: number;
   distance_km?: number;
   address?: string;
+  lat?: number;
+  lng?: number;
+  latitude?: number;
+  longitude?: number;
 }
+
+// CORREZIONE CHIRURGICA: Funzione matematica per calcolare la distanza reale in KM
+const calculateHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Raggio della Terra in KM
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
 
 const TopTicker: React.FC = () => {
   const [stats, setStats] = useState<TickerStats>({ co2: 15420, mw: 912.45 });
@@ -103,8 +119,8 @@ export default function EVMobilityPage() {
   const [stations, setStations] = useState<StationMock[]>([]);
   
   const [geoStatus, setGeoStatus] = useState<string>("INITIALIZING_GPS_STREAM...");
-  const FALLBACK_LAT = 14.5547;
-  const FALLBACK_LNG = 121.0244;
+  const FALLBACK_LAT = 45.8342; // Fallback impostato direttamente su Como/Tavernola per coerenza visiva
+  const FALLBACK_LNG = 9.0718;
 
   const [mapCenter, setMapCenter] = useState<[number, number]>([FALLBACK_LAT, FALLBACK_LNG]);
 
@@ -166,7 +182,9 @@ export default function EVMobilityPage() {
           kw_power: item.kw_power || item.power_kv || 0,
           price_per_kwh: Number(item.price_per_kwh || 0),
           distance_km: item.distance_km,
-          address: item.address
+          address: item.address,
+          lat: item.lat ?? item.latitude,
+          lng: item.lng ?? item.longitude
         }));
         setStations(formatted);
       } else {
@@ -192,7 +210,9 @@ export default function EVMobilityPage() {
         available_bays: item.available_bays,
         total_bays: item.total_bays,
         kw_power: item.kw_power,
-        price_per_kwh: Number(item.price_per_kwh)
+        price_per_kwh: Number(item.price_per_kwh),
+        lat: item.lat ?? item.latitude,
+        lng: item.lng ?? item.longitude
       }));
       setStations(formatted);
     }
@@ -234,7 +254,6 @@ export default function EVMobilityPage() {
   useEffect(() => {
     setIsClient(true);
 
-    // 1. VERIFICA IMMEDIATA DELLA SESSIONE ATTUALE (Evita il blocco del caricamento all'avvio)
     const checkInitialSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -258,19 +277,16 @@ export default function EVMobilityPage() {
       } catch (err) {
         console.error("Error checking initial session:", err);
       } finally {
-        // Forza lo spegnimento della schermata scura di caricamento in ogni caso
         setGlobalLoading(false);
       }
     };
 
     checkInitialSession();
 
-    // 2. ASCOLTATORE DEI CAMBIAMENTI DI STATO (LOGIN/LOGOUT IN TEMPO REALE)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user?.email) {
         const emailClean = session.user.email.toLowerCase().trim();
         
-        // Se i dati sono già sincronizzati, spegni il caricamento ed esci per evitare loop
         if (currentUserEmail === emailClean && isAuthenticated) {
           setGlobalLoading(false);
           return;
@@ -301,7 +317,6 @@ export default function EVMobilityPage() {
       setGlobalLoading(false);
     });
 
-    // 3. SOTTOSCRIZIONE CANALE REALTIME PER LE STAZIONI
     const channel = supabase
       .channel('realtime-sub-stations')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sub_stations' }, () => {
@@ -390,7 +405,20 @@ export default function EVMobilityPage() {
     }
   };
 
-  const filteredStations = stations.filter(s => 
+  // CORREZIONE CHIRURGICA: Calcoliamo dinamicamente i KM veri prima di filtrare le stazioni
+  const filteredStations = stations.map(station => {
+    const sLat = Number(station.lat ?? station.latitude);
+    const sLng = Number(station.lng ?? station.longitude);
+
+    if (sLat && sLng && !isNaN(sLat) && !isNaN(sLng)) {
+      const distance = calculateHaversineDistance(mapCenter[0], mapCenter[1], sLat, sLng);
+      return {
+        ...station,
+        distance_km: Number(distance.toFixed(1))
+      };
+    }
+    return station;
+  }).filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -431,7 +459,7 @@ export default function EVMobilityPage() {
           .nav-items { display: flex; gap: 30px; align-items: center; }
           .network-signal { display: flex; align-items: center; gap: 8px; color: #0891b2; font-size: 8px; font-weight: 800; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
           .sig-dot { width: 4px; height: 4px; background: #22d3ee; border-radius: 50%; animation: blink 1.5s infinite; }
-          .auth-gate-container { max-width: 420px; margin: 80px auto; background: #ffffff; border: 4px solid #1d1d1f; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.05); box-shadow: 0 20px 40px rgba(0,0,0,0.05); box-sizing: border-box; }
+          .auth-gate-container { max-width: 420px; margin: 80px auto; background: #ffffff; border: 4px solid #1d1d1f; border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.05); box-sizing: border-box; }
           .auth-gate-title { font-size: 20px; font-family: 'JetBrains Mono', monospace; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 4px; text-transform: uppercase; color: #1d1d1f; }
           .auth-gate-subtitle { font-size: 11px; color: #64748b; margin-bottom: 30px; font-weight: 500; font-family: 'JetBrains Mono', monospace; }
           .input-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; text-align: left; }
@@ -505,7 +533,7 @@ export default function EVMobilityPage() {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@500;800&display=swap');
         html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; box-sizing: border-box; }
         .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; width: 100%; box-sizing: border-box; padding-top: 55px; }
-        .scroll-progress-indicator { position: fixed; top: 0; left: 0; height: 3px; background: #22d3ee; z-index: 2001; transition: width 0.1s ease-out; box-shadow: 0 0 8px #22d3ee; }
+        .scroll-progress-indicator { position: fixed; top: 0; left: 0; height: 3px; background: #22d3ee; z-index: 2011; transition: width 0.1s ease-out; box-shadow: 0 0 8px #22d3ee; }
         .nav-minimal-lux { display: flex; justify-content: space-between; align-items: center; padding: 30px 40px 20px; max-width: 1400px; margin: 0 auto; position: relative; z-index: 10; box-sizing: border-box; width: 100%; }
         .logo-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
         .main-logo { height: 35px; cursor: pointer; }
@@ -552,15 +580,14 @@ export default function EVMobilityPage() {
         .action-btn-go:hover { background: #111; }
         .action-btn-go.sharing { background: #10b981; }
         .action-btn-go:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
-        
         .map-canvas { flex: 1; background: #edf2f7; position: relative; display: flex; flex-direction: column; }
         .map-overlay-stats { position: absolute; top: 20px; left: 20px; display: flex; gap: 10px; z-index: 50; flex-wrap: wrap; right: 20px; }
         .mini-stat-pill { background: #1e293b; color: white; padding: 6px 14px; border-radius: 100px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .map-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; padding: 0; overflow: hidden; }
         
         @keyframes marquee { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
-        @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); } }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } }
         @keyframes radarPulse { 0% { transform: scale(0.2); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
 
         @media (max-width: 900px) {
