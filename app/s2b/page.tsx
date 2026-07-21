@@ -16,12 +16,11 @@ export default function S2BCombinedPortal() {
   const [globalLoading, setGlobalLoading] = useState(true);
 
   const [newOrder, setNewOrder] = useState({
-    customer_email: "", provider: "", origin: "", destination: "", type: "", price: ""
+    customer_email: "", provider: "", origin: "", destination: "", type: "", price: "", tracking_id: ""
   });
 
   const statusCycle = ['PROCESSING', 'IN_TRANSIT', 'DELIVERED', 'ON_HOLD'];
 
-  // 1. Unico punto di controllo sessione stabile all'avvio del componente
   useEffect(() => {
     let isMounted = true;
 
@@ -75,7 +74,6 @@ export default function S2BCombinedPortal() {
 
     initializePortal();
 
-    // Gestione disconnessione reale senza intercettare i refresh di token temporanei del cambio scheda
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT' && isMounted) {
         setGlobalLoading(false);
@@ -89,7 +87,6 @@ export default function S2BCombinedPortal() {
     };
   }, [router]);
 
-  // 2. Sincronizzazione tab basata sullo stato utente in memoria (non chiama più getSession a vuoto)
   useEffect(() => {
     if (activeTab === 'Shipments' && userEmail) {
       fetchCloudShipments(userRole, userEmail);
@@ -115,6 +112,7 @@ export default function S2BCombinedPortal() {
         setShipments(data.map((item: any) => ({
           realId: item.id,
           id: item.id.toString(),
+          tracking_id: item.tracking_id || 'N/A',
           provider: item.provider || 'Global Supplier',
           origin: item.origin || 'Intl Port',
           destination: item.destination || 'Manila Hub',
@@ -147,11 +145,13 @@ export default function S2BCombinedPortal() {
     if (!searchTerm.trim()) return true;
 
     const cleanSearch = searchTerm.toLowerCase().replace('az-', '').trim();
-    return (
-      item.id.toLowerCase().includes(cleanSearch) ||
-      item.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.type.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const matchesBase = item.id.toLowerCase().includes(cleanSearch) || item.type.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (userRole === 'ADMIN') {
+      return matchesBase || item.tracking_id.toLowerCase().includes(cleanSearch) || item.provider.toLowerCase().includes(searchTerm.toLowerCase());
+    }
+    
+    return matchesBase;
   });
 
   const handleCloudSubmit = async (e: React.FormEvent) => {
@@ -164,13 +164,18 @@ export default function S2BCombinedPortal() {
       provider: newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
-      customer_email: newOrder.customer_email.toLowerCase().trim()
+      customer_email: newOrder.customer_email.toLowerCase().trim(),
+      tracking_id: newOrder.tracking_id.trim()
     };
+    
     const { error } = await supabase.from('inventory').insert([payload]);
     if (!error) {
       setIsModalOpen(false);
-      setNewOrder({ customer_email: "", provider: "", origin: "", destination: "", type: "", price: "" });
+      setNewOrder({ customer_email: "", provider: "", origin: "", destination: "", type: "", price: "", tracking_id: "" });
       fetchCloudShipments(userRole, userEmail);
+    } else {
+      console.error("Errore inserimento cargo:", error);
+      alert("Errore durante la registrazione del cargo. Controlla se l'ID Tracking è duplicato.");
     }
   };
 
@@ -182,6 +187,8 @@ export default function S2BCombinedPortal() {
     );
   }
 
+  const allowedTabs = userRole === 'ADMIN' ? ['Shipments', 'Inventory', 'Providers'] : ['Shipments'];
+
   return (
     <div className="portal-container">
       <aside className="sidebar">
@@ -191,7 +198,7 @@ export default function S2BCombinedPortal() {
             <div className="status-orb"></div>
           </div>
           <nav className="nav-links">
-            {['Shipments', 'Inventory', 'Providers'].map(item => (
+            {allowedTabs.map(item => (
               <div key={item} onClick={() => setActiveTab(item as any)}
                 className={`nav-item ${activeTab === item ? 'active' : ''}`}>
                 <span className="nav-dot">•</span> {item.toUpperCase()}
@@ -211,7 +218,7 @@ export default function S2BCombinedPortal() {
           <div className="actions-section">
             <div className="search-container">
               <input 
-                placeholder="Search AZ-Ref (es. AZ-6)..." 
+                placeholder={userRole === 'ADMIN' ? "Search AZ-Ref o Tracking..." : "Search AZ-Ref..."} 
                 className="smooth-search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -242,13 +249,21 @@ export default function S2BCombinedPortal() {
                       <td className="ref-id-cell">
                         <div className="ref-id">AZ-{ship.id}</div>
                         <div className="asset-sub-info">
-                          <span className="sub-type">{ship.type}</span>
+                          {/* Sostituito DUNNO/ship.type con la logica coerente al Provider */}
+                          <span className="sub-type">
+                            {userRole === 'ADMIN' ? ship.provider : 'International Provider'}
+                          </span>
                           <span className="sub-price">₱{Number(ship.price).toLocaleString()}</span>
+                          <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>
+                            TRACKING: {userRole === 'ADMIN' ? ship.tracking_id : 'SECURED_NODE'}
+                          </span>
                         </div>
                       </td>
                       <td>
                         <div className="route-text">{ship.origin} → {ship.destination}</div>
-                        <div className="provider-text">{ship.provider}</div>
+                        <div className="provider-text">
+                          {userRole === 'ADMIN' ? ship.provider : 'International Provider'}
+                        </div>
                       </td>
                       <td>
                         <span 
@@ -267,7 +282,7 @@ export default function S2BCombinedPortal() {
           </div>
         )}
 
-        {(activeTab === 'Inventory' || activeTab === 'Providers') && (
+        {userRole === 'ADMIN' && (activeTab === 'Inventory' || activeTab === 'Providers') && (
             <div className="info-card">
               <h3>{activeTab.toUpperCase()}</h3>
               <p>Database node sync active...</p>
@@ -275,7 +290,7 @@ export default function S2BCombinedPortal() {
         )}
       </main>
 
-      {isModalOpen && (
+      {isModalOpen && userRole === 'ADMIN' && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
@@ -283,6 +298,10 @@ export default function S2BCombinedPortal() {
               <p className="modal-subtitle">Initialize asset deployment in the logistics grid.</p>
             </div>
             <form onSubmit={handleCloudSubmit} className="modern-form">
+              <div className="form-group">
+                <label>TRACKING_ID (CORE KEY FOR MAKE.CM)</label>
+                <input required type="text" placeholder="Es: DHL-PH-99812" value={newOrder.tracking_id} onChange={e => setNewOrder({...newOrder, tracking_id: e.target.value})} />
+              </div>
               <div className="form-group">
                 <label>CUSTOMER_EMAIL</label>
                 <input required type="email" placeholder="client@access.com" value={newOrder.customer_email} onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
@@ -320,13 +339,12 @@ export default function S2BCombinedPortal() {
       )}
 
       <style jsx>{`
-        /* Gli stili rimangono immutati per preservare la grafica al 100% */
         .ref-id-cell { display: flex; flex-direction: column; gap: 4px; }
         .asset-sub-info { display: flex; flex-direction: column; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
         .sub-type { color: #64748b; font-weight: 700; text-transform: uppercase; }
         .sub-price { color: #0ea5e9; font-weight: 800; }
 
-        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; box-sizing: border-box; }
         .modal-content { background: #fff; width: 100%; max-width: 500px; border-radius: 24px; padding: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid #e2e8f0; box-sizing: border-box; }
         .modal-header { margin-bottom: 24px; }
         .modal-title { font-size: 20px; font-weight: 900; color: #111; letter-spacing: -0.5px; margin: 0; }

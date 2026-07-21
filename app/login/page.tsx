@@ -54,13 +54,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false); 
+  
+  // Stati per la gestione del Password Recovery integrato
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryMessage, setRecoveryMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
   const router = useRouter();
 
-  // Array degli account amministratori autorizzati alla scelta del modulo
   const adminEmails = [
     "admin@azphur.com", 
     "tuofratello@email.com", 
-    "tuamailprincipale@email.com" // Sostituisci questa con la tua mail reale
+    "tuamailprincipale@email.com" 
   ];
 
   useEffect(() => {
@@ -75,7 +80,6 @@ export default function LoginPage() {
             window.location.reload();
           }
         } else if (data.session?.user?.email) {
-          // Se c'è già una sessione attiva ed è un admin, mostra direttamente i tasti di scelta
           const currentEmail = data.session.user.email.toLowerCase().trim();
           if (adminEmails.includes(currentEmail)) {
             setIsAdmin(true);
@@ -97,7 +101,6 @@ export default function LoginPage() {
       const emailNormalized = email.toLowerCase().trim();
       const isAnAdminUser = adminEmails.includes(emailNormalized);
 
-      // Protezione preventiva globale per intercettare gli amministratori a monte
       if (isAnAdminUser) {
         if (typeof window !== 'undefined') {
           (window as any).IS_ADMIN_LOGGING_IN = true;
@@ -119,16 +122,13 @@ export default function LoginPage() {
       } 
       
       if (data.session && data.user) {
-        // Se l'utente fa parte della lista admin, interrompi il flusso e mostra i bottoni di scelta
         if (isAnAdminUser) {
           setIsAdmin(true);
           setLoading(false);
-          // 🔥 SISTEMATO: Sincronizza lo stato dei cookie del router prima dell'interruzione per stabilizzare la sessione client
           router.refresh();
           return; 
         }
 
-        // Se arriviamo qui l'utente non è admin, spegniamo il flag di protezione globale
         if (typeof window !== 'undefined') {
           (window as any).IS_ADMIN_LOGGING_IN = false;
         }
@@ -136,7 +136,6 @@ export default function LoginPage() {
         const user = data.user;
         const userEmail = user.email ? user.email.toLowerCase().trim() : '';
 
-        // Smistamento utenti standard nei moduli corretti
         const { data: isEvCustomer } = await supabase
           .from('module_05_customers')
           .select('email')
@@ -170,7 +169,6 @@ export default function LoginPage() {
           return;
         }
 
-        // Fallback se l'account non è presente in nessuna tabella di sistema
         alert("ACCESS_DENIED: Profilo non configurato per i moduli dell'ecosistema AZPHUR.");
         await supabase.auth.signOut();
         setLoading(false);
@@ -184,12 +182,38 @@ export default function LoginPage() {
     }
   };
 
-  // Funzione di reset sicurezza prima di spostarsi su un modulo dell'ecosistema
+  // Funzione per gestire la richiesta di Reset Password tramite Supabase + Resend
+  const handleRecoveryRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setRecoveryMessage(null);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(recoveryEmail.toLowerCase().trim(), {
+        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/reset-password` : undefined,
+      });
+
+      if (error) throw error;
+
+      setRecoveryMessage({
+        type: 'success',
+        text: 'RESET_LINK_SENT: Check your corporate email inbox to update credentials.'
+      });
+      setRecoveryEmail('');
+    } catch (err: any) {
+      setRecoveryMessage({
+        type: 'error',
+        text: err.message || 'RECOVERY_ERROR: Unable to process link generation.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const navigateToModule = async (path: string) => {
     if (typeof window !== 'undefined') {
       (window as any).IS_ADMIN_LOGGING_IN = false;
     }
-    // 🔥 SISTEMATO: Forza l'aggiornamento e la scrittura del token locale in storage prima del push della pagina
     await supabase.auth.getSession();
     router.push(path);
   };
@@ -230,8 +254,12 @@ export default function LoginPage() {
         <div className="login-box-premium">
           <div className="login-header">
             <span className="phase-label">SYSTEM_AUTHENTICATION</span>
-            <h2 className="text-cyan">AZPHUR Universal Portal</h2>
-            <p className="login-desc">Enter authorization credentials to initialize your ecosystem profile uplink.</p>
+            <h2 className="text-cyan">{showRecovery ? 'Account Recovery' : 'AZPHUR Universal Portal'}</h2>
+            <p className="login-desc">
+              {showRecovery 
+                ? 'Provide your registered corporate email to generate a secure credential override uplink.' 
+                : 'Enter authorization credentials to initialize your ecosystem profile uplink.'}
+            </p>
           </div>
 
           {isAdmin ? (
@@ -242,7 +270,7 @@ export default function LoginPage() {
                 GO TO B2B ENTERPRISE ⚡
               </button>
 
-              <button onClick={() => navigateToModule('/EV')} className="login-btn-premium btn-admin-blue">
+              <button onClick={() => navigateToModule('/var')} className="login-btn-premium btn-admin-blue">
                 GO TO EV MOBILITY (MOD_05) 🔋
               </button>
 
@@ -250,7 +278,53 @@ export default function LoginPage() {
                 GO TO S2B LOGISTICS →
               </button>
             </div>
+          ) : showRecovery ? (
+            /* PANNELLO DI RECUPERO PASSWORD (Dinamico e in Inglese) */
+            <form onSubmit={handleRecoveryRequest} className="login-form fade-in">
+              {recoveryMessage && (
+                <div style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  fontWeight: 'bold',
+                  backgroundColor: recoveryMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
+                  color: recoveryMessage.type === 'success' ? '#065f46' : '#991b1b',
+                  border: `1px solid ${recoveryMessage.type === 'success' ? '#a7f3d0' : '#fca5a5'}`
+                }}>
+                  {recoveryMessage.text}
+                </div>
+              )}
+
+              <div className="input-group">
+                <label>REGISTERED_EMAIL</label>
+                <input 
+                  type="email" 
+                  placeholder="operator@azphur.com" 
+                  required 
+                  value={recoveryEmail}
+                  onChange={(e) => setRecoveryEmail(e.target.value)}
+                />
+              </div>
+
+              <button type="submit" disabled={loading} className="login-btn-premium">
+                {loading ? 'GENERATING LINK...' : 'SEND RESET LINK →'}
+              </button>
+
+              <div style={{ textAlign: 'center', marginTop: '20px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => { setShowRecovery(false); setRecoveryMessage(null); }}
+                 // RIGA CORRETTA
+                 style={{ background: 'none', border: 'none', color: '#0891b2', fontSize: '9px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer' }}
+                >
+                  ← BACK TO SIGN IN
+                </button>
+              </div>
+            </form>
           ) : (
+            /* FORM DI LOGIN ORIGINALE TRATTENUTO CON RIGORE */
             <form onSubmit={handleLogin} className="login-form">
               <div className="input-group">
                 <label>ACCOUNT_EMAIL</label>
@@ -264,7 +338,16 @@ export default function LoginPage() {
               </div>
               
               <div className="input-group" style={{ marginTop: '20px' }}>
-                <label>SECURITY_CODE</label>
+                <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ margin: 0 }}>SECURITY_CODE</label>
+                  <button 
+                    type="button"
+                    onClick={() => setShowRecovery(true)}
+                    style={{ background: 'none', border: 'none', color: '#86868b', fontSize: '8px', fontWeight: '800', letterSpacing: '0.5px', cursor: 'pointer', textTransform: 'uppercase' }}
+                  >
+                    Forgot security code?
+                  </button>
+                </div>
                 <input 
                   type="password" 
                   placeholder="••••••••" 
