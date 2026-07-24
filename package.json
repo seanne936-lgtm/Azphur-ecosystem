@@ -12,6 +12,7 @@
     "@marsidev/react-turnstile": "^1.5.3",
     "@supabase/supabase-js": "^2.104.0",
     "bcrypt": "^6.0.0",
+    "html2pdf.js": "^0.14.0",
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "next": "16.2.3",

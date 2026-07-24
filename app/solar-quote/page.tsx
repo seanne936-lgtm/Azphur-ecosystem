@@ -9,32 +9,38 @@ export default function SolarQuotePage() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   
-  // Request Form States (Public) - AGGIORNATI CON BLUEPRINT V1.0 (TESTO LIBERO PER OBJECTIVE)
+  // Public Form (Inflow Request)
   const [fullName, setFullName] = useState('');
   const [emailForm, setEmailForm] = useState('');
   const [phone, setPhone] = useState('');
   const [monthlyBill, setMonthlyBill] = useState('');
   const [roofType, setRoofType] = useState('Flat');
-  const [objective, setObjective] = useState(''); // Testo libero per l'obiettivo energetico
+  const [objective, setObjective] = useState('');
   const [address, setAddress] = useState('');            
   const [loadingForm, setLoadingForm] = useState(false);
   const [successForm, setSuccessForm] = useState(false);
 
-  // Private Area Authentication States
+  // Auth States
   const [session, setSession] = useState<any>(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [loadingAuth, setLoadingAuth] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
 
-  // Private Customer History States
+  // Private Data States
   const [myQuotes, setMyQuotes] = useState<any[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
   const [isAuthorizedCustomer, setIsAuthorizedCustomer] = useState<boolean>(false);
   const [debugSolar, setDebugSolar] = useState<string>("Waiting...");
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
 
-  // Lista degli admin (Bypass whitelist + Supervisor Write Access)
+  // Admin Quote Emission & Deposit Slider
+  const [selectedLeadForQuote, setSelectedLeadForQuote] = useState<string | null>(null);
+  const [quoteBasePrice, setQuoteBasePrice] = useState<string>('');
+  const [quoteDepositPct, setQuoteDepositPct] = useState<number>(20);
+
+  // Admin Whitelist
   const adminEmails = [
     "admin@azphur.com", 
     "tuofratello@email.com", 
@@ -98,31 +104,306 @@ export default function SolarQuotePage() {
     }
   };
 
-  // Funzione per aggiornare lo stato con un click dall'interfaccia Supervisor
-  const handleStatusChange = async (leadId: string, newStatus: string) => {
+  // Status Change / Quote Emission by Admin
+  const handleStatusChange = async (
+    leadId: string, 
+    newStatus: string, 
+    customBasePrice?: number, 
+    customPct?: number,
+    validityDays: number = 30
+  ) => {
     if (!session?.user?.email) return;
+
+    if (newStatus === 'REFUNDED' && !confirm("CONFIRM FULL REFUND ISSUANCE? This will nullify VAT and lock the deal.")) {
+      return;
+    }
+    if (newStatus === 'CANCELLED' && !confirm("CANCEL THIS QUOTATION?")) {
+      return;
+    }
     
+    try {
+      const payload: any = {
+        lead_id: leadId,
+        new_status: newStatus,
+        admin_email: session.user.email
+      };
+
+      if (customBasePrice && customBasePrice > 0) {
+        payload.base_price = customBasePrice;
+        payload.deposit_percentage = customPct || 20;
+
+        const expirationDate = new Date();
+        expirationDate.setDate(expirationDate.getDate() + validityDays);
+        payload.valid_until = expirationDate.toISOString();
+      }
+
+      const response = await fetch('/api/v1/solar-leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.success) {
+        await verifySolarAccess(session.user.email);
+        setSelectedLeadForQuote(null);
+        setQuoteBasePrice('');
+      } else {
+        alert("STATUS_UPDATE_FAILED: " + (resData.error || "Unknown Error"));
+      }
+    } catch (err) {
+      alert("SYSTEM_ERROR_ON_STATUS_PATCH");
+    }
+  };
+
+  // ADMIN ACTION: Toggle Final Balance Unlock State
+  const handleToggleBalanceUnlock = async (leadId: string, currentUnlocked: boolean) => {
+    if (!session?.user?.email) return;
+
     try {
       const response = await fetch('/api/v1/solar-leads', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           lead_id: leadId,
-          new_status: newStatus,
-          admin_email: session.user.email
+          admin_email: session.user.email,
+          balance_unlocked: !currentUnlocked
         })
       });
 
       const resData = await response.json();
       if (response.ok && resData.success) {
-        setMyQuotes(prev => 
-          prev.map(q => q.id === leadId ? { ...q, status: newStatus.toUpperCase() } : q)
-        );
+        await verifySolarAccess(session.user.email);
       } else {
-        alert("STATUS_UPDATE_FAILED: " + (resData.error || "Unknown Error"));
+        alert("UNLOCK_FAILED: " + (resData.error || "Unknown Error"));
       }
     } catch (err) {
-      alert("SYSTEM_ERROR_ON_STATUS_PATCH");
+      alert("SYSTEM_ERROR_ON_BALANCE_UNLOCK");
+    }
+  };
+
+  // Customer Payment Simulation (Deposit or Balance)
+  const handleSimulatedCustomerPayment = async (leadId: string, paymentType: 'DEPOSIT' | 'BALANCE') => {
+    try {
+      const payload: any = { lead_id: leadId };
+
+      if (paymentType === 'DEPOSIT') {
+        payload.deposit_paid = true;
+      } else {
+        payload.balance_paid = true;
+      }
+
+      const response = await fetch('/api/v1/solar-leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        alert(`PAYMENT_CONFIRMED (${paymentType}): Transaction processed successfully!`);
+        if (session?.user?.email) await verifySolarAccess(session.user.email);
+      }
+    } catch (err) {
+      alert("PAYMENT_TRANSACTION_ERROR");
+    }
+  };
+
+  // 1. GENERATORE RICEVUTA ACCONTO (INITIAL DEPOSIT)
+  const handleDownloadDepositPDF = async (q: any) => {
+    if (typeof window === 'undefined') return;
+    setDownloadingPdfId(q.id);
+
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+
+      const finalDeal = Number(q.final_deal || q.deal_value || 0);
+      const basePrice = Number(q.base_price || (finalDeal / 1.12));
+      const vatVal = Number(q.vat || q.vat_amount || (finalDeal - basePrice));
+      const depPct = Number(q.deposit_percentage || 20);
+      const depAmt = Number(q.deposit_amount || finalDeal * (depPct / 100));
+      const balAmt = Number(q.balance_amount || finalDeal - depAmt);
+
+      const element = document.createElement('div');
+      element.innerHTML = `
+        <div style="padding: 30px; font-family: Arial, sans-serif; color: #1d1d1f; max-width: 700px; margin: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0891b2; padding-bottom: 20px; margin-bottom: 20px;">
+            <div>
+              <h1 style="margin: 0; font-size: 24px; color: #0891b2; letter-spacing: 2px;">AZPHUR HQ</h1>
+              <p style="margin: 4px 0 0; font-size: 10px; color: #64748b; font-weight: bold;">OFFICIAL INITIAL DEPOSIT RECEIPT</p>
+            </div>
+            <div style="text-align: right; font-size: 10px; color: #64748b;">
+              <p style="margin: 2px 0;"><strong>TX HASH:</strong> ${q.id?.split('-')[0].toUpperCase()}_DEP</p>
+              <p style="margin: 2px 0;"><strong>DATE:</strong> ${new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 25px; font-size: 12px; line-height: 1.6;">
+            <p style="margin: 0;"><strong>CLIENT NAME:</strong> ${q.customer_name || 'N/A'}</p>
+            <p style="margin: 0;"><strong>CLIENT EMAIL:</strong> ${q.customer_email || 'N/A'}</p>
+            <p style="margin: 0;"><strong>SYSTEM SPEC:</strong> ${q.quote_details?.roof_type ? `${q.quote_details.roof_type} Roof System` : 'Solar Energy System'}</p>
+            <p style="margin: 0;"><strong>STATUS:</strong> <span style="color: #0891b2; font-weight: bold;">DEPOSIT PAID & CONFIRMED</span></p>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 11px;">
+            <thead>
+              <tr style="background: #f0f9fa; border-bottom: 2px solid #1d1d1f; text-align: left;">
+                <th style="padding: 10px; color: #0891b2;">DESCRIPTION</th>
+                <th style="padding: 10px; text-align: right; color: #0891b2;">AMOUNT (PHP)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px;">System Base Price</td>
+                <td style="padding: 10px; text-align: right; font-family: monospace;">₱${basePrice.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px;">Value Added Tax (12% VAT)</td>
+                <td style="padding: 10px; text-align: right; font-family: monospace;">₱${vatVal.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+              <tr style="border-bottom: 2px solid #1d1d1f; font-weight: bold; background: #fafafa;">
+                <td style="padding: 10px;">TOTAL TURNKEY VALUE</td>
+                <td style="padding: 10px; text-align: right; font-family: monospace; color: #0891b2;">₱${finalDeal.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="background: #f0f9fa; border: 1px solid #22d3ee; padding: 15px; border-radius: 8px; font-size: 11px; margin-bottom: 30px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span><strong>INITIAL DEPOSIT PAID (${depPct}%):</strong></span>
+              <span style="color: #166534; font-weight: bold; font-family: monospace;">
+                ₱${depAmt.toLocaleString(undefined, {minimumFractionDigits: 2})} [PAID]
+              </span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span><strong>REMAINING BALANCE (${100 - depPct}%):</strong></span>
+              <span style="color: #64748b; font-weight: bold; font-family: monospace;">
+                ₱${balAmt.toLocaleString(undefined, {minimumFractionDigits: 2})} [PENDING INSTALLATION]
+              </span>
+            </div>
+          </div>
+
+          <div style="text-align: center; font-size: 9px; color: #86868b; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+            Official digital deposit receipt generated by AZPHUR Solar Operations Center.
+          </div>
+        </div>
+      `;
+
+      const opt: any = {
+        margin:       10,
+        filename:     `AZPHUR_Deposit_Receipt_${q.id?.split('-')[0].toUpperCase()}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error(err);
+      alert("PDF_GENERATION_FAILED");
+    } finally {
+      setDownloadingPdfId(null);
+    }
+  };
+
+  // 2. GENERATORE RICEVUTA SALDO FINALE (FINAL SETTLEMENT)
+  const handleDownloadFinalPDF = async (q: any) => {
+    if (typeof window === 'undefined') return;
+    setDownloadingPdfId(q.id);
+
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+
+      const finalDeal = Number(q.final_deal || q.deal_value || 0);
+      const basePrice = Number(q.base_price || (finalDeal / 1.12));
+      const vatVal = Number(q.vat || q.vat_amount || (finalDeal - basePrice));
+      const depPct = Number(q.deposit_percentage || 20);
+      const depAmt = Number(q.deposit_amount || finalDeal * (depPct / 100));
+      const balAmt = Number(q.balance_amount || finalDeal - depAmt);
+
+      const element = document.createElement('div');
+      element.innerHTML = `
+        <div style="padding: 30px; font-family: Arial, sans-serif; color: #1d1d1f; max-width: 700px; margin: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #166534; padding-bottom: 20px; margin-bottom: 20px;">
+            <div>
+              <h1 style="margin: 0; font-size: 24px; color: #166534; letter-spacing: 2px;">AZPHUR HQ</h1>
+              <p style="margin: 4px 0 0; font-size: 10px; color: #166534; font-weight: bold;">FINAL TURNKEY SETTLEMENT RECEIPT</p>
+            </div>
+            <div style="text-align: right; font-size: 10px; color: #64748b;">
+              <p style="margin: 2px 0;"><strong>TX HASH:</strong> ${q.id?.split('-')[0].toUpperCase()}_FINAL</p>
+              <p style="margin: 2px 0;"><strong>DATE:</strong> ${new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 25px; font-size: 12px; line-height: 1.6;">
+            <p style="margin: 0;"><strong>CLIENT NAME:</strong> ${q.customer_name || 'N/A'}</p>
+            <p style="margin: 0;"><strong>CLIENT EMAIL:</strong> ${q.customer_email || 'N/A'}</p>
+            <p style="margin: 0;"><strong>SYSTEM SPEC:</strong> ${q.quote_details?.roof_type ? `${q.quote_details.roof_type} Roof System` : 'Solar Energy System'}</p>
+            <p style="margin: 0;"><strong>STATUS:</strong> <span style="color: #166534; font-weight: bold;">FULLY SETTLED & CLOSED</span></p>
+          </div>
+
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; font-size: 11px;">
+            <thead>
+              <tr style="background: #f0fdf4; border-bottom: 2px solid #1d1d1f; text-align: left;">
+                <th style="padding: 10px; color: #166534;">DESCRIPTION</th>
+                <th style="padding: 10px; text-align: right; color: #166534;">AMOUNT (PHP)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px;">System Base Price</td>
+                <td style="padding: 10px; text-align: right; font-family: monospace;">₱${basePrice.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px;">Value Added Tax (12% VAT)</td>
+                <td style="padding: 10px; text-align: right; font-family: monospace;">₱${vatVal.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+              <tr style="border-bottom: 2px solid #1d1d1f; font-weight: bold; background: #fafafa;">
+                <td style="padding: 10px;">TOTAL TURNKEY VALUE</td>
+                <td style="padding: 10px; text-align: right; font-family: monospace; color: #166534;">₱${finalDeal.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="background: #f0fdf4; border: 1px solid #86efac; padding: 15px; border-radius: 8px; font-size: 11px; margin-bottom: 30px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span><strong>INITIAL DEPOSIT (${depPct}%):</strong></span>
+              <span style="color: #166534; font-weight: bold; font-family: monospace;">
+                ₱${depAmt.toLocaleString(undefined, {minimumFractionDigits: 2})} [PAID]
+              </span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+              <span><strong>FINAL BALANCE (${100 - depPct}%):</strong></span>
+              <span style="color: #166534; font-weight: bold; font-family: monospace;">
+                ₱${balAmt.toLocaleString(undefined, {minimumFractionDigits: 2})} [PAID]
+              </span>
+            </div>
+            <div style="padding-top: 8px; border-top: 1px dashed #86efac; text-align: center; color: #166534; font-weight: bold;">
+              ✓ ALL OBLIGATIONS COMPLETED - ZERO REMAINING BALANCE
+            </div>
+          </div>
+
+          <div style="text-align: center; font-size: 9px; color: #86868b; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+            Official final settlement invoice generated by AZPHUR Solar Operations Center.
+          </div>
+        </div>
+      `;
+
+      const opt: any = {
+        margin:       10,
+        filename:     `AZPHUR_Final_Settlement_${q.id?.split('-')[0].toUpperCase()}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error(err);
+      alert("PDF_GENERATION_FAILED");
+    } finally {
+      setDownloadingPdfId(null);
     }
   };
 
@@ -157,10 +438,7 @@ export default function SolarQuotePage() {
         setObjective('');
         setAddress('');
         
-        // ALLINEAMENTO LOGICA: Siccome il backend ha fatto l'auto-whitelist, dichiariamo il client autorizzato
         setIsAuthorizedCustomer(true);
-        
-        // Se l'utente era già loggato, aggiorniamo la lista dei suoi preventivi in real-time
         if (session?.user?.email) {
           await verifySolarAccess(session.user.email);
         }
@@ -217,7 +495,7 @@ export default function SolarQuotePage() {
 
       <div className="glow-sphere"></div>
 
-      {/* NAV BAR */}
+      {/* NAVBAR */}
       <nav className="nav-minimal-lux">
         <div className="logo-group">
           <img src="/logo-azphur.avif" alt="AZPHUR Logo" style={{ height: '32px', cursor: 'pointer' }} onClick={() => router.push('/')} />
@@ -242,7 +520,7 @@ export default function SolarQuotePage() {
       </nav>
 
       <div className="center-content">
-        {/* PRIVATE LOGIN INTERFACE */}
+        {/* LOGIN TERMINAL */}
         {showLogin && !session && (
           <div className="login-box-premium fade-in">
             <span className="phase-label">SECURE_CLIENT_LOGIN</span>
@@ -264,7 +542,7 @@ export default function SolarQuotePage() {
           </div>
         )}
 
-        {/* PRIVATE QUOTATIONS HISTORY / ADMIN OVERVIEW */}
+        {/* QUOTATION DASHBOARD TABLE */}
         {session && (
           <div className="login-box-premium dashboard-box fade-in">
             <span className="phase-label">{isAdmin ? "SYSTEM_SUPERVISOR_FEED // WRITE_ACCESS" : "SECURE_DATA_FEED // ENCRYPTED"}</span>
@@ -272,7 +550,7 @@ export default function SolarQuotePage() {
             
             {!isAuthorizedCustomer ? (
               <div className="no-records" style={{ borderColor: '#ef4444', color: '#ef4444', marginTop: '15px' }}>
-                ACCESS_DENIED: Your account email is not whitelisted in the Solar Database System. Please contact support or submit a new inquiry below.
+                ACCESS_DENIED: Your account email is not whitelisted in the Solar Database System.
               </div>
             ) : loadingQuotes ? (
               <div className="system-ops-label">RETRIEVING_DATA_STREAM...</div>
@@ -281,7 +559,7 @@ export default function SolarQuotePage() {
             ) : (
               <>
                 <p className="login-desc">
-                  {isAdmin ? "Global list of system leads. Use the custom dropdown selectors to change real-time state configurations inside Supabase." : "Real-time status updates of structural estimates managed by AZPHUR HQ."}
+                  {isAdmin ? "Global list of system leads. Use status and quote emission controls." : "Real-time status updates of structural estimates managed by AZPHUR HQ."}
                 </p>
                 <div className="quotes-table-wrapper">
                   <table className="quotes-table">
@@ -289,47 +567,305 @@ export default function SolarQuotePage() {
                       <tr>
                         <th>TX_HASH</th>
                         <th>{isAdmin ? "CUSTOMER / CONTACT" : "SYSTEM_TYPE"}</th>
-                        <th>VALUE</th>
-                        <th>STATUS</th>
+                        <th>TOTAL VALUE</th>
+                        <th>STATUS / ACTION</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {myQuotes.map(q => (
-                        <tr key={q.id}>
-                          <td className="mono">{q.id?.split('-')[0].toUpperCase()}_AZP</td>
-                          <td>
-                            {isAdmin ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <span style={{ fontWeight: 800 }}>{q.customer_name || 'N/A'}</span>
-                                <span style={{ fontSize: '10px', color: '#5c5e62', fontFamily: 'monospace' }}>{q.customer_email}</span>
-                              </div>
-                            ) : (
-                              q.quote_details?.roof_type ? `${q.quote_details.roof_type} Roof System` : (q.product_name || 'Solar Energy System')
+                      {myQuotes.map(q => {
+                        const finalDeal = Number(q.final_deal || q.deal_value || 0);
+                        const basePrice = Number(
+                          q.base_price || (q.deal_value && q.deal_value !== finalDeal ? q.deal_value : finalDeal / 1.12)
+                        );
+                        const vatVal = Number(q.vat || q.vat_amount || (finalDeal - basePrice));
+                        const depPct = Number(q.deposit_percentage || 20);
+                        const depAmt = Number(q.deposit_amount || finalDeal * (depPct / 100));
+                        const balAmt = Number(q.balance_amount || finalDeal - depAmt);
+
+                        return (
+                          <React.Fragment key={q.id}>
+                            <tr>
+                              <td className="mono">{q.id?.split('-')[0].toUpperCase()}_AZP</td>
+                              <td>
+                                {isAdmin ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <span style={{ fontWeight: 800 }}>{q.customer_name || 'N/A'}</span>
+                                    <span style={{ fontSize: '10px', color: '#5c5e62', fontFamily: 'monospace' }}>{q.customer_email}</span>
+                                  </div>
+                                ) : (
+                                  q.quote_details?.roof_type ? `${q.quote_details.roof_type} Roof System` : 'Solar Energy System'
+                                )}
+                              </td>
+                              <td className="mono">
+                                ₱{finalDeal > 0 ? finalDeal.toLocaleString() : Number(q.quote_details?.monthly_bill || 0).toLocaleString()}
+                              </td>
+                              <td>
+                                {isAdmin ? (
+                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <select 
+                                      value={q.status?.toUpperCase() || 'NEW'} 
+                                      onChange={(e) => handleStatusChange(q.id, e.target.value)}
+                                      className="select-table-status"
+                                    >
+                                      <option value="NEW">NEW</option>
+                                      <option value="CONTACTED">CONTACTED</option>
+                                      <option value="QUOTED">QUOTED</option>
+                                      <option value="WAITING_DEPOSIT">WAITING_DEPOSIT</option>
+                                      <option value="DEPOSIT_PAID">DEPOSIT_PAID</option>
+                                      <option value="WAITING_BALANCE">WAITING_BALANCE</option>
+                                      <option value="CLOSED">CLOSED</option>
+                                      <option value="CANCELLED">CANCELLED</option>
+                                      <option value="REFUNDED">REFUNDED</option>
+                                    </select>
+                                    
+                                    <button 
+                                      className="btn-cyan-outline"
+                                      style={{ padding: '4px 8px', fontSize: '9px' }}
+                                      onClick={() => setSelectedLeadForQuote(selectedLeadForQuote === q.id ? null : q.id)}
+                                    >
+                                      {selectedLeadForQuote === q.id ? 'CLOSE' : 'EMIT'}
+                                    </button>
+
+                                    {/* ADMIN BALANCE UNLOCK TRIGGER BUTTON */}
+                                    {q.deposit_paid && (
+                                      <button
+                                        onClick={() => handleToggleBalanceUnlock(q.id, q.balance_unlocked)}
+                                        style={{
+                                          background: q.balance_unlocked ? '#ef4444' : '#10b981',
+                                          color: '#fff',
+                                          border: 'none',
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          fontSize: '9px',
+                                          fontWeight: 800,
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        {q.balance_unlocked ? "LOCK BALANCE" : "UNLOCK BALANCE"}
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className={`status-tag ${q.status?.toLowerCase() || 'new'}`}>
+                                    {q.status || 'NEW'}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+
+                            {/* ADMIN PANEL FOR QUOTE EMISSION WITH DEPOSIT SLIDER */}
+                            {isAdmin && selectedLeadForQuote === q.id && (
+                              <tr>
+                                <td colSpan={4} style={{ background: '#f0fdf4', padding: '15px', borderBottom: '2px solid #166534' }}>
+                                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <input 
+                                      type="number" 
+                                      placeholder="Base Price (PHP)" 
+                                      value={quoteBasePrice} 
+                                      onChange={(e) => setQuoteBasePrice(e.target.value)} 
+                                      style={{ padding: '8px', borderRadius: '6px', border: '1px solid #1d1d1f', fontSize: '12px' }}
+                                    />
+                                    <span style={{ fontSize: '11px', fontWeight: 800 }}>Deposit: {quoteDepositPct}%</span>
+                                    <input 
+                                      type="range" 
+                                      min="1" 
+                                      max="100" 
+                                      value={quoteDepositPct} 
+                                      onChange={(e) => setQuoteDepositPct(Number(e.target.value))} 
+                                    />
+                                    <button 
+                                      className="login-btn-premium" 
+                                      style={{ margin: 0, padding: '8px 16px', width: 'auto' }}
+                                      onClick={() => handleStatusChange(q.id, 'QUOTED', Number(quoteBasePrice), quoteDepositPct)}
+                                    >
+                                      SEND QUOTATION
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
-                          </td>
-                          <td className="mono">
-                            ₱{Number(q.deal_value || q.quote_details?.monthly_bill || 0).toLocaleString()}
-                          </td>
-                          <td>
-                            {isAdmin ? (
-                              <select 
-                                value={q.status?.toUpperCase() || 'NEW'} 
-                                onChange={(e) => handleStatusChange(q.id, e.target.value)}
-                                className="select-table-status"
-                              >
-                                <option value="NEW">NEW</option>
-                                <option value="QUOTED">QUOTED</option>
-                                <option value="CONTACTED">CONTACTED</option>
-                                <option value="CLOSED">CLOSED</option>
-                              </select>
-                            ) : (
-                              <span className={`status-tag ${q.status?.toLowerCase() || 'new'}`}>
-                                {q.status || 'NEW'}
-                              </span>
+
+                            {/* CUSTOMER QUOTE BREAKDOWN & PAYMENT CONTROLS */}
+                            {!isAdmin && (
+                              <tr>
+                                <td colSpan={4} style={{ padding: '20px', background: '#f0f9fa', borderBottom: '2px solid #1d1d1f' }}>
+                                  
+                                  {(q.status === 'CANCELLED' || q.status === 'REFUNDED') ? (
+                                    /* 🔴 BANNER DI ANNULLAMENTO / RIMBORSO */
+                                    <div style={{
+                                      background: q.status === 'REFUNDED' ? '#fef2f2' : '#f8fafc',
+                                      border: `1px solid ${q.status === 'REFUNDED' ? '#fecaca' : '#cbd5e1'}`,
+                                      padding: '20px',
+                                      borderRadius: '12px',
+                                      textAlign: 'center',
+                                      width: '100%',
+                                      margin: '5px 0'
+                                    }}>
+                                      <h4 style={{ 
+                                        margin: '0 0 6px 0', 
+                                        color: q.status === 'REFUNDED' ? '#991b1b' : '#475569',
+                                        fontSize: '13px',
+                                        fontWeight: 900
+                                      }}>
+                                        {q.status === 'REFUNDED' ? '🔄 TRANSACTION REFUNDED' : '❌ QUOTATION CANCELLED'}
+                                      </h4>
+                                      <p style={{ margin: 0, fontSize: '11px', color: '#64748b', lineHeight: '1.4' }}>
+                                        {q.status === 'REFUNDED' 
+                                          ? 'The initial deposit has been fully refunded due to technical/structural unfeasibility. All payment features are disabled.'
+                                          : 'This quotation has been marked as cancelled. Please contact our support team if you wish to re-evaluate your setup.'}
+                                      </p>
+                                    </div>
+                                  ) : finalDeal > 0 ? (
+                                    <>
+                                      {/* --- TRANSPARENT OFFER SHEET --- */}
+                                      <div style={{ background: '#ffffff', padding: '16px', borderRadius: '12px', border: '1px solid rgba(34, 211, 238, 0.4)', marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                                          <div style={{ fontSize: '10px', fontWeight: 900, color: '#0891b2', letterSpacing: '1px' }}>
+                                            OFFICIAL SYSTEM QUOTATION BREAKDOWN
+                                          </div>
+
+                                          {/* CONTENITORE DEDICATO AI DUE PULSANTI RICEVUTA PDF */}
+                                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                            {/* 1. RICEVUTA ACCONTO */}
+                                            {(q.deposit_paid || ['DEPOSIT_PAID', 'WAITING_BALANCE', 'BALANCE_PAID', 'CLOSED'].includes(q.status?.toUpperCase())) && (
+                                              <button
+                                                onClick={() => handleDownloadDepositPDF(q)}
+                                                disabled={downloadingPdfId === q.id}
+                                                style={{
+                                                  background: '#0891b2',
+                                                  color: '#fff',
+                                                  border: 'none',
+                                                  padding: '6px 12px',
+                                                  borderRadius: '6px',
+                                                  fontSize: '10px',
+                                                  fontWeight: 800,
+                                                  cursor: downloadingPdfId === q.id ? 'wait' : 'pointer',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '5px'
+                                                }}
+                                              >
+                                                📄 {downloadingPdfId === q.id ? 'GENERATING...' : 'DEPOSIT RECEIPT (PDF)'}
+                                              </button>
+                                            )}
+
+                                            {/* 2. RICEVUTA SALDO FINALE */}
+                                            {(q.balance_paid || ['CLOSED', 'BALANCE_PAID'].includes(q.status?.toUpperCase())) && (
+                                              <button
+                                                onClick={() => handleDownloadFinalPDF(q)}
+                                                disabled={downloadingPdfId === q.id}
+                                                style={{
+                                                  background: '#10b981',
+                                                  color: '#fff',
+                                                  border: 'none',
+                                                  padding: '6px 12px',
+                                                  borderRadius: '6px',
+                                                  fontSize: '10px',
+                                                  fontWeight: 800,
+                                                  cursor: downloadingPdfId === q.id ? 'wait' : 'pointer',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: '5px'
+                                                }}
+                                              >
+                                                🧾 {downloadingPdfId === q.id ? 'GENERATING...' : 'FINAL SETTLEMENT (PDF)'}
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5c5e62' }}>
+                                            <span>System Base Price:</span>
+                                            <span className="mono" style={{ fontWeight: 700, color: '#1d1d1f' }}>₱{basePrice.toLocaleString()}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#5c5e62' }}>
+                                            <span>Value Added Tax (12% VAT):</span>
+                                            <span className="mono" style={{ fontWeight: 700, color: '#1d1d1f' }}>₱{vatVal.toLocaleString()}</span>
+                                          </div>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px dashed #cbd5e1', fontWeight: 900, color: '#0891b2', fontSize: '14px' }}>
+                                            <span>Turnkey Total Value:</span>
+                                            <span className="mono">₱{finalDeal.toLocaleString()}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* --- MILESTONE PAYMENT BUTTONS --- */}
+                                      <div style={{ display: 'flex', gap: '15px', justifyContent: 'space-around', alignItems: 'center', flexWrap: 'wrap' }}>
+                                        
+                                        {/* STEP 1: INITIAL DEPOSIT */}
+                                        <div style={{ textAlign: 'center', flex: '1', minWidth: '220px' }}>
+                                          <div style={{ fontSize: '10px', fontWeight: 800, color: '#0891b2', marginBottom: '5px' }}>
+                                            STEP 1: INITIAL DEPOSIT ({depPct}%)
+                                          </div>
+                                          {(() => {
+                                            const isExpired = q.valid_until && new Date() > new Date(q.valid_until);
+
+                                            if (q.deposit_paid) {
+                                              return (
+                                                <span style={{ background: '#dcfce7', color: '#166534', padding: '10px 16px', borderRadius: '8px', fontWeight: 900, fontSize: '11px', display: 'block' }}>
+                                                  ✅ DEPOSIT PAID (₱{depAmt.toLocaleString()})
+                                                </span>
+                                              );
+                                            }
+
+                                            if (isExpired) {
+                                              return (
+                                                <button disabled style={{ width: '100%', padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'not-allowed' }}>
+                                                  ⚠️ QUOTE EXPIRED
+                                                </button>
+                                              );
+                                            }
+
+                                            return (
+                                              <button 
+                                                className="login-btn-premium" 
+                                                style={{ margin: 0, padding: '12px 20px', width: '100%', background: '#0891b2' }}
+                                                onClick={() => handleSimulatedCustomerPayment(q.id, 'DEPOSIT')}
+                                              >
+                                                Pay Deposit: ₱{depAmt.toLocaleString()}
+                                              </button>
+                                            );
+                                          })()}
+                                        </div>
+
+                                        {/* STEP 2: FINAL BALANCE */}
+                                        <div style={{ textAlign: 'center', flex: '1', minWidth: '220px' }}>
+                                          <div style={{ fontSize: '10px', fontWeight: 800, color: '#0891b2', marginBottom: '5px' }}>
+                                            STEP 2: FINAL BALANCE ({100 - depPct}%)
+                                          </div>
+                                          {q.balance_paid ? (
+                                            <span style={{ background: '#dcfce7', color: '#166534', padding: '10px 16px', borderRadius: '8px', fontWeight: 900, fontSize: '11px', display: 'block' }}>
+                                              ✅ BALANCE COMPLETED (₱{balAmt.toLocaleString()})
+                                            </span>
+                                          ) : q.balance_unlocked ? (
+                                            <button 
+                                              className="login-btn-premium" 
+                                              style={{ margin: 0, padding: '12px 20px', width: '100%', background: '#10b981' }}
+                                              onClick={() => handleSimulatedCustomerPayment(q.id, 'BALANCE')}
+                                            >
+                                              Pay Final Balance: ₱{balAmt.toLocaleString()}
+                                            </button>
+                                          ) : (
+                                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, padding: '12px', background: '#e2e8f0', borderRadius: '8px' }}>
+                                              🔒 BALANCE LOCKED (Pending Installation)
+                                            </div>
+                                          )}
+                                        </div>
+
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div style={{ textAlign: 'center', padding: '10px', color: '#64748b', fontSize: '12px', fontWeight: 700 }}>
+                                      ⏳ AWAITING OFFICIAL QUOTATION ISSUANCE FROM AZPHUR HQ
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
                             )}
-                          </td>
-                        </tr>
-                      ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -338,7 +874,7 @@ export default function SolarQuotePage() {
           </div>
         )}
 
-        {/* LEAD INTAKE FORM (PUBLIC) */}
+        {/* PUBLIC INFLOW FORM */}
         <div className="login-box-premium form-inflow-box">
           <div className="login-header">
             <span className="phase-label">PUBLIC_INFLOW_INTERFACE</span>
@@ -424,7 +960,7 @@ export default function SolarQuotePage() {
 
         .center-content { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; z-index: 1; width: 100%; box-sizing: border-box; gap: 30px; }
         .login-box-premium { background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); padding: 40px; border-radius: 24px; border: 4px solid #1d1d1f; width: 100%; max-width: 480px; text-align: left; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.08); box-sizing: border-box; }
-        .dashboard-box { max-width: 760px !important; width: 100%; }
+        .dashboard-box { max-width: 820px !important; width: 100%; }
         
         .phase-label { font-size: 9px; font-weight: 900; color: #86868b; letter-spacing: 1.5px; margin-bottom: 15px; display: block; }
         .text-cyan { color: #0891b2 !important; font-size: 24px; font-weight: 800; margin: 0; }
@@ -447,9 +983,12 @@ export default function SolarQuotePage() {
         
         .status-tag { font-size: 9px; padding: 3px 8px; border-radius: 4px; font-weight: 900; text-transform: uppercase; display: inline-block; }
         .status-tag.new { background: #dcfce7; color: #166534; }
-        .status-tag.quoted { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-        .status-tag.contacted { background: #fef9c3; color: #854d0e; }
+        .status-tag.waiting_deposit { background: #fef9c3; color: #854d0e; }
+        .status-tag.deposit_paid { background: #e0f2fe; color: #0369a1; }
+        .status-tag.waiting_balance { background: #ffedd5; color: #9a3412; }
         .status-tag.closed { background: #f1f5f9; color: #475569; }
+        .status-tag.cancelled { background: #f1f5f9; color: #64748b; }
+        .status-tag.refunded { background: #fef2f2; color: #991b1b; }
         
         .no-records { padding: 20px; text-align: center; font-weight: 700; color: #86868b; background: #fff; border-radius: 12px; border: 1px solid #e6f7f9; }
         .system-ops-label { font-size: 9px; font-weight: 900; color: #0891b2; letter-spacing: 2px; text-align: center; margin: 20px 0; }

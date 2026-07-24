@@ -12,14 +12,16 @@ export default function AdminDashboard() {
   const [stations, setStations] = useState([]); 
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [netProfit, setNetProfit] = useState(0); 
-  const [pipelineValue, setPipelineValue] = useState(0); // Tracciamento preventivi emessi pendenti
+  const [pipelineValue, setPipelineValue] = useState(0); 
   const [mounted, setMounted] = useState(false);
   const [co2Saved, setCo2Saved] = useState(14200.45);
   const [loading, setLoading] = useState(true);
   
-  // STATI AGGIUNTI PER LA GESTIONE DEI BUSINESS MAN (WHITELIST)
   const [allowedEmails, setAllowedEmails] = useState([]);
   const [newAllowedEmail, setNewAllowedEmail] = useState('');
+
+  // STATO PER IL ROLLER/SLIDER E VALORI PREVENTIVO (PER LEAD ID)
+  const [quoteInputs, setQuoteInputs] = useState({});
 
   const [newItem, setNewItem] = useState({ 
     name: '', 
@@ -43,7 +45,7 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'providers' }, () => syncHqData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => syncHqData()) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'charging_stations' }, () => syncHqData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'allowed_partners' }, () => syncHqData()) // Ascolta anche i nuovi partner abilitati
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'allowed_partners' }, () => syncHqData()) 
       .subscribe();
 
     const interval = setInterval(() => setCo2Saved(p => p + 0.01), 3000);
@@ -81,7 +83,6 @@ export default function AdminDashboard() {
         .select('*');
       if (stationData) setStations(stationData);
 
-      // Lettura dei Businessman abilitati nella Whitelist
       const { data: partnerData } = await supabase
         .from('allowed_partners')
         .select('*')
@@ -96,20 +97,17 @@ export default function AdminDashboard() {
       if (leadData) {
         setLeads(leadData);
         
-        // Calcolo Real Revenue sui contratti chiusi
         const realRevenue = leadData
           .filter(l => l.status === 'CLOSED')
           .reduce((sum, l) => sum + (Number(l.deal_value) || 0), 0);
         setTotalRevenue(realRevenue);
 
-        // Calcolo Commissioni (10%)
         const commissionRate = 0.10;
         const profit = leadData
           .filter(l => l.status === 'CLOSED')
           .reduce((sum, l) => sum + (Number(l.deal_value) * commissionRate), 0);
         setNetProfit(profit);
 
-        // Calcolo Pipeline Preventivi Emessi (Stato QUOTED)
         const quotedPipeline = leadData
           .filter(l => l.status === 'QUOTED')
           .reduce((sum, l) => sum + (Number(l.deal_value) || 0), 0);
@@ -123,7 +121,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // LOGICA PER AGGIUNGERE UN APPLICANTE ALLA LISTA BUSINESSMAN
   async function handleAllowPartner(e) {
     e.preventDefault();
     if (!newAllowedEmail) return;
@@ -143,23 +140,55 @@ export default function AdminDashboard() {
     }
   }
 
-  // LOGICA DI EMISSIONE PREVENTIVO (QUOTE) CON IVA AL 12%
-  async function generateQuote(leadId, baseValue, productName) {
+  const handleQuoteInputChange = (leadId, field, value) => {
+    setQuoteInputs(prev => ({
+      ...prev,
+      [leadId]: {
+        baseValue: prev[leadId]?.baseValue || '',
+        initialPct: prev[leadId]?.initialPct ?? 30,
+        [field]: value
+      }
+    }));
+  };
+
+  async function generateQuote(leadId, productName) {
+    const inputState = quoteInputs[leadId] || {};
+    const baseValue = parseFloat(inputState.baseValue);
+    const initialPct = parseInt(inputState.initialPct ?? 30, 10);
+
     if (!baseValue || baseValue <= 0) return alert("ENTER A VALID ASSET VALUE");
     
     const vatAmount = baseValue * 0.12;
     const finalDealValue = baseValue + vatAmount;
+    const depositAmount = (finalDealValue * initialPct) / 100;
+    const balanceAmount = finalDealValue - depositAmount;
+
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + 30);
+    const validUntilISO = expirationDate.toISOString();
     
     try {
       const { error } = await supabase
         .from('leads')
         .update({ 
-          status: 'QUOTED', // Mantenuto fisso in MAIUSCOLO
+          status: 'QUOTED',
           deal_value: finalDealValue,
+          deposit_amount: depositAmount,
+          balance_amount: balanceAmount,
+          deposit_percentage: initialPct,
+          deposit_paid: false,
+          balance_unlocked: false,
+          balance_paid: false,
+          valid_until: validUntilISO,
           quote_details: {
             items: [{ name: productName, qty: 1, base: baseValue }],
             base_price: baseValue,
             vat: vatAmount,
+            down_payment_pct: initialPct,
+            balance_pct: 100 - initialPct,
+            deposit_amount: depositAmount,
+            balance_amount: balanceAmount,
+            valid_until: validUntilISO,
             generated_at: new Date().toISOString()
           }
         })
@@ -176,6 +205,23 @@ export default function AdminDashboard() {
     }
   }
 
+  async function toggleBalanceUnlock(leadId, currentUnlockedState) {
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ balance_unlocked: !currentUnlockedState })
+        .eq('id', leadId);
+
+      if (!error) {
+        syncHqData();
+      } else {
+        alert("DATABASE_ERROR: " + error.message);
+      }
+    } catch (err) {
+      console.error("Unlock Error:", err);
+    }
+  }
+
   async function updateCargoStatus(id, newStatus) {
     try {
       const { error } = await supabase.from('inventory').update({ status: newStatus }).eq('id', id);
@@ -183,11 +229,25 @@ export default function AdminDashboard() {
     } catch (err) { console.error("Cargo Status Error:", err); }
   }
 
+  // AGGIORNAMENTO STATO LEAD (INCLUSI CANCELLED E REFUNDED)
   async function updateLeadStatus(id, newStatus) {
-    // BLINDATURA: Forza lo status in MAIUSCOLO prima di mandarlo a Supabase per evitare il Check Constraint Error
     const sanitizedStatus = newStatus ? newStatus.toUpperCase() : '';
+    if (!sanitizedStatus) return;
+    
+    // Conferma di sicurezza per operatore Admin
+    if (sanitizedStatus === 'REFUNDED' && !confirm("CONFIRM FULL REFUND ISSUANCE? This will nullify transactions and lock the deal for customer.")) {
+      return;
+    }
+    if (sanitizedStatus === 'CANCELLED' && !confirm("CANCEL THIS TRANSACTION RECORD? Customer UI will be locked.")) {
+      return;
+    }
+
     try {
-      const { error } = await supabase.from('leads').update({ status: sanitizedStatus }).eq('id', id);
+      const { error } = await supabase
+        .from('leads')
+        .update({ status: sanitizedStatus })
+        .eq('id', id);
+
       if (!error) {
         setLeads(prev => prev.map(l => l.id === id ? { ...l, status: sanitizedStatus } : l));
         syncHqData();
@@ -213,7 +273,7 @@ export default function AdminDashboard() {
   async function dispatchToProvider(leadId, providerName) {
     if(!providerName) return;
     alert(`DISPATCH_ORDER: Executing routing to ${providerName}...`);
-    await updateLeadStatus(leadId, 'CONTACTED'); // Forza la chiamata con lo stato corretto
+    await updateLeadStatus(leadId, 'CONTACTED');
   }
 
   async function handleAddAsset(e) {
@@ -262,7 +322,7 @@ export default function AdminDashboard() {
         .hq-nav { height: 70px; display: flex; justify-content: space-between; align-items: center; padding: 0 40px; border-bottom: 1px solid #e2e8f0; background: #fff; position: sticky; top: 0; z-index: 100; box-sizing: border-box; }
         .nav-left { display: flex; align-items: center; gap: 25px; }
         .hq-logo { height: 32px; width: auto; cursor: pointer; }
-        .exit-terminal { color: #64748b; text-textdecoration: none; font-size: 11px; font-weight: 800; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; text-decoration: none; }
+        .exit-terminal { color: #64748b; text-decoration: none; font-size: 11px; font-weight: 800; letter-spacing: 1px; font-family: 'JetBrains Mono', monospace; }
         .sys-status { font-size: 10px; color: #059669; display: flex; align-items: center; gap: 8px; font-weight: 800; }
         .pulse-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: blink 2s infinite; }
         
@@ -304,10 +364,14 @@ export default function AdminDashboard() {
         .status-quoted { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
         .status-contacted { background: #fef9c3; color: #854d0e; }
         .status-closed { background: #f1f5f9; color: #475569; }
+        .status-cancelled { background: #f3f4f6; color: #6b7280; border: 1px solid #d1d5db; }
+        .status-refunded { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
         
         .control-btn { border: 1px solid #e2e8f0; background: #fff; padding: 5px 10px; border-radius: 6px; font-size: 9px; font-weight: 800; cursor: pointer; }
         .control-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
         .term-btn { background: #fee2e2; border: none; color: #991b1b; padding: 6px 12px; font-size: 10px; font-weight: 900; cursor: pointer; border-radius: 8px; }
+
+        .pct-roller { width: 100%; accent-color: #0ea5e9; cursor: pointer; height: 6px; border-radius: 4px; background: #e2e8f0; }
         
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @media (min-width: 1024px) { .hq-console { grid-template-columns: 1.2fr 0.8fr; } }
@@ -423,6 +487,7 @@ export default function AdminDashboard() {
                 </div>
              </div>
           </div>
+
           <div className="sub-card">
             <h3 className="card-title">INITIALIZE_ASSET_INFLOW</h3>
             <form onSubmit={handleAddAsset} className="modern-form">
@@ -445,7 +510,6 @@ export default function AdminDashboard() {
             </form>
           </div>
 
-          {/* BLOCCO INTEGRATO: PROVISIONING / WHITELIST PER I BUSINESS MAN FILIPPINI */}
           <div className="sub-card" style={{ borderLeft: '6px solid #0ea5e9' }}>
             <h3 className="card-title">
               ADMIN_PARTNER_PROVISIONING 
@@ -488,62 +552,173 @@ export default function AdminDashboard() {
               </div>
             </div>
           </div>
-          {/* FINE BLOCCO PROVISIONING */}
-
         </div>
 
         <div className="hq-panel feed">
             <h3 className="card-title">TRANSACTION_CONTROL_CENTER <span style={{color: '#0ea5e9'}}>[{leads.length}]</span></h3>
-            <div style={{marginBottom: '40px', maxHeight: '450px', overflowY: 'auto', borderBottom: '2px solid #f1f5f9'}}>
-                {leads.map(lead => (
-                    <div key={lead.id} className="feed-item" style={{borderLeft: lead.status === 'CLOSED' ? '4px solid #94a3b8' : lead.status === 'QUOTED' ? '4px solid #0ea5e9' : '4px solid #10b981', paddingLeft: '15px', marginBottom: '10px'}}>
+            <div style={{marginBottom: '40px', maxHeight: '550px', overflowY: 'auto', borderBottom: '2px solid #f1f5f9'}}>
+                {leads.map(lead => {
+                  const leadInput = quoteInputs[lead.id] || { baseValue: '', initialPct: 30 };
+                  const baseValNum = parseFloat(leadInput.baseValue) || 0;
+                  const vatAmount = baseValNum * 0.12;
+                  const totalVal = baseValNum + vatAmount;
+                  const downPayAmount = (totalVal * leadInput.initialPct) / 100;
+
+                  // ✅ DOPO (blocca gli input non appena il preventivo viene inviato o se viene annullato/rimborsato):
+                  const isLocked = ['QUOTED', 'DEPOSIT_PAID', 'WAITING_BALANCE', 'BALANCE_PAID', 'CLOSED', 'CANCELLED', 'REFUNDED'].includes(lead.status);
+
+                  return (
+                    <div key={lead.id} className="feed-item" style={{
+                      borderLeft: lead.status === 'CLOSED' ? '4px solid #94a3b8' : 
+                                  lead.status === 'REFUNDED' ? '4px solid #ef4444' : 
+                                  lead.status === 'CANCELLED' ? '4px solid #6b7280' : 
+                                  lead.status === 'QUOTED' ? '4px solid #0ea5e9' : '4px solid #10b981', 
+                      paddingLeft: '15px', 
+                      marginBottom: '10px'
+                    }}>
                         <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px', width: '100%', flexWrap: 'wrap', gap: '5px'}}>
                             <span className="item-name">{lead.customer_name}</span>
-                            <span className={`lead-badge ${lead.status === 'NEW' ? 'status-new' : lead.status === 'QUOTED' ? 'status-quoted' : lead.status === 'CONTACTED' ? 'status-contacted' : 'status-closed'}`}>{lead.status}</span>
+                            <span className={`lead-badge ${
+                              lead.status === 'NEW' ? 'status-new' : 
+                              lead.status === 'QUOTED' ? 'status-quoted' : 
+                              lead.status === 'CONTACTED' ? 'status-contacted' : 
+                              lead.status === 'CANCELLED' ? 'status-cancelled' : 
+                              lead.status === 'REFUNDED' ? 'status-refunded' : 'status-closed'
+                            }`}>{lead.status}</span>
                         </div>
                         <div style={{fontSize: '11px', color: '#64748b', fontFamily: 'JetBrains Mono', width: '100%', wordBreak: 'break-word'}}>
-                            ASSET: {lead.product_name} | VALUE: ₱{Number(lead.deal_value).toLocaleString()}
+                            ASSET: {lead.product_name} | VALUE: ₱{Number(lead.deal_value || 0).toLocaleString()}
                             <div style={{color: '#94a3b8', marginTop: '4px'}}>TX_HASH: {lead.id?.split('-')[0].toUpperCase()}_AZP</div>
                         </div>
                         
-                        {/* WIDGET DI EMISSIONE PREVENTIVO (QUOTE) */}
-                        {(lead.status === 'NEW' || lead.status === 'CONTACTED') && (
+                        {/* WIDGET PREVENTIVO PER NEW, CONTACTED E QUOTED */}
+                        {(lead.status === 'NEW' || lead.status === 'CONTACTED' || lead.status === 'QUOTED') && (
                           <div style={{marginTop: '12px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', width: '100%', boxSizing: 'border-box'}}>
-                            <span style={{ fontSize: '9px', fontWeight: '900', color: '#0ea5e9', display: 'block', marginBottom: '8px', letterSpacing: '1px' }}>GENERATE_OFFICIAL_QUOTE (12% VAT INCLUDED)</span>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '9px', fontWeight: '900', color: '#0ea5e9', display: 'block', marginBottom: '8px', letterSpacing: '1px' }}>
+                              GENERATE_OFFICIAL_QUOTE (12% VAT INCLUDED)
+                            </span>
+                            
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
                               <input 
                                 type="number" 
                                 placeholder="Base Price (PHP)" 
                                 style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '6px', border: '1px solid #e2e8f0', flex: 1, minWidth: '120px', fontFamily: 'monospace' }}
-                                id={`quote-input-${lead.id}`}
+                                value={leadInput.baseValue}
+                                disabled={isLocked}
+                                onChange={e => handleQuoteInputChange(lead.id, 'baseValue', e.target.value)}
                               />
+                            </div>
+
+                            {isLocked && (
+                              <span style={{ fontSize: '9px', color: '#f59e0b', fontWeight: '900', display: 'block', marginBottom: '8px' }}>
+                                🔒 CONTRACT_LOCKED ({lead.status})
+                              </span>
+                            )}
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px', background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', fontWeight: '800', fontFamily: 'JetBrains Mono' }}>
+                                <span style={{ color: '#64748b' }}>INITIAL_DOWN_PAYMENT:</span>
+                                <span style={{ color: '#0ea5e9', fontWeight: '900' }}>{leadInput.initialPct}%</span>
+                              </div>
+                              <input 
+                                type="range" 
+                                min="1" 
+                                max="100" 
+                                value={leadInput.initialPct} 
+                                disabled={isLocked}
+                                onChange={e => handleQuoteInputChange(lead.id, 'initialPct', parseInt(e.target.value, 10))}
+                                className="pct-roller"
+                              />
+                              {baseValNum > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#059669', fontWeight: '800', fontFamily: 'JetBrains Mono', marginTop: '2px' }}>
+                                  <span>DUE NOW: ₱{downPayAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  <span style={{ color: '#64748b' }}>REMAINING: ₱{(totalVal - downPayAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {!isLocked && (
                               <button 
-                                onClick={() => {
-                                  const baseVal = parseFloat(document.getElementById(`quote-input-${lead.id}`).value);
-                                  generateQuote(lead.id, baseVal, lead.product_name);
-                                }}
+                                onClick={() => generateQuote(lead.id, lead.product_name)}
                                 className="control-btn"
-                                style={{ background: '#0ea5e9', color: '#fff', borderColor: '#0ea5e9' }}
+                                style={{ background: '#0ea5e9', color: '#fff', borderColor: '#0ea5e9', width: '100%', padding: '8px', fontWeight: '900' }}
                               >
                                 EMIT_QUOTE_V2
                               </button>
-                            </div>
+                            )}
                           </div>
                         )}
 
-                        {lead.status !== 'CLOSED' ? (
-                          <div style={{marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-                              <select className="control-btn" style={{padding: '5px', width: '130px'}} onChange={(e) => dispatchToProvider(lead.id, e.target.value)} value={lead.status === 'CONTACTED' ? 'CONTACTED' : ''}>
-                                  <option value="">DISPATCH_TO...</option>
-                                  {providers.map(p => (<option key={p.id} value={p.name}>{p.name}</option>))}
-                              </select>
-                              <button onClick={() => { if(confirm("CONFIRM TRANSACTION COMPLETION?")) updateLeadStatus(lead.id, 'CLOSED'); }} className="control-btn" style={{background: '#10b981', color: '#fff', borderColor: '#10b981'}}>CLOSE_DEAL</button>
+                        {/* CONTROLLO SBLOCCO SALDO FINALE */}
+                        {(lead.status === 'QUOTED' || lead.status === 'DEPOSIT_PAID' || lead.status === 'WAITING_BALANCE') && (
+                          <div style={{ marginTop: '10px', padding: '10px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', width: '100%', boxSizing: 'border-box' }}>
+                            <div style={{ fontSize: '10px', fontWeight: '800', fontFamily: 'JetBrains Mono', color: '#0369a1', marginBottom: '6px' }}>
+                              POST-INSTALLATION BALANCE GATE
+                            </div>
+                            <div style={{ fontSize: '9px', color: '#64748b', marginBottom: '8px', fontFamily: 'JetBrains Mono' }}>
+                              DEPOSIT: ₱{Number(lead.deposit_amount || 0).toLocaleString()} | BALANCE: ₱{Number(lead.balance_amount || 0).toLocaleString()}
+                            </div>
+                            
+                            <button
+                              onClick={() => toggleBalanceUnlock(lead.id, lead.balance_unlocked)}
+                              className="control-btn"
+                              style={{
+                                background: lead.balance_unlocked ? '#ef4444' : '#10b981',
+                                color: '#fff',
+                                borderColor: lead.balance_unlocked ? '#ef4444' : '#10b981',
+                                width: '100%',
+                                padding: '8px',
+                                fontWeight: '900'
+                              }}
+                            >
+                              {lead.balance_unlocked ? "LOCK_BALANCE_BUTTON (ACTIVE)" : "UNLOCK_FINAL_BALANCE_BUTTON"}
+                            </button>
                           </div>
-                        ) : (
-                          <div style={{marginTop: '10px'}}><button onClick={() => deleteLead(lead.id)} className="term-btn" style={{background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0'}}>DELETE_RECORD</button></div>
                         )}
+
+                        {/* CONTROLLI DI STATO GLOBALI (INCLUSI CANCELLED / REFUNDED) */}
+                        <div style={{marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap', width: '100%', alignItems: 'center'}}>
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '4px', flex: 1}}>
+                              <span style={{fontSize: '8px', fontWeight: '900', color: '#94a3b8', letterSpacing: '1px'}}>UPDATE_STATUS</span>
+                              <select 
+                                className="control-btn" 
+                                style={{padding: '6px', width: '100%', fontWeight: '700', fontFamily: 'JetBrains Mono'}} 
+                                onChange={(e) => updateLeadStatus(lead.id, e.target.value)} 
+                                value={lead.status}
+                              >
+                                  <option value="NEW">NEW</option>
+                                  <option value="CONTACTED">CONTACTED</option>
+                                  <option value="QUOTED">QUOTED</option>
+                                  <option value="DEPOSIT_PAID">DEPOSIT_PAID</option>
+                                  <option value="WAITING_BALANCE">WAITING_BALANCE</option>
+                                  <option value="BALANCE_PAID">BALANCE_PAID</option>
+                                  <option value="CLOSED">CLOSED</option>
+                                  <option value="CANCELLED">CANCELLED (ANNULLA)</option>
+                                  <option value="REFUNDED">REFUNDED (RIMBORSA)</option>
+                              </select>
+                            </div>
+
+                            {lead.status !== 'CLOSED' && (
+                              <button 
+                                onClick={() => { if(confirm("CONFIRM TRANSACTION COMPLETION?")) updateLeadStatus(lead.id, 'CLOSED'); }} 
+                                className="control-btn" 
+                                style={{background: '#10b981', color: '#fff', borderColor: '#10b981', height: '30px', selfAlign: 'flex-end', marginTop: '12px'}}
+                              >
+                                CLOSE_DEAL
+                              </button>
+                            )}
+
+                            <button 
+                              onClick={() => deleteLead(lead.id)} 
+                              className="term-btn" 
+                              style={{height: '30px', marginTop: '12px'}}
+                            >
+                              DELETE
+                            </button>
+                        </div>
                     </div>
-                ))}
+                  );
+                })}
             </div>
             
             <h3 className="card-title">WORLD WIDE ASSET TRACKER</h3>
