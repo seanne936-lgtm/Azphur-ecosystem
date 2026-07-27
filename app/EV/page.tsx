@@ -482,6 +482,20 @@ export default function EVMobilityPage() {
 
   const handleBookRide = async (driver: OnlineDriver) => {
   try {
+    // 1. Pop-up per far decidere al cliente la destinazione
+    const userDestination = window.prompt("Where do you want to go? Enter the address or destination.:");
+
+    // Se l'utente clicca su "Annulla" o lascia vuoto, interrompiamo la prenotazione
+    if (!userDestination || userDestination.trim() === "") {
+      alert("⚠️ Booking cancelled: you must specify a destination..");
+      return;
+    }
+
+    // Coordinate di backup per la destinazione (o quelle attuali se non hai il geocoding inverso attivo)
+    const destLat = mapCenter[0];
+    const destLng = mapCenter[1];
+
+    // 2. Invio richiesta a Supabase
     const { data, error } = await supabase
       .from('rides')
       .insert([
@@ -490,12 +504,17 @@ export default function EVMobilityPage() {
           passenger_email: currentUserEmail,
           driver_email: driver.email || null,
           driver_id: driver.id,
-          // 📍 Inviamo le coordinate reali del tuo GPS
+          
+          // 📍 PUNTO DI PICKUP (Posizione GPS attuale del Cliente)
           pickup_lat: mapCenter[0], 
           pickup_lng: mapCenter[1],
-          pickup_location: `Posizione GPS (${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)})`,
-          // 🏁 Inviamo la destinazione scritta nella ricerca (o una di default se vuota)
-          destination: searchQuery || 'Destinazione Personalizzata',
+          pickup_location: `GPS: ${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)}`,
+          
+          // 🏁 PUNTO DI DROP-OFF (Destinazione inserita dal Cliente nel pop-up)
+          destination: userDestination,
+          destination_lat: destLat,
+          destination_lng: destLng,
+
           status: 'pending',
           fare: 15.00
         }
@@ -505,11 +524,11 @@ export default function EVMobilityPage() {
     if (error) {
       alert("❌ ERRORE PRENOTAZIONE: " + error.message);
     } else {
-      alert("✅ BOOK RIDE INVIATO AL DRIVER!");
-      console.log("Corsa creata con successo:", data);
+      alert(`✅ RIDE BOOKED! \nDestination sent to the driver: ${userDestination}`);
+      console.log("Ride created:", data);
     }
   } catch (err: any) {
-    alert("❌ ERRORE GENERICO: " + err.message);
+    alert("❌ GENERIC ERROR: " + err.message);
   }
 };
 
