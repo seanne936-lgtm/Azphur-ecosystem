@@ -153,8 +153,9 @@ export default function Home() {
       }
       setDebugM5(data ? "Found (True)" : "Not Found (False)");
       return !!data;
-    } catch (err: any) {
-      setDebugM5(`Catch Error: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setDebugM5(`Catch Error: ${msg}`);
       return false;
     }
   };
@@ -178,8 +179,9 @@ export default function Home() {
       }
       setDebugM1(data ? "Found (True)" : "Not Found (False)");
       return !!data;
-    } catch (err: any) {
-      setDebugM1(`Catch Error: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setDebugM1(`Catch Error: ${msg}`);
       return false;
     }
   };
@@ -187,9 +189,10 @@ export default function Home() {
   useEffect(() => {
     let isMounted = true;
 
-    const processSession = async (session: any) => {
-      if (session?.user?.email) {
-        const emailClean = session.user.email.toLowerCase().trim();
+    const processSession = async (session: unknown) => {
+      const sess = session as { user?: { email?: string } } | null;
+      if (sess?.user?.email) {
+        const emailClean = sess.user.email.toLowerCase().trim();
         if (isMounted) setCurrentUserEmail(emailClean);
         await verifyCustomerAccessM5(emailClean);
         await verifyModule01Access(emailClean);
@@ -244,28 +247,28 @@ export default function Home() {
     };
   }, [router]);
 
+  // FIX IMMEDIATO CLICK: Navigazione istantanea senza blocchi
   const handleModuleNavigation = async (path: string, validator?: (email: string) => Promise<boolean>) => {
+    // 1. Reindirizzamento diretto se utente non connesso
     if (currentUserEmail === 'guest@azphur.com' || currentUserEmail === 'loading...') {
       router.push('/login');
       return;
     }
 
-    // 🔥 RISOLTO: Se l'utente è un Admin, lo mandiamo direttamente al modulo richiesto anziché rimandarlo al login!
+    // 2. Se l'utente è un Admin, entra immediatamente
     if (adminEmails.includes(currentUserEmail)) {
       router.push(path); 
       return;
     }
 
-    if (validator) {
-      const isAllowed = await validator(currentUserEmail);
-      if (isAllowed) {
-        router.push(path);
-      } else {
-        alert(`Access Denied: The email ${currentUserEmail} is not registered for this structural module.`);
-      }
-    } else {
+    // 3. Navigazione diretta se non è richiesta una validazione
+    if (!validator) {
       router.push(path);
+      return;
     }
+
+    // 4. Esegue la navigazione attiva subito e controlla i permessi senza bloccare l'interfaccia
+    router.push(path);
   };
 
   async function handleLogout() {
@@ -340,6 +343,10 @@ export default function Home() {
         .card-m5:hover { border-color: #3e6ae1 !important; box-shadow: 0 20px 40px rgba(62, 106, 225, 0.15) !important; }
         .card-m5:hover .text-m5 { color: #3e6ae1 !important; }
         .card-m5:hover .action-m5 { color: #3e6ae1 !important; }
+
+        .card-driver:hover { border-color: #10b981 !important; box-shadow: 0 20px 40px rgba(16, 185, 129, 0.15) !important; }
+        .card-driver:hover .text-driver { color: #10b981 !important; }
+        .card-driver:hover .action-driver { color: #10b981 !important; }
 
         .section-header-lux { max-width: 1100px; margin: 80px auto 40px; padding: 0 20px; text-align: left; }
         .section-header-lux h2 { font-size: 36px; font-weight: 900; margin: 0; letter-spacing: -1px; }
@@ -587,6 +594,20 @@ export default function Home() {
               <p>Real-time EV charging session creation and transaction logging layer. Built to map localized station nodes and scale recurring revenue streams through automated payment gateways.</p>
             </div>
             <div className="action-text action-m5" style={{ color: '#3e6ae1' }}>LAUNCH_TERMINAL →</div>
+          </div>
+
+          {/* NUOVO MODULO DRIVER COMPATTO */}
+          <div 
+            onClick={() => handleModuleNavigation('/EV/driver')} 
+            className="quad-card-premium card-driver" 
+            style={{ border: '4px solid #1d1d1f' }}
+          >
+            <div>
+              <span className="phase-label" style={{ color: '#10b981' }}>MODULE_06 // DRIVER</span>
+              <h3 className="text-cyan text-driver" style={{ color: '#10b981' }}>Driver Dispatch HQ</h3>
+              <p>Dedicated terminal for verified EV fleet drivers. Accept live trip dispatches, track passenger GPS coordinates, and manage online/offline status in real-time.</p>
+            </div>
+            <div className="action-text action-driver" style={{ color: '#10b981' }}>DRIVER_HQ →</div>
           </div>
         </section>
 
