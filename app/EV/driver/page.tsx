@@ -41,7 +41,7 @@ export default function DriverHQPage() {
     checkDriverAuth();
   }, []);
 
-  // Ascolto in tempo reale per corse assegnate e aggiornamenti GPS customer da Modulo 5
+  // Ascolto in tempo reale per corse assegnate e aggiornamenti GPS customer
   useEffect(() => {
     if (authorizedDriver) {
       fetchAssignedRide();
@@ -59,8 +59,10 @@ export default function DriverHQPage() {
     }
   }, [authorizedDriver]);
 
+  // Controllo autenticazione Driver
   const checkDriverAuth = async () => {
     try {
+      setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
@@ -101,9 +103,8 @@ export default function DriverHQPage() {
       }
 
       setAuthorizedDriver(driverData);
-      setIsOnline(driverData.is_online);
+      setIsOnline(driverData.is_online ?? false);
     } catch (err: unknown) {
-      // eslint-disable-next-line no-console
       console.error("Authorization check error:", err);
       router.push('/login');
     } finally {
@@ -111,7 +112,43 @@ export default function DriverHQPage() {
     }
   };
 
-  // Recupera la corsa reale attiva e le coordinate del customer dal Modulo 5
+  // 🚗 QUANDO IL DRIVER ACCETTA LA CORSA -> DIVENTA OCCUPATO
+const handleAcceptRide = async (rideId: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+
+  // 1. Aggiorna lo stato della corsa
+  await supabase
+    .from('rides')
+    .update({ status: 'accepted' })
+    .eq('id', rideId);
+
+  // 2. Nasconde il driver dalla mappa dei clienti
+  await supabase
+    .from('driver_profiles')
+    .update({ is_available: false })
+    .eq('id', session.user.id);
+};
+
+// 🏁 QUANDO IL DRIVER COMPLETA O ANNULLA LA CORSA -> TORNA LIBERO
+const handleCompleteRide = async (rideId: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return;
+
+  // 1. Chiude la corsa
+  await supabase
+    .from('rides')
+    .update({ status: 'completed' })
+    .eq('id', rideId);
+
+  // 2. Rilancia il driver sulla mappa per i clienti
+  await supabase
+    .from('driver_profiles')
+    .update({ is_available: true })
+    .eq('id', session.user.id);
+};
+
+  // Recupera la corsa reale attiva
   const fetchAssignedRide = async () => {
     if (!authorizedDriver) return;
     setFetchingRide(true);
@@ -137,23 +174,21 @@ export default function DriverHQPage() {
         setActiveRide({
           id: ride.id,
           passenger_name: ride.passenger_name || ride.customer_email || 'Verified EV Customer',
-          pickup_address: ride.pickup_address || 'Milano Malpensa Airport (MXP)',
+          pickup_address: ride.pickup_address || ride.pickup_location || 'Posizione GPS Attuale',
           pickup_lat: Number(ride.pickup_lat) || 45.6301,
           pickup_lng: Number(ride.pickup_lng) || 8.7231,
-          dropoff_address: ride.dropoff_address || 'Piazza del Duomo, Milano',
-          dropoff_lat: Number(ride.dropoff_lat) || 45.4642,
-          dropoff_lng: Number(ride.dropoff_lng) || 9.1900,
-          // Lettura coordinate reali del customer loggato nel Modulo 5
+          dropoff_address: ride.dropoff_address || ride.destination || 'Destinazione Selezionata',
+          dropoff_lat: Number(ride.destination_lat || ride.dropoff_lat) || 45.4642,
+          dropoff_lng: Number(ride.destination_lng || ride.dropoff_lng) || 9.1900,
           passenger_lat: Number(ride.passenger_lat || ride.pickup_lat) || 45.6301,
           passenger_lng: Number(ride.passenger_lng || ride.pickup_lng) || 8.7231,
-          fare_amount: Number(ride.fare_amount || 0),
+          fare_amount: Number(ride.fare || ride.fare_amount || 15.00),
           status: ride.status
         });
       } else {
         setActiveRide(null);
       }
     } catch (err: unknown) {
-      // eslint-disable-next-line no-console
       console.error("Error fetching assigned ride:", err);
     } finally {
       setFetchingRide(false);
@@ -164,20 +199,20 @@ export default function DriverHQPage() {
     if (!authorizedDriver) return;
     const newStatus = !isOnline;
     
-    // Aggiornamento ottimistico dell'UI
     setIsOnline(newStatus);
 
     if (authorizedDriver.id !== 'admin-override-id') {
-      // Aggiorna usando sia ID che Email per sicurezza assoluta su Supabase
       const { error } = await supabase
         .from('driver_profiles')
-        .update({ is_online: newStatus })
+        .update({ 
+          is_online: newStatus,
+          is_available: newStatus 
+        })
         .eq('id', authorizedDriver.id);
 
       if (error) {
-        // eslint-disable-next-line no-console
         console.error("Errore salvataggio status driver:", error.message);
-        setIsOnline(!newStatus); // Rollback in caso di errore DB
+        setIsOnline(!newStatus);
       }
     }
   };
@@ -186,8 +221,37 @@ export default function DriverHQPage() {
     if (!activeRide) return;
 
     try {
-      if (newStatus === 'completed') {
-        // Registra transazione IVA al 12% su dashboard_iva_totale
+      if (newStatus === 'accepted') {
+        // Driver accetta la corsa e diventa OCCUPATO per gli altri clienti
+        const { error } = await supabase
+          .from('rides')
+          .update({ status: 'accepted' })
+          .eq('id', activeRide.id);
+
+        if (error) throw error;
+
+        if (authorizedDriver?.id !== 'admin-override-id') {
+          await supabase
+            .from('driver_profiles')
+            .update({ is_available: false })
+            .eq('id', authorizedDriver?.id);
+        }
+
+        setActiveRide({ ...activeRide, status: 'accepted' });
+
+      } else if (newStatus === 'in_progress') {
+        // Inizia viaggio verso il Drop-off
+        const { error } = await supabase
+          .from('rides')
+          .update({ status: 'in_progress' })
+          .eq('id', activeRide.id);
+
+        if (error) throw error;
+        setActiveRide({ ...activeRide, status: 'in_progress' });
+        alert("🚀 Corsa iniziata! Navigazione impostata verso la destinazione.");
+
+      } else if (newStatus === 'completed') {
+        // Corsa completata -> Driver TORNA DISPONIBILE
         const { error: rpcError } = await supabase.rpc('complete_driver_ride', {
           p_ride_id: activeRide.id,
           p_driver_id: authorizedDriver?.id === 'admin-override-id' ? '00000000-0000-0000-0000-000000000000' : authorizedDriver?.id,
@@ -202,26 +266,25 @@ export default function DriverHQPage() {
             .eq('id', activeRide.id);
         }
 
-        alert("TRIP COMPLETED! Fare recorded & 12% VAT synchronized with HQ Dashboard.");
+        if (authorizedDriver?.id !== 'admin-override-id') {
+          await supabase
+            .from('driver_profiles')
+            .update({ is_available: true })
+            .eq('id', authorizedDriver?.id);
+        }
+
+        alert("✅ TRIP COMPLETED! Il driver è nuovamente disponibile sulla mappa.");
         setActiveRide(null);
         fetchAssignedRide();
-      } else {
-        const { error } = await supabase
-          .from('rides')
-          .update({ status: newStatus })
-          .eq('id', activeRide.id);
-
-        if (error) throw error;
-        setActiveRide({ ...activeRide, status: newStatus });
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      alert("Error updating ride status: " + errorMsg);
+      alert("Errore aggiornamento corsa: " + errorMsg);
     }
   };
 
   const openExternalMaps = (lat: number, lng: number) => {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`, '_blank');
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
   };
 
   if (loading) {
@@ -230,15 +293,14 @@ export default function DriverHQPage() {
         <div className="spinner"></div>
         <span>VERIFYING DRIVER CREDENTIALS...</span>
         <style jsx>{`
-          .loading-screen { min-height: 100vh; background: #080a0c; color: #22d3ee; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; font-family: monospace; font-size: 12px; letter-spacing: 1px; }
-          .spinner { width: 30px; height: 30px; border: 3px solid rgba(34,211,238,0.2); border-top-color: #22d3ee; border-radius: 50%; animation: spin 0.8s linear infinite; }
+          .loading-screen { min-height: 100vh; background: #f8fafc; color: #0284c7; display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: center; font-family: sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+          .spinner { width: 32px; height: 32px; border: 3px solid rgba(2, 132, 199, 0.2); border-top-color: #0284c7; border-radius: 50%; animation: spin 0.8s linear infinite; }
           @keyframes spin { to { transform: rotate(360deg); } }
         `}</style>
       </div>
     );
   }
 
-  // Seleziona le coordinate del bersaglio (Pickup/Customer Pos vs Dropoff)
   const targetLat = activeRide?.status === 'in_progress' 
     ? (activeRide.dropoff_lat || 45.4642) 
     : (activeRide?.passenger_lat || activeRide?.pickup_lat || 45.6301);
@@ -247,7 +309,6 @@ export default function DriverHQPage() {
     ? (activeRide.dropoff_lng || 9.1900) 
     : (activeRide?.passenger_lng || activeRide?.pickup_lng || 8.7231);
   
-  // URL mappa interattiva OpenStreetMap con evidenziazione marker cliente Modulo 5
   const mapInteractiveUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${targetLng - 0.02}%2C${targetLat - 0.02}%2C${targetLng + 0.02}%2C${targetLat + 0.02}&layer=mapnik&marker=${targetLat}%2C${targetLng}`;
 
   return (
@@ -287,7 +348,7 @@ export default function DriverHQPage() {
           <div className="placeholder-card">
             <div className="icon">📡</div>
             <h3>DRIVER IS CURRENTLY OFFLINE</h3>
-            <p>Toggle your status to <strong>ONLINE</strong> to link with active Supabase rides and automatically log VAT revenue.</p>
+            <p>Toggle your status to <strong>ONLINE</strong> to link with active Supabase rides and receive passenger requests.</p>
           </div>
         ) : activeRide ? (
           <div className="ride-card">
@@ -299,7 +360,7 @@ export default function DriverHQPage() {
             <div className="passenger-row">
               <span className="icon">👤</span>
               <div>
-                <label>CUSTOMER MOD 5 (GPS LIVE)</label>
+                <label>CUSTOMER (GPS LIVE)</label>
                 <div>{activeRide.passenger_name}</div>
               </div>
             </div>
@@ -324,7 +385,7 @@ export default function DriverHQPage() {
               </div>
             </div>
 
-            {/* CONTENITORE MAPPA INTERATTIVA CON POSIZIONE REALE CUSTOMER */}
+            {/* MAPPA INTERATTIVA */}
             <div className="map-wrapper">
               <iframe
                 title="Interactive Map Customer GPS Navigation"
@@ -366,75 +427,75 @@ export default function DriverHQPage() {
           <div className="placeholder-card empty">
             <div className="radar-search"></div>
             <h3>SEARCHING FOR EV CUSTOMERS...</h3>
-            <p>Connected to Supabase. Waiting for dispatch allocation or Mod 5 passenger request.</p>
+            <p>Connected to Supabase. Waiting for dispatch allocation or passenger request.</p>
           </div>
         )}
       </main>
 
       <style jsx>{`
-        .driver-wrapper { min-height: 100vh; background: #080a0c; color: #f3f4f6; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 480px; margin: 0 auto; box-sizing: border-box; }
+        .driver-wrapper { min-height: 100vh; background: #f8fafc; color: #0f172a; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 480px; margin: 0 auto; box-sizing: border-box; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #1f2937; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
         .driver-info { display: flex; align-items: center; gap: 12px; }
-        .avatar { width: 40px; height: 40px; background: linear-gradient(135deg, #06b6d4, #3b82f6); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #fff; font-size: 16px; }
-        .title { margin: 0; font-size: 15px; font-weight: 800; color: #fff; }
-        .subtitle { font-size: 11px; color: #9ca3af; }
-        .plate { color: #22d3ee; }
-        .exit-btn { color: #9ca3af; border: 1px solid #374151; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; transition: 0.2s; }
-        .exit-btn:hover { background: #1f2937; color: #fff; }
+        .avatar { width: 42px; height: 42px; background: linear-gradient(135deg, #0284c7, #2563eb); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #fff; font-size: 18px; shadow: 0 2px 8px rgba(2, 132, 199, 0.2); }
+        .title { margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; }
+        .subtitle { font-size: 12px; color: #64748b; }
+        .plate { color: #0284c7; }
+        .exit-btn { color: #64748b; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; transition: 0.2s; background: #fff; }
+        .exit-btn:hover { background: #f1f5f9; color: #0f172a; }
 
-        .status-card { margin-top: 18px; padding: 16px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(8px); }
-        .status-card.offline { background: #11141a; border: 1px solid #1f2937; }
-        .status-card.online { background: rgba(34, 211, 238, 0.08); border: 1px solid rgba(34, 211, 238, 0.4); }
+        .status-card { margin-top: 18px; padding: 16px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+        .status-card.online { border-color: #38bdf8; background: #f0f9ff; }
         .status-info { display: flex; align-items: center; gap: 12px; }
-        .pulse-dot { width: 10px; height: 10px; border-radius: 50%; background: #6b7280; }
+        .pulse-dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }
         .online .pulse-dot { background: #10b981; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
-        .status-title { font-size: 11px; font-weight: 900; letter-spacing: 0.5px; }
-        .status-sub { font-size: 10px; color: #9ca3af; }
-        .toggle-btn { background: #fff; color: #000; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; }
+        .status-title { font-size: 12px; font-weight: 900; letter-spacing: 0.5px; color: #0f172a; }
+        .status-sub { font-size: 11px; color: #64748b; }
+        .toggle-btn { background: #0f172a; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; transition: 0.2s; }
+        .toggle-btn:hover { background: #1e293b; }
 
         .content { margin-top: 24px; }
-        .section-hdr { font-size: 10px; color: #6b7280; letter-spacing: 1.5px; font-weight: 900; margin-bottom: 12px; display: flex; justify-content: space-between; }
-        .syncing { color: #22d3ee; animation: blink 1s infinite; }
+        .section-hdr { font-size: 11px; color: #64748b; letter-spacing: 1.5px; font-weight: 900; margin-bottom: 12px; display: flex; justify-content: space-between; }
+        .syncing { color: #0284c7; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.4; } }
 
-        .ride-card { background: #11141a; border: 1px solid #1f2937; border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .ride-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
         .ride-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-        .ride-badge { background: #1f2937; color: #22d3ee; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-family: monospace; }
-        .ride-price { font-size: 22px; font-weight: 900; color: #10b981; }
+        .ride-badge { background: #f1f5f9; color: #0284c7; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-family: monospace; }
+        .ride-price { font-size: 24px; font-weight: 900; color: #059669; }
 
-        .passenger-row { display: flex; align-items: center; gap: 10px; background: #181c24; padding: 12px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; font-weight: 700; }
-        .passenger-row label { display: block; font-size: 9px; color: #6b7280; font-weight: 800; }
+        .passenger-row { display: flex; align-items: center; gap: 10px; background: #f8fafc; padding: 12px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; font-weight: 700; border: 1px solid #f1f5f9; }
+        .passenger-row label { display: block; font-size: 10px; color: #64748b; font-weight: 800; }
 
         .route-timeline { margin: 16px 0; }
         .point { display: flex; gap: 12px; opacity: 0.5; }
         .point.active { opacity: 1; }
         .point-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
-        .point-dot.pickup { background: #22d3ee; box-shadow: 0 0 8px #22d3ee; }
-        .point-dot.dropoff { background: #f43f5e; box-shadow: 0 0 8px #f43f5e; }
-        .line { width: 2px; height: 20px; background: #374151; margin-left: 5px; margin-top: 2px; margin-bottom: 2px; }
-        .point-details label { font-size: 9px; color: #6b7280; font-weight: 900; letter-spacing: 0.5px; }
-        .point-details p { margin: 2px 0 0 0; font-size: 13px; font-weight: 600; color: #e5e7eb; }
+        .point-dot.pickup { background: #0284c7; box-shadow: 0 0 8px rgba(2, 132, 199, 0.4); }
+        .point-dot.dropoff { background: #e11d48; box-shadow: 0 0 8px rgba(225, 29, 72, 0.4); }
+        .line { width: 2px; height: 20px; background: #cbd5e1; margin-left: 5px; margin-top: 2px; margin-bottom: 2px; }
+        .point-details label { font-size: 10px; color: #64748b; font-weight: 900; letter-spacing: 0.5px; }
+        .point-details p { margin: 2px 0 0 0; font-size: 14px; font-weight: 600; color: #0f172a; }
 
-        .map-wrapper { margin-top: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #1f2937; position: relative; }
-        .map-iframe { width: 100%; height: 200px; border: none; filter: invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%); }
-        .map-nav-btn { width: 100%; background: #181c24; color: #22d3ee; border: none; padding: 12px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; text-align: center; border-top: 1px solid #1f2937; }
-        .map-nav-btn:hover { background: #1f2937; }
+        .map-wrapper { margin-top: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; position: relative; }
+        .map-iframe { width: 100%; height: 200px; border: none; }
+        .map-nav-btn { width: 100%; background: #ffffff; color: #0284c7; border: none; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; text-align: center; border-top: 1px solid #e2e8f0; transition: 0.2s; }
+        .map-nav-btn:hover { background: #f8fafc; }
 
         .action-area { margin-top: 18px; }
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-weight: 900; font-size: 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: 0.2s; }
-        .btn-accept { background: #22d3ee; color: #080a0c; box-shadow: 0 4px 15px rgba(34, 211, 238, 0.3); }
-        .btn-start { background: #3b82f6; color: #fff; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); }
-        .btn-complete { background: #10b981; color: #fff; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
-        .btn:hover { transform: translateY(-1px); }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-weight: 900; font-size: 13px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: 0.2s; }
+        .btn-accept { background: #0284c7; color: #ffffff; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3); }
+        .btn-start { background: #2563eb; color: #ffffff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
+        .btn-complete { background: #059669; color: #ffffff; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+        .btn:hover { transform: translateY(-1px); opacity: 0.95; }
 
-        .placeholder-card { background: #11141a; border: 1px dashed #1f2937; border-radius: 16px; padding: 40px 20px; text-align: center; color: #6b7280; }
-        .placeholder-card h3 { color: #d1d5db; font-size: 14px; font-weight: 800; margin: 12px 0 6px 0; }
+        .placeholder-card { background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 16px; padding: 40px 20px; text-align: center; color: #64748b; }
+        .placeholder-card h3 { color: #0f172a; font-size: 15px; font-weight: 800; margin: 12px 0 6px 0; }
         .placeholder-card p { font-size: 12px; margin: 0; line-height: 1.5; }
         .placeholder-card .icon { font-size: 32px; }
 
-        .radar-search { width: 40px; height: 40px; border: 2px solid #22d3ee; border-radius: 50%; margin: 0 auto; animation: radar 1.5s infinite ease-out; }
+        .radar-search { width: 40px; height: 40px; border: 2px solid #0284c7; border-radius: 50%; margin: 0 auto; animation: radar 1.5s infinite ease-out; }
         @keyframes radar { 0% { transform: scale(0.1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
       `}</style>
     </div>

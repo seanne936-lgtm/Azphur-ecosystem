@@ -201,40 +201,42 @@ export default function EVMobilityPage() {
     }
   };
 
-  // Caricamento dei Driver Online da Supabase (Pin Blu e Lista GRAB)
-  const fetchOnlineDrivers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('driver_profiles')
-        .select('*')
-        .eq('is_online', true);
+  /// Caricamento dei Driver Online e Disponibili da Supabase (Pin Blu e Lista GRAB)
+const fetchOnlineDrivers = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('driver_profiles')
+      .select('*')
+      .eq('is_online', true)
+      .eq('is_available', true); // 👈 Filtra solo i driver liberi (non occupati)
 
-      if (error || !data) return;
+    if (error || !data) return;
 
-      const currentIsAdmin = adminEmails.includes(currentUserEmail.toLowerCase().trim());
+    const currentIsAdmin = adminEmails.includes(currentUserEmail.toLowerCase().trim());
 
-      const filteredDrivers: OnlineDriver[] = data
-        .filter((d: any) => {
-          if (currentIsAdmin && d.email?.toLowerCase().trim() === 'admin@azphur.com') {
-            return false;
-          }
-          return true;
-        })
-        .map((d: any) => ({
-          id: d.id,
-          full_name: d.full_name || 'AZPHUR Driver',
-          vehicle_model: d.vehicle_model || 'Executive EV',
-          vehicle_plate: d.vehicle_plate || 'HQ-DRIVER',
-          lat: Number(d.current_lat || d.lat || FALLBACK_LAT + (Math.random() * 0.01 - 0.005)),
-          lng: Number(d.current_lng || d.lng || FALLBACK_LNG + (Math.random() * 0.01 - 0.005)),
-          email: d.email
-        }));
+    const filteredDrivers: OnlineDriver[] = data
+      .filter((d: any) => {
+        if (currentIsAdmin && d.email?.toLowerCase().trim() === 'admin@azphur.com') {
+          return false;
+        }
+        return true;
+      })
+      .map((d: any) => ({
+        id: d.id,
+        full_name: d.full_name || 'AZPHUR Driver',
+        vehicle_model: d.vehicle_model || 'Executive EV',
+        vehicle_plate: d.vehicle_plate || 'HQ-DRIVER',
+        lat: Number(d.current_lat || d.lat || FALLBACK_LAT + (Math.random() * 0.01 - 0.005)),
+        lng: Number(d.current_lng || d.lng || FALLBACK_LNG + (Math.random() * 0.01 - 0.005)),
+        email: d.email,
+        is_available: d.is_available ?? true
+      }));
 
-      setOnlineDrivers(filteredDrivers);
-    } catch (err: unknown) {
-      console.error("Error fetching online drivers:", err);
-    }
-  };
+    setOnlineDrivers(filteredDrivers);
+  } catch (err: unknown) {
+    console.error("Error fetching online drivers:", err);
+  }
+};
 
   const fetchRealSubStations = async (lat?: number, lng?: number) => {
     const currentLat = lat || FALLBACK_LAT;
