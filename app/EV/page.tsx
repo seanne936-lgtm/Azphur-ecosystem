@@ -486,11 +486,16 @@ export default function EVMobilityPage() {
       .from('rides')
       .insert([
         {
+          id: crypto.randomUUID(),
           passenger_email: currentUserEmail,
           driver_email: driver.email || null,
           driver_id: driver.id,
-          pickup_location: 'La tua Posizione GPS',
-          destination: 'Destinazione Selezionata',
+          // 📍 Inviamo le coordinate reali del tuo GPS
+          pickup_lat: mapCenter[0], 
+          pickup_lng: mapCenter[1],
+          pickup_location: `Posizione GPS (${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)})`,
+          // 🏁 Inviamo la destinazione scritta nella ricerca (o una di default se vuota)
+          destination: searchQuery || 'Destinazione Personalizzata',
           status: 'pending',
           fare: 15.00
         }
