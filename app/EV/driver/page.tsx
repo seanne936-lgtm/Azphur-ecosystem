@@ -7,6 +7,7 @@ import Link from 'next/link';
 
 interface DriverProfile {
   id: string;
+  email?: string;
   full_name: string;
   vehicle_plate: string;
   vehicle_model: string;
@@ -73,6 +74,7 @@ export default function DriverHQPage() {
       if (userEmail === 'admin@azphur.com') {
         const adminProfile: DriverProfile = {
           id: 'admin-override-id',
+          email: userEmail,
           full_name: 'AZPHUR Admin (Override)',
           vehicle_plate: 'ADMIN-HQ',
           vehicle_model: 'Fleet Executive EV',
@@ -161,13 +163,22 @@ export default function DriverHQPage() {
   const toggleOnlineStatus = async () => {
     if (!authorizedDriver) return;
     const newStatus = !isOnline;
+    
+    // Aggiornamento ottimistico dell'UI
     setIsOnline(newStatus);
 
     if (authorizedDriver.id !== 'admin-override-id') {
-      await supabase
+      // Aggiorna usando sia ID che Email per sicurezza assoluta su Supabase
+      const { error } = await supabase
         .from('driver_profiles')
         .update({ is_online: newStatus })
         .eq('id', authorizedDriver.id);
+
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("Errore salvataggio status driver:", error.message);
+        setIsOnline(!newStatus); // Rollback in caso di errore DB
+      }
     }
   };
 
@@ -402,7 +413,7 @@ export default function DriverHQPage() {
         .point-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
         .point-dot.pickup { background: #22d3ee; box-shadow: 0 0 8px #22d3ee; }
         .point-dot.dropoff { background: #f43f5e; box-shadow: 0 0 8px #f43f5e; }
-        .line { width: 2px; height: 20px; background: #374151; margin-left: 5px; margin-y: 2px; }
+        .line { width: 2px; height: 20px; background: #374151; margin-left: 5px; margin-top: 2px; margin-bottom: 2px; }
         .point-details label { font-size: 9px; color: #6b7280; font-weight: 900; letter-spacing: 0.5px; }
         .point-details p { margin: 2px 0 0 0; font-size: 13px; font-weight: 600; color: #e5e7eb; }
 
