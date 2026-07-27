@@ -480,6 +480,34 @@ export default function EVMobilityPage() {
     }
   };
 
+  const handleBookRide = async (driver: OnlineDriver) => {
+  try {
+    const { data, error } = await supabase
+      .from('rides')
+      .insert([
+        {
+          passenger_email: currentUserEmail,
+          driver_email: driver.email || null,
+          driver_id: driver.id,
+          pickup_location: 'La tua Posizione GPS',
+          destination: 'Destinazione Selezionata',
+          status: 'pending',
+          fare: 15.00
+        }
+      ])
+      .select();
+
+    if (error) {
+      alert("❌ ERRORE PRENOTAZIONE: " + error.message);
+    } else {
+      alert("✅ BOOK RIDE INVIATO AL DRIVER!");
+      console.log("Corsa creata con successo:", data);
+    }
+  } catch (err: any) {
+    alert("❌ ERRORE GENERICO: " + err.message);
+  }
+};
+
   const filteredStations = stations.map(station => {
     const sLat = Number(station.lat ?? station.latitude);
     const sLng = Number(station.lng ?? station.longitude);
@@ -778,9 +806,12 @@ export default function EVMobilityPage() {
                             <span className="status-pill">
                               AVAILABLE NOW
                             </span>
-                            <button className="action-btn-go grab">
-                              BOOK RIDE
-                            </button>
+                            <button 
+  className="action-btn-go grab" 
+  onClick={() => handleBookRide(driver)}
+>
+  BOOK RIDE →
+</button>
                           </div>
                         </div>
                       ))
