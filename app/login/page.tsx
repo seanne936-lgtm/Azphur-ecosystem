@@ -136,6 +136,18 @@ export default function LoginPage() {
         const user = data.user;
         const userEmail = user.email ? user.email.toLowerCase().trim() : '';
 
+        // CHECK DRIVER IN DRIVER_PROFILES
+        const { data: isDriver } = await supabase
+          .from('driver_profiles')
+          .select('email')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (isDriver) {
+          router.push('/EV/driver');
+          return;
+        }
+
         const { data: isEvCustomer } = await supabase
           .from('module_05_customers')
           .select('email')
@@ -270,8 +282,12 @@ export default function LoginPage() {
                 GO TO B2B ENTERPRISE ⚡
               </button>
 
-              <button onClick={() => navigateToModule('/var')} className="login-btn-premium btn-admin-blue">
+              <button onClick={() => navigateToModule('/EV')} className="login-btn-premium btn-admin-blue">
                 GO TO EV MOBILITY (MOD_05) 🔋
+              </button>
+
+              <button onClick={() => navigateToModule('/EV/driver')} className="login-btn-premium btn-admin-green">
+                GO TO DRIVER HQ 🚗
               </button>
 
               <button onClick={() => navigateToModule('/s2b')} className="login-btn-premium btn-admin-cyan">
@@ -316,8 +332,7 @@ export default function LoginPage() {
                 <button 
                   type="button" 
                   onClick={() => { setShowRecovery(false); setRecoveryMessage(null); }}
-                 // RIGA CORRETTA
-                 style={{ background: 'none', border: 'none', color: '#0891b2', fontSize: '9px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', color: '#0891b2', fontSize: '9px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer' }}
                 >
                   ← BACK TO SIGN IN
                 </button>
@@ -435,6 +450,7 @@ export default function LoginPage() {
         
         .btn-admin-dark { background: #1d1d1f !important; color: #fff !important; border: 2px solid #22d3ee !important; }
         .btn-admin-blue { background: #3e6ae1 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }
+        .btn-admin-green { background: #10b981 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }
         .btn-admin-cyan { background: #22d3ee !important; color: #1d1d1f !important; border: 2px solid #1d1d1f !important; }
 
         .system-ops-label { font-size: 9px; font-weight: 900; color: #0891b2; letter-spacing: 2px; text-align: center; margin-top: 35px; }

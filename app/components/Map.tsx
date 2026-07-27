@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix per le icone di Leaflet: Posizione Utente (Blu classica)
+// Fix per le icone di Leaflet: Posizione Utente
 const defaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
@@ -23,7 +23,17 @@ const greenStationIcon = L.icon({
   shadowSize: [41, 41]
 });
 
-interface Station {
+// Icona Blu per i Driver Online
+const blueDriverIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+export interface Station {
   id: string;
   name: string;
   kw_power: number;
@@ -35,12 +45,24 @@ interface Station {
   longitude?: number | string;
 }
 
+export interface OnlineDriver {
+  id: string;
+  full_name: string;
+  vehicle_model: string;
+  vehicle_plate: string;
+  lat?: number;
+  lng?: number;
+  email?: string;
+}
+
 interface MapProps {
   center: [number, number];
   stations: Station[];
+  onlineDrivers?: OnlineDriver[];
+  drivers?: OnlineDriver[]; // Alias per retrocompatibilità
 }
 
-// Sotto-componente corretto con controlli di sicurezza rigorosi per evitare crash del setView
+// Sub-componente sicuro per la gestione del cambio coordinate/vista
 const ChangeView = ({ center }: { center: [number, number] }) => {
   const map = useMap();
   
@@ -50,7 +72,6 @@ const ChangeView = ({ center }: { center: [number, number] }) => {
     }
     
     try {
-      // Controllo di sicurezza: se la mappa si sta smontando, getCenter potrebbe fallire
       const currentCenter = map.getCenter();
       if (!currentCenter) return;
 
@@ -64,20 +85,23 @@ const ChangeView = ({ center }: { center: [number, number] }) => {
         }, 100);
       }
     } catch (e) {
-      console.warn("Mappa non ancora pronta per setView:", e);
+      console.warn("Map not ready for setView:", e);
     }
   }, [center, map]);
   
   return null;
 };
 
-const MapComponent = React.memo(function MapComponent({ center, stations }: MapProps) {
+const MapComponent = React.memo(function MapComponent({ center, stations, onlineDrivers, drivers }: MapProps) {
   if (!center || !Array.isArray(center) || center[0] === undefined || center[1] === undefined) {
     return <div style={{ padding: '20px', color: '#0891b2', fontFamily: 'monospace' }}>LOADING_MAP_COORDINATES...</div>;
   }
 
-  // Genera i marker reali passatigli dal Modulo 5
-  const renderedMarkers = useMemo(() => {
+  // Supporta sia onlineDrivers che drivers
+  const activeDriversList = onlineDrivers || drivers || [];
+
+  // Marker delle Stazioni di Ricarica
+  const renderedStationMarkers = useMemo(() => {
     return stations.map((station) => {
       const rawLat = station.lat !== undefined && station.lat !== null ? station.lat : station.latitude;
       const rawLng = station.lng !== undefined && station.lng !== null ? station.lng : station.longitude;
@@ -92,17 +116,16 @@ const MapComponent = React.memo(function MapComponent({ center, stations }: MapP
       }
 
       return (
-        <Marker key={station.id} position={[stationLat, stationLng]} icon={greenStationIcon}>
+        <Marker key={`station-${station.id}`} position={[stationLat, stationLng]} icon={greenStationIcon}>
           <Popup>
             <div style={{ fontFamily: 'sans-serif', fontSize: '12px', color: '#1e293b' }}>
               <strong style={{ fontSize: '13px', color: '#111' }}>{station.name}</strong><br />
-              {/* RIPRISTINATO: Emoji saetta corretta */}
               <span style={{ color: '#22c55e', fontWeight: 'bold' }}>⚡ {station.kw_power} kW</span><br />
               Bays: {station.available_bays}/{station.total_bays} Available
               
               <div style={{ marginTop: '10px' }}>
                 <a 
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${stationLat},${stationLng}`}
+                  href={`https://www.google.com/maps?q=${stationLat},${stationLng}`}
                   target="_blank" 
                   rel="noopener noreferrer"
                   style={{
@@ -118,7 +141,6 @@ const MapComponent = React.memo(function MapComponent({ center, stations }: MapP
                     boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                   }}
                 >
-                  {/* RIPRISTINATO: Emoji mappa corretta */}
                   🗺️ START NAVIGATION
                 </a>
               </div>
@@ -129,8 +151,34 @@ const MapComponent = React.memo(function MapComponent({ center, stations }: MapP
     });
   }, [stations]);
 
-  // FIX DEFINTIVO PER NEXT.JS: Usiamo una key univoca basata sul centro. 
-  // Se cambia bruscamente o la pagina rinfresca, distrugge la vecchia istanza Leaflet ed evita il crash del DOM.
+  // Marker dei Driver Online (Pin Blu con Popup descrittivo)
+  const renderedDriverMarkers = useMemo(() => {
+    return activeDriversList.map((driver) => {
+      if (!driver.lat || !driver.lng || isNaN(driver.lat) || isNaN(driver.lng)) {
+        return null;
+      }
+
+      return (
+        <Marker key={`driver-${driver.id}`} position={[driver.lat, driver.lng]} icon={blueDriverIcon}>
+          <Popup>
+            <div style={{ fontFamily: 'sans-serif', fontSize: '12px', color: '#1e293b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <span style={{ background: '#3b82f6', color: '#fff', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px' }}>
+                  DRIVER ONLINE
+                </span>
+              </div>
+              <strong style={{ fontSize: '13px', color: '#111' }}>{driver.full_name}</strong><br />
+              <div style={{ marginTop: '4px', fontSize: '11px', color: '#64748b' }}>
+                🚗 <strong>Veicolo:</strong> {driver.vehicle_model}<br />
+                🏷️ <strong>Targa:</strong> {driver.vehicle_plate}
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      );
+    });
+  }, [activeDriversList]);
+
   const mapKey = `${center[0]}-${center[1]}`;
 
   return (
@@ -149,26 +197,35 @@ const MapComponent = React.memo(function MapComponent({ center, stations }: MapP
           attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
 
+        {/* Marker posizione Utente corrente */}
         <Marker position={center} icon={defaultIcon}>
           <Popup>
             <div style={{ fontFamily: 'monospace', fontSize: '11px' }}>
-              {/* RIPRISTINATO: Emoji pin corretta */}
-              <strong>📌 YOUR_POSITION</strong><br />
+              <strong>📍 YOUR_POSITION</strong><br />
               GPS Uplink Active.
             </div>
           </Popup>
         </Marker>
 
-        {renderedMarkers}
+        {/* Stazioni di Ricarica */}
+        {renderedStationMarkers}
+
+        {/* Driver Online */}
+        {renderedDriverMarkers}
       </MapContainer>
     </div>
   );
 }, (prevProps, nextProps) => {
+  const prevDrivers = prevProps.onlineDrivers || prevProps.drivers || [];
+  const nextDrivers = nextProps.onlineDrivers || nextProps.drivers || [];
+
   return (
     prevProps.center[0] === nextProps.center[0] &&
     prevProps.center[1] === nextProps.center[1] &&
     prevProps.stations.length === nextProps.stations.length &&
-    JSON.stringify(prevProps.stations) === JSON.stringify(nextProps.stations)
+    prevDrivers.length === nextDrivers.length &&
+    JSON.stringify(prevProps.stations) === JSON.stringify(nextProps.stations) &&
+    JSON.stringify(prevDrivers) === JSON.stringify(nextDrivers)
   );
 });
 

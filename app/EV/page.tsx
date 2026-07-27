@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
-// Import dinamico del componente Mappa per evitare crash SSR sul server
+// Dynamic import della mappa per evitare SSR hydration errors
 const MapComponent = dynamic(() => import('../components/Map'), {
   ssr: false,
   loading: () => (
@@ -20,13 +20,15 @@ interface TickerStats {
   mw: number;
 }
 
-interface VehicleMock {
+interface Vehicle {
   id: string;
   model: string;
   plate: string;
   battery: number;
   status: 'AVAILABLE' | 'IN_USE' | 'MAINTENANCE';
-  distance: string;
+  distance?: string;
+  lat?: number;
+  lng?: number;
 }
 
 interface StationMock {
@@ -44,9 +46,18 @@ interface StationMock {
   longitude?: number;
 }
 
-// CORREZIONE CHIRURGICA: Funzione matematica per calcolare la distanza reale in KM
+interface OnlineDriver {
+  id: string;
+  full_name: string;
+  vehicle_model: string;
+  vehicle_plate: string;
+  lat?: number;
+  lng?: number;
+  email?: string;
+}
+
 const calculateHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371; // Raggio della Terra in KM
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = 
@@ -113,13 +124,14 @@ export default function EVMobilityPage() {
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string>('');
 
-  const [activeService, setActiveService] = useState<'CHARGING' | 'SHARING'>('CHARGING');
+  const [activeService, setActiveService] = useState<'CHARGING' | 'GRAB'>('CHARGING');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [vehicles, setVehicles] = useState<VehicleMock[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [stations, setStations] = useState<StationMock[]>([]);
+  const [onlineDrivers, setOnlineDrivers] = useState<OnlineDriver[]>([]);
   
   const [geoStatus, setGeoStatus] = useState<string>("INITIALIZING_GPS_STREAM...");
-  const FALLBACK_LAT = 45.8342; // Fallback impostato direttamente su Como/Tavernola per coerenza visiva
+  const FALLBACK_LAT = 45.8342;
   const FALLBACK_LNG = 9.0718;
 
   const [mapCenter, setMapCenter] = useState<[number, number]>([FALLBACK_LAT, FALLBACK_LNG]);
@@ -137,7 +149,7 @@ export default function EVMobilityPage() {
         .maybeSingle();
       if (error) throw error;
       return !!data;
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error verifying Module 5 privileges:", err);
       return false;
     }
@@ -155,6 +167,72 @@ export default function EVMobilityPage() {
       return !!data;
     } catch {
       return false;
+    }
+  };
+
+  // Caricamento flotte reali da Supabase
+  const fetchRealVehicles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*');
+
+      if (error || !data || data.length === 0) {
+        setVehicles([
+          { id: "EV-CAR-01", model: "AZPHUR Pod S", plate: "NEX-2026", battery: 84, status: "AVAILABLE", distance: "0.3 km" },
+          { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2 km" }
+        ]);
+        return;
+      }
+
+      const formatted: Vehicle[] = data.map((v: any) => ({
+        id: v.id || v.vehicle_id,
+        model: v.model || v.name || 'AZPHUR Fleet EV',
+        plate: v.plate || v.vehicle_plate || 'EV-LIVE',
+        battery: Number(v.battery || v.battery_level || 100),
+        status: (v.status || 'AVAILABLE').toUpperCase() as any,
+        lat: Number(v.lat || v.latitude),
+        lng: Number(v.lng || v.longitude)
+      }));
+
+      setVehicles(formatted);
+    } catch (err: unknown) {
+      console.error("Error fetching vehicles from Supabase:", err);
+    }
+  };
+
+  // Caricamento dei Driver Online da Supabase (Pin Blu e Lista GRAB)
+  const fetchOnlineDrivers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('driver_profiles')
+        .select('*')
+        .eq('is_online', true);
+
+      if (error || !data) return;
+
+      const currentIsAdmin = adminEmails.includes(currentUserEmail.toLowerCase().trim());
+
+      const filteredDrivers: OnlineDriver[] = data
+        .filter((d: any) => {
+          if (currentIsAdmin && d.email?.toLowerCase().trim() === 'admin@azphur.com') {
+            return false;
+          }
+          return true;
+        })
+        .map((d: any) => ({
+          id: d.id,
+          full_name: d.full_name || 'AZPHUR Driver',
+          vehicle_model: d.vehicle_model || 'Executive EV',
+          vehicle_plate: d.vehicle_plate || 'HQ-DRIVER',
+          lat: Number(d.current_lat || d.lat || FALLBACK_LAT + (Math.random() * 0.01 - 0.005)),
+          lng: Number(d.current_lng || d.lng || FALLBACK_LNG + (Math.random() * 0.01 - 0.005)),
+          email: d.email
+        }));
+
+      setOnlineDrivers(filteredDrivers);
+    } catch (err: unknown) {
+      console.error("Error fetching online drivers:", err);
     }
   };
 
@@ -190,7 +268,7 @@ export default function EVMobilityPage() {
       } else {
         await triggerDatabaseFallback();
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error fetching sub_stations via API:", err);
       await triggerDatabaseFallback();
     }
@@ -230,15 +308,18 @@ export default function EVMobilityPage() {
             setMapCenter([latitude, longitude]);
           }
           fetchRealSubStations(latitude, longitude);
+          fetchRealVehicles();
+          fetchOnlineDrivers();
         },
-        (error) => {
-          console.warn("GPS Access Denied. Using fallback coordinates.");
+        () => {
           setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK");
           
           if (updateMap && typeof setMapCenter === 'function') {
             setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
           }
           fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+          fetchRealVehicles();
+          fetchOnlineDrivers();
         },
         { enableHighAccuracy: false, timeout: 4000 }
       );
@@ -248,6 +329,8 @@ export default function EVMobilityPage() {
         setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
       }
       fetchRealSubStations(FALLBACK_LAT, FALLBACK_LNG);
+      fetchRealVehicles();
+      fetchOnlineDrivers();
     }
   };
 
@@ -264,17 +347,12 @@ export default function EVMobilityPage() {
           if (hasModule5Access) {
             setCurrentUserEmail(emailClean);
             setIsAuthenticated(true);
-            setVehicles([
-              { id: "EV-CAR-01", model: "AZPHUR Pod S", plate: "NEX-2026", battery: 84, status: "AVAILABLE", distance: "350m away" },
-              { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2km away" },
-              { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
-            ]);
             triggerLocationAcquisition(true);
           } else {
             router.push('/s2b');
           }
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error("Error checking initial session:", err);
       } finally {
         setGlobalLoading(false);
@@ -297,13 +375,6 @@ export default function EVMobilityPage() {
         if (hasModule5Access) {
           setCurrentUserEmail(emailClean);
           setIsAuthenticated(true);
-          
-          setVehicles([
-            { id: "EV-CAR-01", model: "AZPHUR Pod S", plate: "NEX-2026", battery: 84, status: "AVAILABLE", distance: "350m away" },
-            { id: "EV-CAR-02", model: "AZPHUR Cargo E", plate: "LAL-9981", battery: 42, status: "AVAILABLE", distance: "1.2km away" },
-            { id: "EV-CAR-03", model: "AZPHUR Pod X", plate: "GRB-4412", battery: 95, status: "IN_USE", distance: "800m away" }
-          ]);
-          
           triggerLocationAcquisition(true);
         } else {
           setIsAuthenticated(false);
@@ -317,10 +388,14 @@ export default function EVMobilityPage() {
       setGlobalLoading(false);
     });
 
+    // Realtime listeners per driver e stazioni
     const channel = supabase
-      .channel('realtime-sub-stations')
+      .channel('realtime-mod5-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sub_stations' }, () => {
         triggerLocationAcquisition(false); 
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_profiles' }, () => {
+        fetchOnlineDrivers();
       })
       .subscribe();
 
@@ -386,7 +461,7 @@ export default function EVMobilityPage() {
       if (authError) {
         setAuthError("INVALID_CREDENTIALS: Incorrect security code.");
       }
-    } catch (err) {
+    } catch {
       setAuthError('An unexpected authentication anomaly occurred.');
     } finally {
       setAuthLoading(false);
@@ -398,14 +473,13 @@ export default function EVMobilityPage() {
       setGlobalLoading(true);
       await supabase.auth.signOut();
       window.location.href = '/';
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Logout Error:", err);
     } finally {
       setGlobalLoading(false);
     }
   };
 
-  // CORREZIONE CHIRURGICA: Calcoliamo dinamicamente i KM veri prima di filtrare le stazioni
   const filteredStations = stations.map(station => {
     const sLat = Number(station.lat ?? station.latitude);
     const sLng = Number(station.lng ?? station.longitude);
@@ -422,9 +496,10 @@ export default function EVMobilityPage() {
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredVehicles = vehicles.filter(v => 
-    v.model.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    v.plate.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredDrivers = onlineDrivers.filter(d => 
+    d.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    d.vehicle_model.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    d.vehicle_plate.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (!isClient || globalLoading) {
@@ -471,7 +546,7 @@ export default function EVMobilityPage() {
           .error-banner { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; font-size: 10px; font-weight: 700; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
           .encryption-tag { font-size: 8px; font-family: 'JetBrains Mono', monospace; color: #94a3b8; text-align: center; margin-top: 15px; display: block; font-weight: bold; }
         `}</style>
-        
+
         <TopTicker />
 
         <nav className="nav-minimal-lux">
@@ -556,7 +631,7 @@ export default function EVMobilityPage() {
         .service-selector { display: grid; grid-template-columns: 1fr 1fr; background: #f1f5f9; padding: 4px; border-radius: 12px; margin-bottom: 20px; gap: 4px; }
         .service-tab { border: none; background: transparent; padding: 12px 6px; font-size: 11px; font-weight: 800; color: #64748b; border-radius: 10px; cursor: pointer; transition: 0.2s; letter-spacing: 0.5px; text-align: center; }
         .active-charging { background: #ffffff; color: #3e6ae1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .active-sharing { background: #ffffff; color: #10b981; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .active-grab { background: #ffffff; color: #0284c7; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         .search-input { width: 100%; padding: 14px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 13px; font-weight: 600; outline: none; box-sizing: border-box; margin-bottom: 24px; }
         .feed-title { font-size: 10px; font-weight: 900; color: #94a3b8; letter-spacing: 1.5px; margin-bottom: 14px; display: block; }
         .card-list { display: flex; flex-direction: column; gap: 12px; }
@@ -568,27 +643,23 @@ export default function EVMobilityPage() {
         .bay-badge { font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
         .bay-badge.green { background: #d1fae5; color: #065f46; }
         .bay-badge.red { background: #fee2e2; color: #991b1b; }
-        .battery-indicator { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; background: #f1f5f9; white-space: nowrap; }
-        .battery-indicator.high { color: #10b981; }
-        .battery-indicator.low { color: #f59e0b; }
+        .driver-badge { font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 6px; background: #e0f2fe; color: #0369a1; white-space: nowrap; }
         .card-footer-info { display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #f1f5f9; padding-top: 14px; gap: 10px; }
         .price-tag { font-size: 14px; font-weight: 800; color: #1e293b; }
-        .status-pill { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
-        .status-pill.available { color: #10b981; }
-        .status-pill.in_use { color: #64748b; }
+        .status-pill { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #10b981; }
         .action-btn-go { border: none; background: #3e6ae1; color: white; padding: 8px 16px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s; white-space: nowrap; }
         .action-btn-go:hover { background: #111; }
-        .action-btn-go.sharing { background: #10b981; }
+        .action-btn-go.grab { background: #0284c7; }
+        .action-btn-go.grab:hover { background: #0369a1; }
         .action-btn-go:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
         .map-canvas { flex: 1; background: #edf2f7; position: relative; display: flex; flex-direction: column; }
         .map-overlay-stats { position: absolute; top: 20px; left: 20px; display: flex; gap: 10px; z-index: 50; flex-wrap: wrap; right: 20px; }
         .mini-stat-pill { background: #1e293b; color: white; padding: 6px 14px; border-radius: 100px; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .map-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; padding: 0; overflow: hidden; }
-        
+
         @keyframes marquee { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
         @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } }
-        @keyframes radarPulse { 0% { transform: scale(0.2); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
 
         @media (max-width: 900px) {
           .nav-minimal-lux { padding: 20px; flex-direction: column; gap: 20px; text-align: center; }
@@ -644,24 +715,24 @@ export default function EVMobilityPage() {
                   ⚡ CHARGING
                 </button>
                 <button 
-                  className={`service-tab ${activeService === 'SHARING' ? 'active-sharing' : ''}`}
-                  onClick={() => { setActiveService('SHARING'); setSearchQuery(''); }}
+                  className={`service-tab ${activeService === 'GRAB' ? 'active-grab' : ''}`}
+                  onClick={() => { setActiveService('GRAB'); setSearchQuery(''); }}
                 >
-                  🚗 SHARING
+                  🚖 GRAB
                 </button>
               </div>
 
               <input 
                 type="text" 
                 className="search-input" 
-                placeholder={activeService === 'CHARGING' ? "Filter charging stations..." : "Filter fleet vehicles..."}
+                placeholder={activeService === 'CHARGING' ? "Filter charging stations..." : "Filter online drivers or vehicles..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
 
               <div className="feed-container">
                 <span className="feed-title">
-                  {activeService === 'CHARGING' ? 'AVAILABLE CHARGING NODES' : 'VEHICLES READY FOR DEPLOYMENT'}
+                  {activeService === 'CHARGING' ? 'AVAILABLE CHARGING NODES' : 'ONLINE DRIVERS READY FOR RIDE'}
                 </span>
                 
                 <div className="card-list">
@@ -681,7 +752,7 @@ export default function EVMobilityPage() {
                           </span>
                         </div>
                         <div className="card-footer-info">
-                          <span className="price-tag">₱{station.price_per_kwh.toFixed(2)}/kWh</span>
+                          <span className="price-tag">€{station.price_per_kwh.toFixed(2)}/kWh</span>
                           <button className="action-btn-go" disabled={station.available_bays === 0}>
                             {station.available_bays > 0 ? 'CHARGE' : 'OCCUPIED'}
                           </button>
@@ -689,30 +760,35 @@ export default function EVMobilityPage() {
                       </div>
                     ))
                   ) : (
-                    filteredVehicles.map((vehicle) => (
-                      <div className="mobility-card" key={vehicle.id}>
-                        <div className="card-main-info">
-                          <div>
-                            <h3 className="node-title">{vehicle.model}</h3>
-                            <p className="node-sub">{vehicle.plate} • {vehicle.distance}</p>
+                    filteredDrivers.length > 0 ? (
+                      filteredDrivers.map((driver) => (
+                        <div className="mobility-card" key={driver.id}>
+                          <div className="card-main-info">
+                            <div>
+                              <h3 className="node-title">{driver.full_name}</h3>
+                              <p className="node-sub">
+                                🚗 {driver.vehicle_model} • 🏷️ {driver.vehicle_plate}
+                              </p>
+                            </div>
+                            <span className="driver-badge">
+                              ONLINE
+                            </span>
                           </div>
-                          <span className={`battery-indicator ${vehicle.battery > 50 ? 'high' : 'low'}`}>
-                            🔋 {vehicle.battery}%
-                          </span>
+                          <div className="card-footer-info">
+                            <span className="status-pill">
+                              AVAILABLE NOW
+                            </span>
+                            <button className="action-btn-go grab">
+                              BOOK RIDE
+                            </button>
+                          </div>
                         </div>
-                        <div className="card-footer-info">
-                          <span className={`status-pill ${vehicle.status.toLowerCase()}`}>
-                            {vehicle.status.replace('_', ' ')}
-                          </span>
-                          <button 
-                            className="action-btn-go sharing" 
-                            disabled={vehicle.status !== 'AVAILABLE'}
-                          >
-                            {vehicle.status === 'AVAILABLE' ? 'START' : 'IN USE'}
-                          </button>
-                        </div>
+                      ))
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '12px' }}>
+                        No drivers currently online.
                       </div>
-                    ))
+                    )
                   )}
                 </div>
               </div>
@@ -721,12 +797,13 @@ export default function EVMobilityPage() {
             <div className="map-canvas">
               <div className="map-overlay-stats">
                 <div className="mini-stat-pill">⚡ 42.8 MW</div>
-                <div className="mini-stat-pill" style={{ background: '#0f766e' }}>🟢 SYNC: ON</div>
+                <div className="mini-stat-pill" style={{ background: '#0284c7' }}>🚖 DRIVERS: {onlineDrivers.length} ONLINE</div>
               </div>
               <div className="map-placeholder" style={{ height: "100%", minHeight: "350px", width: "100%", position: "relative" }}>
                  <MapComponent 
                    center={mapCenter} 
-                   stations={filteredStations} 
+                   stations={filteredStations}
+                   onlineDrivers={onlineDrivers}
                  />
               </div>
             </div>
