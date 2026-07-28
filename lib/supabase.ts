@@ -4,7 +4,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error("ATTENZIONE: Chiavi Supabase mancanti in .env.local!");
+  console.error("ATTENZIONE: Chiavi Supabase mancanti!");
 }
 
 export const supabase = createClient(
