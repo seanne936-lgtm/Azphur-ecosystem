@@ -6,6 +6,7 @@ import { messaging } from '../../lib/firebase';
 import { getToken } from 'firebase/messaging';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { triggerGrabNotification } from '@/lib/notifications';
 
 // Dynamic import della mappa per evitare SSR hydration errors
 const MapComponent = dynamic(() => import('../components/Map'), {
@@ -577,17 +578,24 @@ export default function EVMobilityPage() {
         alert(`✅ RIDE BOOKED! \nDestination sent to the driver: ${userDestination}`);
         console.log("Ride created:", data);
 
-        const { data: driverProfile } = await supabase
+       const { data: driverProfile } = await supabase
           .from('driver_profiles')
           .select('fcm_token')
           .eq('id', driver.id)
           .single();
 
         if (driverProfile?.fcm_token) {
+          await triggerGrabNotification(
+            driverProfile.fcm_token,
+            'DRIVER_NEW_BOOKING'
+          );
+        }
+
+        if (driverProfile?.fcm_token) {
           await sendPushNotification(
             driverProfile.fcm_token,
-            '🚖 Nuova Richiesta Corsa!',
-            `Un cliente vuole andare a: ${userDestination}. Apri l'app per accettare!`
+            '🚖 New Ride Request!',
+            `A customer wants to go to: ${userDestination}. Open the app to accept!`
           );
         }
       }

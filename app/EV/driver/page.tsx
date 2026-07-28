@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { messaging } from '../../../lib/firebase';
 import { getToken } from 'firebase/messaging';
+import { triggerGrabNotification } from '@/lib/notifications';
 
 interface DriverProfile {
   id: string;
@@ -70,7 +71,6 @@ export default function DriverHQPage() {
 
       const permission = await Notification.requestPermission();
       
-      // Verifichiamo che l'istanza messaging esista e sia valida
       if (permission === 'granted' && messaging) {
         const currentToken = await getToken(messaging, {
           vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
@@ -87,20 +87,6 @@ export default function DriverHQPage() {
       }
     } catch (err) {
       console.error("Error during FCM push registration:", err);
-    }
-  };
-
-  // Helper per inviare notifiche push via API Route
-  const sendPushNotification = async (fcmToken: string, title: string, body: string) => {
-    if (!fcmToken) return;
-    try {
-      await fetch('/api/send-notification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fcmToken, title, body }),
-      });
-    } catch (err) {
-      console.error("Error sending push notification to the customer:", err);
     }
   };
 
@@ -255,12 +241,11 @@ export default function DriverHQPage() {
             .eq('id', authorizedDriver?.id);
         }
 
-        // Invia notifica push al cliente notificando che la corsa è stata accettata
+        // Invia notifica push al cliente tramite il sistema centralizzato Grab
         if (activeRide.customer_fcm_token) {
-          await sendPushNotification(
+          await triggerGrabNotification(
             activeRide.customer_fcm_token,
-            '⚡ Corsa Accettata!',
-            'Il tuo driver ha accettato la richiesta ed è in arrivo.'
+            'CLIENT_DRIVER_ACCEPTED'
           );
         }
 
@@ -327,7 +312,6 @@ export default function DriverHQPage() {
     );
   }
 
-  // Dynamic targeting: points to pickup location initially, switches to drop-off coordinates once in progress
   const targetLat = activeRide?.status === 'in_progress' 
     ? (activeRide.dropoff_lat || 45.4642) 
     : (activeRide?.passenger_lat || activeRide?.pickup_lat || 45.6301);
