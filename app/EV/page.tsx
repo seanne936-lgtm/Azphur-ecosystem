@@ -201,42 +201,42 @@ export default function EVMobilityPage() {
     }
   };
 
-  /// Caricamento dei Driver Online e Disponibili da Supabase (Pin Blu e Lista GRAB)
-const fetchOnlineDrivers = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('driver_profiles')
-      .select('*')
-      .eq('is_online', true)
-      .eq('is_available', true); // 👈 Filtra solo i driver liberi (non occupati)
+  // Caricamento dei Driver Online e Disponibili da Supabase
+  const fetchOnlineDrivers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('driver_profiles')
+        .select('*')
+        .eq('is_online', true)
+        .eq('is_available', true);
 
-    if (error || !data) return;
+      if (error || !data) return;
 
-    const currentIsAdmin = adminEmails.includes(currentUserEmail.toLowerCase().trim());
+      const currentIsAdmin = adminEmails.includes(currentUserEmail.toLowerCase().trim());
 
-    const filteredDrivers: OnlineDriver[] = data
-      .filter((d: any) => {
-        if (currentIsAdmin && d.email?.toLowerCase().trim() === 'admin@azphur.com') {
-          return false;
-        }
-        return true;
-      })
-      .map((d: any) => ({
-        id: d.id,
-        full_name: d.full_name || 'AZPHUR Driver',
-        vehicle_model: d.vehicle_model || 'Executive EV',
-        vehicle_plate: d.vehicle_plate || 'HQ-DRIVER',
-        lat: Number(d.current_lat || d.lat || FALLBACK_LAT + (Math.random() * 0.01 - 0.005)),
-        lng: Number(d.current_lng || d.lng || FALLBACK_LNG + (Math.random() * 0.01 - 0.005)),
-        email: d.email,
-        is_available: d.is_available ?? true
-      }));
+      const filteredDrivers: OnlineDriver[] = data
+        .filter((d: any) => {
+          if (currentIsAdmin && d.email?.toLowerCase().trim() === 'admin@azphur.com') {
+            return false;
+          }
+          return true;
+        })
+        .map((d: any) => ({
+          id: d.id,
+          full_name: d.full_name || 'AZPHUR Driver',
+          vehicle_model: d.vehicle_model || 'Executive EV',
+          vehicle_plate: d.vehicle_plate || 'HQ-DRIVER',
+          lat: Number(d.current_lat || d.lat || FALLBACK_LAT + (Math.random() * 0.01 - 0.005)),
+          lng: Number(d.current_lng || d.lng || FALLBACK_LNG + (Math.random() * 0.01 - 0.005)),
+          email: d.email,
+          is_available: d.is_available ?? true
+        }));
 
-    setOnlineDrivers(filteredDrivers);
-  } catch (err: unknown) {
-    console.error("Error fetching online drivers:", err);
-  }
-};
+      setOnlineDrivers(filteredDrivers);
+    } catch (err: unknown) {
+      console.error("Error fetching online drivers:", err);
+    }
+  };
 
   const fetchRealSubStations = async (lat?: number, lng?: number) => {
     const currentLat = lat || FALLBACK_LAT;
@@ -483,56 +483,62 @@ const fetchOnlineDrivers = async () => {
   };
 
   const handleBookRide = async (driver: OnlineDriver) => {
-  try {
-    // 1. Pop-up per far decidere al cliente la destinazione
-    const userDestination = window.prompt("Where do you want to go? Enter the address or destination.:");
+    try {
+      const userDestination = window.prompt("Where do you want to go? Enter the address or destination:");
 
-    // Se l'utente clicca su "Annulla" o lascia vuoto, interrompiamo la prenotazione
-    if (!userDestination || userDestination.trim() === "") {
-      alert("⚠️ Booking cancelled: you must specify a destination..");
-      return;
-    }
+      if (!userDestination || userDestination.trim() === "") {
+        alert("⚠️ Booking cancelled: you must specify a destination.");
+        return;
+      }
 
-    // Coordinate di backup per la destinazione (o quelle attuali se non hai il geocoding inverso attivo)
-    const destLat = mapCenter[0];
-    const destLng = mapCenter[1];
+      let destLat = 45.4642;
+      let destLng = 9.1900;
 
-    // 2. Invio richiesta a Supabase
-    const { data, error } = await supabase
-      .from('rides')
-      .insert([
-        {
-          id: crypto.randomUUID(),
-          passenger_email: currentUserEmail,
-          driver_email: driver.email || null,
-          driver_id: driver.id,
-          
-          // 📍 PUNTO DI PICKUP (Posizione GPS attuale del Cliente)
-          pickup_lat: mapCenter[0], 
-          pickup_lng: mapCenter[1],
-          pickup_location: `GPS: ${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)}`,
-          
-          // 🏁 PUNTO DI DROP-OFF (Destinazione inserita dal Cliente nel pop-up)
-          destination: userDestination,
-          destination_lat: destLat,
-          destination_lng: destLng,
+      try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(userDestination)}`);
+        const results = await response.json();
 
-          status: 'pending',
-          fare: 15.00
+        if (results && results.length > 0) {
+          destLat = parseFloat(results[0].lat);
+          destLng = parseFloat(results[0].lon);
+          console.log(`📍 Exact coordinates found for "${userDestination}":`, destLat, destLng);
+        } else {
+          alert(`⚠️ Exact location not found on map, using approximate coordinates for "${userDestination}".`);
         }
-      ])
-      .select();
+      } catch (geoErr) {
+        console.error("Geocoding error:", geoErr);
+      }
 
-    if (error) {
-      alert("❌ ERRORE PRENOTAZIONE: " + error.message);
-    } else {
-      alert(`✅ RIDE BOOKED! \nDestination sent to the driver: ${userDestination}`);
-      console.log("Ride created:", data);
+      const { data, error } = await supabase
+        .from('rides')
+        .insert([
+          {
+            id: crypto.randomUUID(),
+            passenger_email: currentUserEmail,
+            driver_email: driver.email || null,
+            driver_id: driver.id,
+            pickup_lat: mapCenter[0], 
+            pickup_lng: mapCenter[1],
+            pickup_location: `GPS: ${mapCenter[0].toFixed(4)}, ${mapCenter[1].toFixed(4)}`,
+            destination: userDestination,
+            destination_lat: destLat,
+            destination_lng: destLng,
+            status: 'pending',
+            fare: 15.00
+          }
+        ])
+        .select();
+
+      if (error) {
+        alert("❌ BOOKING ERROR: " + error.message);
+      } else {
+        alert(`✅ RIDE BOOKED! \nDestination sent to the driver: ${userDestination}`);
+        console.log("Ride created:", data);
+      }
+    } catch (err: any) {
+      alert("❌ GENERIC ERROR: " + err.message);
     }
-  } catch (err: any) {
-    alert("❌ GENERIC ERROR: " + err.message);
-  }
-};
+  };
 
   const filteredStations = stations.map(station => {
     const sLat = Number(station.lat ?? station.latitude);
@@ -772,7 +778,7 @@ const fetchOnlineDrivers = async () => {
                   className={`service-tab ${activeService === 'GRAB' ? 'active-grab' : ''}`}
                   onClick={() => { setActiveService('GRAB'); setSearchQuery(''); }}
                 >
-                  🚖 GRAB
+                  🚗 GRAB
                 </button>
               </div>
 
@@ -833,11 +839,11 @@ const fetchOnlineDrivers = async () => {
                               AVAILABLE NOW
                             </span>
                             <button 
-  className="action-btn-go grab" 
-  onClick={() => handleBookRide(driver)}
->
-  BOOK RIDE →
-</button>
+                              className="action-btn-go grab" 
+                              onClick={() => handleBookRide(driver)}
+                            >
+                              BOOK RIDE →
+                            </button>
                           </div>
                         </div>
                       ))
@@ -854,13 +860,15 @@ const fetchOnlineDrivers = async () => {
             <div className="map-canvas">
               <div className="map-overlay-stats">
                 <div className="mini-stat-pill">⚡ 42.8 MW</div>
-                <div className="mini-stat-pill" style={{ background: '#0284c7' }}>🚖 DRIVERS: {onlineDrivers.length} ONLINE</div>
+                <div className="mini-stat-pill" style={{ background: '#0284c7' }}>🚗 DRIVERS: {onlineDrivers.length} ONLINE</div>
               </div>
               <div className="map-placeholder" style={{ height: "100%", minHeight: "350px", width: "100%", position: "relative" }}>
+                 {/* MODIFICA: La mappa ora riceve SOLO le colonnine se in CHARGING o SOLO i driver se in GRAB */}
                  <MapComponent 
                    center={mapCenter} 
-                   stations={filteredStations}
-                   onlineDrivers={onlineDrivers}
+                   stations={activeService === 'CHARGING' ? filteredStations : []}
+                   onlineDrivers={activeService === 'GRAB' ? filteredDrivers : []}
+                   activeService={activeService}
                  />
               </div>
             </div>

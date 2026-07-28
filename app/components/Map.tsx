@@ -23,9 +23,9 @@ const greenStationIcon = L.icon({
   shadowSize: [41, 41]
 });
 
-// Icona Blu per i Driver Online
-const blueDriverIcon = L.icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+// Icona Gialla per i Driver Online (GRAB)
+const yellowDriverIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
@@ -60,6 +60,7 @@ interface MapProps {
   stations: Station[];
   onlineDrivers?: OnlineDriver[];
   drivers?: OnlineDriver[]; // Alias per retrocompatibilità
+  activeService?: 'CHARGING' | 'GRAB'; // Prop per gestire il cambio di vista
 }
 
 // Sub-componente sicuro per la gestione del cambio coordinate/vista
@@ -92,7 +93,7 @@ const ChangeView = ({ center }: { center: [number, number] }) => {
   return null;
 };
 
-const MapComponent = React.memo(function MapComponent({ center, stations, onlineDrivers, drivers }: MapProps) {
+const MapComponent = React.memo(function MapComponent({ center, stations, onlineDrivers, drivers, activeService }: MapProps) {
   if (!center || !Array.isArray(center) || center[0] === undefined || center[1] === undefined) {
     return <div style={{ padding: '20px', color: '#0891b2', fontFamily: 'monospace' }}>LOADING_MAP_COORDINATES...</div>;
   }
@@ -100,7 +101,7 @@ const MapComponent = React.memo(function MapComponent({ center, stations, online
   // Supporta sia onlineDrivers che drivers
   const activeDriversList = onlineDrivers || drivers || [];
 
-  // Marker delle Stazioni di Ricarica
+  // Marker delle Stazioni di Ricarica (Icona Verde)
   const renderedStationMarkers = useMemo(() => {
     return stations.map((station) => {
       const rawLat = station.lat !== undefined && station.lat !== null ? station.lat : station.latitude;
@@ -125,7 +126,7 @@ const MapComponent = React.memo(function MapComponent({ center, stations, online
               
               <div style={{ marginTop: '10px' }}>
                 <a 
-                  href={`https://www.google.com/maps?q=${stationLat},${stationLng}`}
+                  href={`https://maps.google.com/?q=${stationLat},${stationLng}`}
                   target="_blank" 
                   rel="noopener noreferrer"
                   style={{
@@ -151,7 +152,7 @@ const MapComponent = React.memo(function MapComponent({ center, stations, online
     });
   }, [stations]);
 
-  // Marker dei Driver Online (Pin Blu con Popup descrittivo)
+  // Marker dei Driver Online (Pin Giallo per la modalità GRAB)
   const renderedDriverMarkers = useMemo(() => {
     return activeDriversList.map((driver) => {
       if (!driver.lat || !driver.lng || isNaN(driver.lat) || isNaN(driver.lng)) {
@@ -159,11 +160,11 @@ const MapComponent = React.memo(function MapComponent({ center, stations, online
       }
 
       return (
-        <Marker key={`driver-${driver.id}`} position={[driver.lat, driver.lng]} icon={blueDriverIcon}>
+        <Marker key={`driver-${driver.id}`} position={[driver.lat, driver.lng]} icon={yellowDriverIcon}>
           <Popup>
             <div style={{ fontFamily: 'sans-serif', fontSize: '12px', color: '#1e293b' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                <span style={{ background: '#3b82f6', color: '#fff', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px' }}>
+                <span style={{ background: '#eab308', color: '#111', fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px' }}>
                   DRIVER ONLINE
                 </span>
               </div>
@@ -179,7 +180,7 @@ const MapComponent = React.memo(function MapComponent({ center, stations, online
     });
   }, [activeDriversList]);
 
-  const mapKey = `${center[0]}-${center[1]}`;
+  const mapKey = `${center[0]}-${center[1]}-${activeService || 'default'}`;
 
   return (
     <div style={{ height: "100%", minHeight: "350px", width: "100%", borderRadius: "inherit", overflow: "hidden" }}>
@@ -222,6 +223,7 @@ const MapComponent = React.memo(function MapComponent({ center, stations, online
   return (
     prevProps.center[0] === nextProps.center[0] &&
     prevProps.center[1] === nextProps.center[1] &&
+    prevProps.activeService === nextProps.activeService &&
     prevProps.stations.length === nextProps.stations.length &&
     prevDrivers.length === nextDrivers.length &&
     JSON.stringify(prevProps.stations) === JSON.stringify(nextProps.stations) &&

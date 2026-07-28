@@ -41,7 +41,7 @@ export default function DriverHQPage() {
     checkDriverAuth();
   }, []);
 
-  // Ascolto in tempo reale per corse assegnate e aggiornamenti GPS customer
+  // Real-time listener for assigned rides and live updates
   useEffect(() => {
     if (authorizedDriver) {
       fetchAssignedRide();
@@ -59,7 +59,7 @@ export default function DriverHQPage() {
     }
   }, [authorizedDriver]);
 
-  // Controllo autenticazione Driver
+  // Driver Authentication Check
   const checkDriverAuth = async () => {
     try {
       setLoading(true);
@@ -72,7 +72,7 @@ export default function DriverHQPage() {
 
       const userEmail = session.user.email?.toLowerCase().trim();
 
-      // BYPASS ADMIN: Accesso diretto immediato per test
+      // ADMIN BYPASS: Direct access for testing
       if (userEmail === 'admin@azphur.com') {
         const adminProfile: DriverProfile = {
           id: 'admin-override-id',
@@ -88,7 +88,7 @@ export default function DriverHQPage() {
         return;
       }
 
-      // Verifica tabella driver_profiles
+      // Check driver_profiles table
       const { data: driverData, error } = await supabase
         .from('driver_profiles')
         .select('*')
@@ -112,43 +112,7 @@ export default function DriverHQPage() {
     }
   };
 
-  // 🚗 QUANDO IL DRIVER ACCETTA LA CORSA -> DIVENTA OCCUPATO
-const handleAcceptRide = async (rideId: string) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return;
-
-  // 1. Aggiorna lo stato della corsa
-  await supabase
-    .from('rides')
-    .update({ status: 'accepted' })
-    .eq('id', rideId);
-
-  // 2. Nasconde il driver dalla mappa dei clienti
-  await supabase
-    .from('driver_profiles')
-    .update({ is_available: false })
-    .eq('id', session.user.id);
-};
-
-// 🏁 QUANDO IL DRIVER COMPLETA O ANNULLA LA CORSA -> TORNA LIBERO
-const handleCompleteRide = async (rideId: string) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return;
-
-  // 1. Chiude la corsa
-  await supabase
-    .from('rides')
-    .update({ status: 'completed' })
-    .eq('id', rideId);
-
-  // 2. Rilancia il driver sulla mappa per i clienti
-  await supabase
-    .from('driver_profiles')
-    .update({ is_available: true })
-    .eq('id', session.user.id);
-};
-
-  // Recupera la corsa reale attiva
+  // Fetch active assigned ride
   const fetchAssignedRide = async () => {
     if (!authorizedDriver) return;
     setFetchingRide(true);
@@ -174,12 +138,12 @@ const handleCompleteRide = async (rideId: string) => {
         setActiveRide({
           id: ride.id,
           passenger_name: ride.passenger_name || ride.customer_email || 'Verified EV Customer',
-          pickup_address: ride.pickup_address || ride.pickup_location || 'Posizione GPS Attuale',
+          pickup_address: ride.pickup_address || ride.pickup_location || 'Current GPS Position',
           pickup_lat: Number(ride.pickup_lat) || 45.6301,
           pickup_lng: Number(ride.pickup_lng) || 8.7231,
-          dropoff_address: ride.dropoff_address || ride.destination || 'Destinazione Selezionata',
-          dropoff_lat: Number(ride.destination_lat || ride.dropoff_lat) || 45.4642,
-          dropoff_lng: Number(ride.destination_lng || ride.dropoff_lng) || 9.1900,
+          dropoff_address: ride.dropoff_address || ride.destination || 'Selected Destination',
+          dropoff_lat: Number(ride.dropoff_lat || ride.destination_lat) || 45.4642,
+          dropoff_lng: Number(ride.dropoff_lng || ride.destination_lng) || 9.1900,
           passenger_lat: Number(ride.passenger_lat || ride.pickup_lat) || 45.6301,
           passenger_lng: Number(ride.passenger_lng || ride.pickup_lng) || 8.7231,
           fare_amount: Number(ride.fare || ride.fare_amount || 15.00),
@@ -211,7 +175,7 @@ const handleCompleteRide = async (rideId: string) => {
         .eq('id', authorizedDriver.id);
 
       if (error) {
-        console.error("Errore salvataggio status driver:", error.message);
+        console.error("Error saving driver status:", error.message);
         setIsOnline(!newStatus);
       }
     }
@@ -222,7 +186,6 @@ const handleCompleteRide = async (rideId: string) => {
 
     try {
       if (newStatus === 'accepted') {
-        // Driver accetta la corsa e diventa OCCUPATO per gli altri clienti
         const { error } = await supabase
           .from('rides')
           .update({ status: 'accepted' })
@@ -240,7 +203,6 @@ const handleCompleteRide = async (rideId: string) => {
         setActiveRide({ ...activeRide, status: 'accepted' });
 
       } else if (newStatus === 'in_progress') {
-        // Inizia viaggio verso il Drop-off
         const { error } = await supabase
           .from('rides')
           .update({ status: 'in_progress' })
@@ -248,10 +210,9 @@ const handleCompleteRide = async (rideId: string) => {
 
         if (error) throw error;
         setActiveRide({ ...activeRide, status: 'in_progress' });
-        alert("🚀 Corsa iniziata! Navigazione impostata verso la destinazione.");
+        alert("🚀 Trip started! Navigation has switched to the destination drop-off.");
 
       } else if (newStatus === 'completed') {
-        // Corsa completata -> Driver TORNA DISPONIBILE
         const { error: rpcError } = await supabase.rpc('complete_driver_ride', {
           p_ride_id: activeRide.id,
           p_driver_id: authorizedDriver?.id === 'admin-override-id' ? '00000000-0000-0000-0000-000000000000' : authorizedDriver?.id,
@@ -273,18 +234,19 @@ const handleCompleteRide = async (rideId: string) => {
             .eq('id', authorizedDriver?.id);
         }
 
-        alert("✅ TRIP COMPLETED! Il driver è nuovamente disponibile sulla mappa.");
+        alert("✅ TRIP COMPLETED! Driver is available again on the map.");
         setActiveRide(null);
         fetchAssignedRide();
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      alert("Errore aggiornamento corsa: " + errorMsg);
+      alert("Error updating ride status: " + errorMsg);
     }
   };
 
+  // Fixed external map navigation link
   const openExternalMaps = (lat: number, lng: number) => {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+    window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
   };
 
   if (loading) {
@@ -301,6 +263,7 @@ const handleCompleteRide = async (rideId: string) => {
     );
   }
 
+  // Dynamic targeting: points to pickup location initially, switches to drop-off coordinates once in progress
   const targetLat = activeRide?.status === 'in_progress' 
     ? (activeRide.dropoff_lat || 45.4642) 
     : (activeRide?.passenger_lat || activeRide?.pickup_lat || 45.6301);
@@ -324,7 +287,7 @@ const handleCompleteRide = async (rideId: string) => {
         <Link href="/EV" className="exit-btn">EXIT HQ</Link>
       </header>
 
-      {/* CARD TOGGLE STATO DRIVER */}
+      {/* STATUS TOGGLE CARD */}
       <div className={`status-card ${isOnline ? 'online' : 'offline'}`}>
         <div className="status-info">
           <div className="pulse-dot"></div>
@@ -385,8 +348,11 @@ const handleCompleteRide = async (rideId: string) => {
               </div>
             </div>
 
-            {/* MAPPA INTERATTIVA */}
+            {/* DYNAMIC INTERACTIVE MAP & NAVIGATION */}
             <div className="map-wrapper">
+              <div className="map-banner" style={{ background: activeRide.status === 'in_progress' ? '#e11d48' : '#0284c7', color: '#fff', padding: '6px 12px', fontSize: '10px', fontWeight: '900', letterSpacing: '0.5px', textAlign: 'center' }}>
+                {activeRide.status === 'in_progress' ? '🚗 NAVIGATION TO DESTINATION DROP-OFF' : '📍 NAVIGATION TO CUSTOMER PICKUP'}
+              </div>
               <iframe
                 title="Interactive Map Customer GPS Navigation"
                 src={mapInteractiveUrl}
@@ -398,11 +364,11 @@ const handleCompleteRide = async (rideId: string) => {
                 className="map-nav-btn"
                 onClick={() => openExternalMaps(targetLat, targetLng)}
               >
-                🗺️ LAUNCH NATIVE GOOGLE MAPS NAVIGATION
+                🗺️ {activeRide.status === 'in_progress' ? 'LAUNCH GOOGLE MAPS TO DESTINATION' : 'LAUNCH GOOGLE MAPS TO CUSTOMER'}
               </button>
             </div>
 
-            {/* AZIONI CORSA DRIVER */}
+            {/* DRIVER ACTION AREA */}
             <div className="action-area">
               {activeRide.status === 'pending' && (
                 <button className="btn btn-accept" onClick={() => updateRideStatus('accepted')}>
@@ -437,7 +403,7 @@ const handleCompleteRide = async (rideId: string) => {
         
         .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
         .driver-info { display: flex; align-items: center; gap: 12px; }
-        .avatar { width: 42px; height: 42px; background: linear-gradient(135deg, #0284c7, #2563eb); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #fff; font-size: 18px; shadow: 0 2px 8px rgba(2, 132, 199, 0.2); }
+        .avatar { width: 42px; height: 42px; background: linear-gradient(135deg, #0284c7, #2563eb); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; color: #fff; font-size: 18px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.2); }
         .title { margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; }
         .subtitle { font-size: 12px; color: #64748b; }
         .plate { color: #0284c7; }
