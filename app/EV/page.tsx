@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { messaging } from '../../lib/firebase'; // Controlla che il percorso relativo sia corretto
 import { getToken } from 'firebase/messaging';
 import { useRouter } from 'next/navigation';
