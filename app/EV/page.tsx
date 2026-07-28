@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
+import { messaging } from '../../lib/firebase'; // Controlla che il percorso relativo sia corretto
+import { getToken } from 'firebase/messaging';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
@@ -56,6 +58,22 @@ interface OnlineDriver {
   email?: string;
 }
 
+const [clientFcmToken, setClientFcmToken] = useState<string | null>(null);
+
+// Sotto gli import in cima al file
+const sendPushNotification = async (fcmToken: string, title: string, body: string) => {
+  if (!fcmToken) return;
+  try {
+    await fetch('/api/send-notification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fcmToken, title, body }),
+    });
+  } catch (err) {
+    console.error("Errore invio notifica push:", err);
+  }
+};
+
 const calculateHaversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -108,6 +126,8 @@ const TopTicker: React.FC = () => {
     </div>
   );
 };
+
+
 
 export default function EVMobilityPage() {
   const router = useRouter();
@@ -336,6 +356,32 @@ export default function EVMobilityPage() {
     }
   };
 
+// Richiesta permessi e generazione FCM Token per il cliente
+  useEffect(() => {
+    const registerClientNotifications = async () => {
+      try {
+        if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+        const permission = await Notification.requestPermission();
+
+        if (permission === 'granted' && messaging) {
+          const token = await getToken(messaging, {
+            vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+          });
+
+          if (token) {
+            setClientFcmToken(token);
+            console.log("FCM Token Cliente salvato:", token);
+          }
+        }
+      } catch (err) {
+        console.error("Errore registrazione FCM cliente:", err);
+      }
+    };
+
+    registerClientNotifications();
+  }, []);
+
   useEffect(() => {
     setIsClient(true);
 
@@ -482,7 +528,7 @@ export default function EVMobilityPage() {
     }
   };
 
-  const handleBookRide = async (driver: OnlineDriver) => {
+ const handleBookRide = async (driver: OnlineDriver) => {
     try {
       const userDestination = window.prompt("Where do you want to go? Enter the address or destination:");
 
@@ -509,6 +555,7 @@ export default function EVMobilityPage() {
         console.error("Geocoding error:", geoErr);
       }
 
+      // 1. Salva la corsa nel database Supabase (incluso il token FCM del cliente)
       const { data, error } = await supabase
         .from('rides')
         .insert([
@@ -524,7 +571,8 @@ export default function EVMobilityPage() {
             destination_lat: destLat,
             destination_lng: destLng,
             status: 'pending',
-            fare: 15.00
+            fare: 15.00,
+            customer_fcm_token: clientFcmToken // <-- Token FCM del cliente salvato su DB
           }
         ])
         .select();
@@ -534,6 +582,22 @@ export default function EVMobilityPage() {
       } else {
         alert(`✅ RIDE BOOKED! \nDestination sent to the driver: ${userDestination}`);
         console.log("Ride created:", data);
+
+        // 2. Recupera il token FCM del driver selezionato
+        const { data: driverProfile } = await supabase
+          .from('driver_profiles')
+          .select('fcm_token')
+          .eq('id', driver.id)
+          .single();
+
+        // 3. Spedisci la notifica push al Driver! 🚀
+        if (driverProfile?.fcm_token) {
+          await sendPushNotification(
+            driverProfile.fcm_token,
+            '🚕 Nuova Richiesta Corsa!',
+            `Un cliente vuole andare a: ${userDestination}. Apri l'app per accettare!`
+          );
+        }
       }
     } catch (err: any) {
       alert("❌ GENERIC ERROR: " + err.message);

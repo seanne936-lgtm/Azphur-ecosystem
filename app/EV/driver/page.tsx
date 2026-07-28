@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { messaging } from '../../../lib/firebase';
+import { getToken } from 'firebase/messaging';
 
 interface DriverProfile {
   id: string;
@@ -12,6 +14,7 @@ interface DriverProfile {
   vehicle_plate: string;
   vehicle_model: string;
   is_online: boolean;
+  fcm_token?: string;
 }
 
 interface RealRide {
@@ -27,6 +30,7 @@ interface RealRide {
   passenger_lng?: number;
   fare_amount: number;
   status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  customer_fcm_token?: string;
 }
 
 export default function DriverHQPage() {
@@ -58,6 +62,47 @@ export default function DriverHQPage() {
       };
     }
   }, [authorizedDriver]);
+
+  // Gestione Notifiche Push FCM
+  const registerPushNotifications = async (driverId: string) => {
+    try {
+      if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+      const permission = await Notification.requestPermission();
+      
+      // Verifichiamo che l'istanza messaging esista e sia valida
+      if (permission === 'granted' && messaging) {
+        const currentToken = await getToken(messaging, {
+          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+        });
+
+        if (currentToken && driverId !== 'admin-override-id') {
+          await supabase
+            .from('driver_profiles')
+            .update({ fcm_token: currentToken })
+            .eq('id', driverId);
+            
+          console.log("FCM Token Driver successfully registered:", currentToken);
+        }
+      }
+    } catch (err) {
+      console.error("Error during FCM push registration:", err);
+    }
+  };
+
+  // Helper per inviare notifiche push via API Route
+  const sendPushNotification = async (fcmToken: string, title: string, body: string) => {
+    if (!fcmToken) return;
+    try {
+      await fetch('/api/send-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fcmToken, title, body }),
+      });
+    } catch (err) {
+      console.error("Error sending push notification to the customer:", err);
+    }
+  };
 
   // Driver Authentication Check
   const checkDriverAuth = async () => {
@@ -103,7 +148,12 @@ export default function DriverHQPage() {
       }
 
       setAuthorizedDriver(driverData);
-      setIsOnline(driverData.is_online ?? false);
+      const onlineState = driverData.is_online ?? false;
+      setIsOnline(onlineState);
+
+      if (onlineState) {
+        registerPushNotifications(driverData.id);
+      }
     } catch (err: unknown) {
       console.error("Authorization check error:", err);
       router.push('/login');
@@ -147,7 +197,8 @@ export default function DriverHQPage() {
           passenger_lat: Number(ride.passenger_lat || ride.pickup_lat) || 45.6301,
           passenger_lng: Number(ride.passenger_lng || ride.pickup_lng) || 8.7231,
           fare_amount: Number(ride.fare || ride.fare_amount || 15.00),
-          status: ride.status
+          status: ride.status,
+          customer_fcm_token: ride.customer_fcm_token || ride.fcm_token
         });
       } else {
         setActiveRide(null);
@@ -164,6 +215,10 @@ export default function DriverHQPage() {
     const newStatus = !isOnline;
     
     setIsOnline(newStatus);
+
+    if (newStatus) {
+      registerPushNotifications(authorizedDriver.id);
+    }
 
     if (authorizedDriver.id !== 'admin-override-id') {
       const { error } = await supabase
@@ -198,6 +253,15 @@ export default function DriverHQPage() {
             .from('driver_profiles')
             .update({ is_available: false })
             .eq('id', authorizedDriver?.id);
+        }
+
+        // Invia notifica push al cliente notificando che la corsa è stata accettata
+        if (activeRide.customer_fcm_token) {
+          await sendPushNotification(
+            activeRide.customer_fcm_token,
+            '⚡ Corsa Accettata!',
+            'Il tuo driver ha accettato la richiesta ed è in arrivo.'
+          );
         }
 
         setActiveRide({ ...activeRide, status: 'accepted' });
@@ -246,7 +310,7 @@ export default function DriverHQPage() {
 
   // Fixed external map navigation link
   const openExternalMaps = (lat: number, lng: number) => {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
+    window.open(`http://googleusercontent.com/maps.google.com/${lat},${lng}`, '_blank');
   };
 
   if (loading) {
