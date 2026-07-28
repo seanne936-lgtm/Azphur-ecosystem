@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.109.0",
     "bcrypt": "^6.0.0",
     "firebase": "^12.16.0",
+    "firebase-admin": "^13.10.0",
     "html2pdf.js": "^0.14.0",
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",

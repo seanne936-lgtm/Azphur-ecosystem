@@ -1,4 +1,16 @@
 import { NextResponse } from 'next/server';
+import admin from 'firebase-admin';
+
+// Inizializzazione sicura di Firebase Admin (evita doppie inizializzazioni)
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    }),
+  });
+}
 
 export async function POST(req: Request) {
   try {
@@ -8,27 +20,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'FCM Token mancante' }, { status: 400 });
     }
 
-    // Chiamata diretta all'API FCM legacy/standard di Firebase via fetch
-    const response = await fetch('https://fcm.googleapis.com/fcm/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Usa la Server Key/API Key di Firebase
-        'Authorization': `key=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY}`,
+    // Payload basato sul nuovo standard FCM HTTP v1 tramite Admin SDK
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: title || 'Nuova notifica Azphur',
+        body: body || 'Hai una nuova informazione sulla tua corsa!',
       },
-      body: JSON.stringify({
-        to: fcmToken,
-        notification: {
-          title: title || 'Nuova notifica Azphur',
-          body: body || 'Hai una nuova informazione sulla tua corsa!',
-          icon: '/favicon.ico',
+      webpush: {
+        fcmOptions: {
+          link: '/EV/driver',
         },
-      }),
-    });
+      },
+    };
 
-    const data = await response.json();
+    const response = await admin.messaging().send(message);
 
-    return NextResponse.json({ success: true, result: data });
+    return NextResponse.json({ success: true, messageId: response });
   } catch (error: any) {
     console.error("Errore invio notifica push:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
