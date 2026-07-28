@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { messaging } from '../../lib/firebase'; // Controlla che il percorso relativo sia corretto
+import { messaging } from '../../lib/firebase';
 import { getToken } from 'firebase/messaging';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -57,8 +57,6 @@ interface OnlineDriver {
   lng?: number;
   email?: string;
 }
-
-const [clientFcmToken, setClientFcmToken] = useState<string | null>(null);
 
 // Sotto gli import in cima al file
 const sendPushNotification = async (fcmToken: string, title: string, body: string) => {
@@ -127,8 +125,6 @@ const TopTicker: React.FC = () => {
   );
 };
 
-
-
 export default function EVMobilityPage() {
   const router = useRouter();
   const [liveMs, setLiveMs] = useState<number>(421);
@@ -139,6 +135,9 @@ export default function EVMobilityPage() {
   const [globalLoading, setGlobalLoading] = useState<boolean>(true);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
   
+  // FIX: Spostato correttamente qui dentro il componente principale!
+  const [clientFcmToken, setClientFcmToken] = useState<string | null>(null);
+
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
@@ -190,7 +189,6 @@ export default function EVMobilityPage() {
     }
   };
 
-  // Caricamento flotte reali da Supabase
   const fetchRealVehicles = async () => {
     try {
       const { data, error } = await supabase
@@ -221,7 +219,6 @@ export default function EVMobilityPage() {
     }
   };
 
-  // Caricamento dei Driver Online e Disponibili da Supabase
   const fetchOnlineDrivers = async () => {
     try {
       const { data, error } = await supabase
@@ -356,7 +353,6 @@ export default function EVMobilityPage() {
     }
   };
 
-// Richiesta permessi e generazione FCM Token per il cliente
   useEffect(() => {
     const registerClientNotifications = async () => {
       try {
@@ -436,7 +432,6 @@ export default function EVMobilityPage() {
       setGlobalLoading(false);
     });
 
-    // Realtime listeners per driver e stazioni
     const channel = supabase
       .channel('realtime-mod5-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sub_stations' }, () => {
@@ -528,7 +523,7 @@ export default function EVMobilityPage() {
     }
   };
 
- const handleBookRide = async (driver: OnlineDriver) => {
+  const handleBookRide = async (driver: OnlineDriver) => {
     try {
       const userDestination = window.prompt("Where do you want to go? Enter the address or destination:");
 
@@ -555,7 +550,6 @@ export default function EVMobilityPage() {
         console.error("Geocoding error:", geoErr);
       }
 
-      // 1. Salva la corsa nel database Supabase (incluso il token FCM del cliente)
       const { data, error } = await supabase
         .from('rides')
         .insert([
@@ -572,7 +566,7 @@ export default function EVMobilityPage() {
             destination_lng: destLng,
             status: 'pending',
             fare: 15.00,
-            customer_fcm_token: clientFcmToken // <-- Token FCM del cliente salvato su DB
+            customer_fcm_token: clientFcmToken
           }
         ])
         .select();
@@ -583,18 +577,16 @@ export default function EVMobilityPage() {
         alert(`✅ RIDE BOOKED! \nDestination sent to the driver: ${userDestination}`);
         console.log("Ride created:", data);
 
-        // 2. Recupera il token FCM del driver selezionato
         const { data: driverProfile } = await supabase
           .from('driver_profiles')
           .select('fcm_token')
           .eq('id', driver.id)
           .single();
 
-        // 3. Spedisci la notifica push al Driver! 🚀
         if (driverProfile?.fcm_token) {
           await sendPushNotification(
             driverProfile.fcm_token,
-            '🚕 Nuova Richiesta Corsa!',
+            '🚖 Nuova Richiesta Corsa!',
             `Un cliente vuole andare a: ${userDestination}. Apri l'app per accettare!`
           );
         }
@@ -927,7 +919,6 @@ export default function EVMobilityPage() {
                 <div className="mini-stat-pill" style={{ background: '#0284c7' }}>🚗 DRIVERS: {onlineDrivers.length} ONLINE</div>
               </div>
               <div className="map-placeholder" style={{ height: "100%", minHeight: "350px", width: "100%", position: "relative" }}>
-                 {/* MODIFICA: La mappa ora riceve SOLO le colonnine se in CHARGING o SOLO i driver se in GRAB */}
                  <MapComponent 
                    center={mapCenter} 
                    stations={activeService === 'CHARGING' ? filteredStations : []}

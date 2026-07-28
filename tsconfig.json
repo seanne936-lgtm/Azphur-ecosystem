@@ -13,10 +13,8 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*", "./src/*"]
+      "@/*": ["./src/*", "./*"]
     },
     "plugins": [
       {
@@ -30,8 +28,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts",
-    "app/admin/page.js"
+    "**/*.mts"
   ],
   "exclude": ["node_modules"]
 }
