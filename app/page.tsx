@@ -221,11 +221,23 @@ export default function Home() {
     });
 
     async function getCount() {
-      const { count } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-      if (count !== null && isMounted) setInventoryCount(count);
-    }
-    getCount();
+  // Richiediamo solo la colonna 'id' senza 'head: true' per non far bloccare la richiesta dalla RLS
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('id');
 
+  if (error) {
+    console.error("Errore nel conteggio inventario:", error.message);
+    return;
+  }
+
+  // Contiamo semplicemente quante righe ci ha restituito il database
+  if (data && isMounted) {
+    setInventoryCount(data.length);
+  }
+}
+
+getCount();
     const msInterval = setInterval(() => {
       if (isMounted) setLiveMs(() => Math.floor(Math.random() * 80) + 380);
     }, 1500);
