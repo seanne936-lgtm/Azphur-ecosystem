@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.5.3",
-    "@supabase/supabase-js": "^2.104.0",
+    "@supabase/supabase-js": "^2.109.0",
     "bcrypt": "^6.0.0",
     "firebase": "^12.16.0",
     "html2pdf.js": "^0.14.0",
