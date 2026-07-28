@@ -310,9 +310,9 @@ export default function DriverHQPage() {
 
   // Fixed external map navigation link
   const openExternalMaps = (lat: number, lng: number) => {
-    window.open(`http://googleusercontent.com/maps.google.com/${lat},${lng}`, '_blank');
+    window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
   };
-
+  
   if (loading) {
     return (
       <div className="loading-screen">
