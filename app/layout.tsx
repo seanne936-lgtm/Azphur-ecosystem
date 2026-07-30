@@ -17,15 +17,17 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="it">
       <body style={{ 
         margin: 0, 
+        padding: 0,
         backgroundColor: '#050505', 
-        color: 'white', 
-        fontFamily: 'sans-serif' 
+        color: '#ffffff', 
+        fontFamily: 'sans-serif',
+        boxSizing: 'border-box'
       }}>
         {children}
       </body>

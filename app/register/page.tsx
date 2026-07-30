@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
-import { Turnstile } from '@marsidev/react-turnstile'; 
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -13,20 +12,13 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState('modulo_05');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!captchaToken) {
-      setMessage({ type: 'error', text: 'Please confirm you are not a robot.' });
-      return;
-    }
-
     setLoading(true);
     setMessage(null);
 
@@ -40,7 +32,6 @@ export default function RegisterPage() {
             full_name: fullName 
           },
           emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
-          captchaToken: captchaToken, 
         },
       });
 
@@ -54,9 +45,21 @@ export default function RegisterPage() {
       setFullName('');
       setEmail('');
       setPassword('');
-      setCaptchaToken(null);
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'An error occurred during registration.' });
+    } catch (err: unknown) {
+      let errorText = 'An error occurred during registration.';
+
+      if (err instanceof Error) {
+        errorText = err.message;
+      } else if (typeof err === 'object' && err !== null) {
+        const potentialMsg = (err as any).message || (err as any).error_description;
+        if (typeof potentialMsg === 'string' && potentialMsg.trim() !== '') {
+          errorText = potentialMsg;
+        }
+      } else if (typeof err === 'string') {
+        errorText = err;
+      }
+
+      setMessage({ type: 'error', text: errorText });
     } finally {
       setLoading(false);
     }
@@ -70,28 +73,29 @@ export default function RegisterPage() {
       alignItems: 'center',
       justifyContent: 'center',
       fontFamily: 'sans-serif',
-      padding: '20px'
+      padding: '16px'
     }}>
       <div style={{
         backgroundColor: '#ffffff',
-        padding: '40px',
-        borderRadius: '16px',
+        padding: '32px 24px',
+        borderRadius: '20px',
         boxShadow: '0 10px 25px rgba(0, 0, 0, 0.05)',
         border: '1px solid #e2e8f0',
         width: '100%',
-        maxWidth: '450px'
+        maxWidth: '450px',
+        boxSizing: 'border-box'
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h2 style={{ color: '#1e293b', fontSize: '28px', fontWeight: 'bold', margin: '0 0 10px 0' }}>
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <h2 style={{ color: '#1e293b', fontSize: '26px', fontWeight: 'bold', margin: '0 0 8px 0' }}>
             AZPHUR <span style={{ color: '#0891b2' }}>Ecosystem</span>
           </h2>
           <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>Create your unified corporate account</p>
         </div>
 
-        {message && (
+        {message && message.text && typeof message.text === 'string' && message.text !== '{}' && (
           <div style={{
             padding: '12px',
-            borderRadius: '8px',
+            borderRadius: '10px',
             marginBottom: '20px',
             fontSize: '14px',
             backgroundColor: message.type === 'success' ? '#ecfdf5' : '#fef2f2',
@@ -102,10 +106,10 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Full Name</label>
+            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name</label>
             <input 
               type="text" 
               required
@@ -113,18 +117,20 @@ export default function RegisterPage() {
               onChange={(e) => setFullName(e.target.value)}
               placeholder="John Doe"
               style={{
-                padding: '12px',
-                borderRadius: '8px',
+                padding: '12px 14px',
+                borderRadius: '10px',
                 border: '1px solid #cbd5e1',
                 fontSize: '14px',
                 outline: 'none',
-                backgroundColor: '#f8fafc'
+                backgroundColor: '#f8fafc',
+                width: '100%',
+                boxSizing: 'border-box'
               }}
             />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Corporate Email</label>
+            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Corporate Email</label>
             <input 
               type="email" 
               required
@@ -132,64 +138,81 @@ export default function RegisterPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@company.com"
               style={{
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                outline: 'none',
-                backgroundColor: '#f8fafc'
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Password</label>
-            <input 
-              type="password" 
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              style={{
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                outline: 'none',
-                backgroundColor: '#f8fafc'
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Select Access Portal</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              style={{
-                padding: '12px',
-                borderRadius: '8px',
+                padding: '12px 14px',
+                borderRadius: '10px',
                 border: '1px solid #cbd5e1',
                 fontSize: '14px',
                 outline: 'none',
                 backgroundColor: '#f8fafc',
-                cursor: 'pointer'
+                width: '100%',
+                boxSizing: 'border-box'
               }}
-            >
-              <option value="modulo_05">EV Mobility (Module 5)</option>
-              <option value="business">Allowed Partners (Module 2 / Investors)</option>
-              <option value="solar_logistic">Solar & S2B Logistics (Portal & Module 1)</option>
-            </select>
+            />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
-            <Turnstile
-              siteKey="0x4AAAAAAD2fwkWQrLTAP7BI"
-              options={{ language: 'en' }} 
-              onSuccess={(token) => setCaptchaToken(token)}
-              onError={() => setCaptchaToken(null)}
-              onExpire={() => setCaptchaToken(null)}
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input 
+                type={showPassword ? "text" : "password"} 
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="********"
+                style={{
+                  padding: '12px 42px 12px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid #cbd5e1',
+                  fontSize: '14px',
+                  outline: 'none',
+                  backgroundColor: '#f8fafc',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: '#64748b'
+                }}
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? "👁️‍🗨️" : "👁️"}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Select Access Portal</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '10px',
+                border: '1px solid #cbd5e1',
+                fontSize: '14px',
+                outline: 'none',
+                backgroundColor: '#f8fafc',
+                cursor: 'pointer',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="modulo_05">⚡ EV Mobility (Module 5)</option>
+              <option value="business">💼 Allowed Partners (Module 2 / Investors)</option>
+              <option value="solar_logistic">☀️ Solar & S2B Logistics (Portal & Module 1)</option>
+            </select>
           </div>
 
           <button 
@@ -199,22 +222,23 @@ export default function RegisterPage() {
               backgroundColor: '#22d3ee', 
               color: '#0f172a',
               padding: '14px',
-              borderRadius: '8px',
+              borderRadius: '10px',
               border: 'none',
-              fontSize: '15px',
+              fontSize: '14px',
               fontWeight: 'bold',
               cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'background-color 0.2s',
-              marginTop: '5px'
+              marginTop: '6px',
+              boxShadow: '0 4px 12px rgba(34, 211, 238, 0.2)'
             }}
           >
             {loading ? 'PROCESSING REGISTRATION...' : 'REQUEST AUTOMATIC ACCESS'}
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px' }}>
+        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '14px' }}>
           <span style={{ color: '#64748b' }}>Already have an account? </span>
-          <Link href="/EV" style={{ color: '#0891b2', fontWeight: 'bold', textDecoration: 'none' }}>
+          <Link href="/login" style={{ color: '#0891b2', fontWeight: 'bold', textDecoration: 'none' }}>
             Log In
           </Link>
         </div>

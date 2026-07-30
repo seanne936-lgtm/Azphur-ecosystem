@@ -47,7 +47,6 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     setMounted(true);
 
-    // Gestione errori nell'URL (es. token scaduto da Supabase)
     if (typeof window !== 'undefined') {
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const errorDescription = hashParams.get('error_description');
@@ -61,7 +60,6 @@ export default function ResetPasswordPage() {
     }
   }, []);
 
-  // Calcolo forza password
   const calculateStrength = (pass: string) => {
     let score = 0;
     if (pass.length >= 6) score += 1;
@@ -106,10 +104,11 @@ export default function ResetPasswordPage() {
         router.push('/login');
       }, 2500);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'UPDATE_ERROR: Unable to apply new security credentials.';
       setMessage({
         type: 'error',
-        text: err.message || 'UPDATE_ERROR: Unable to apply new security credentials.'
+        text: errorMsg
       });
     } finally {
       setLoading(false);
@@ -121,7 +120,7 @@ export default function ResetPasswordPage() {
       <TopTicker />
       
       <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; scroll-behavior: smooth; box-sizing: border-box; }
         .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; overflow-x: hidden; width: 100%; box-sizing: border-box; padding-top: 45px; display: flex; flex-direction: column; }
         
@@ -196,7 +195,6 @@ export default function ResetPasswordPage() {
         }
         .toggle-password-btn:hover { color: #22d3ee; }
 
-        /* Indicatori di Forza e Match */
         .strength-bar-bg { width: 100%; height: 4px; background: rgba(0,0,0,0.06); border-radius: 10px; margin-top: 8px; overflow: hidden; }
         .strength-bar-fill { height: 100%; transition: width 0.3s ease, background-color 0.3s ease; }
         .match-badge { font-size: 8px; font-weight: 800; letter-spacing: 0.5px; }
@@ -256,22 +254,22 @@ export default function ResetPasswordPage() {
             <p className="login-desc">Establish a new top-tier authentication key to restore your platform session.</p>
           </div>
 
-         {tokenError ? (
-  <div className="fade-in" style={{ textAlign: 'center', padding: '10px 0' }}>
-    <div style={{
-      padding: '16px', borderRadius: '12px', backgroundColor: '#fef2f2',
-      color: '#991b1b', border: '1px solid #fca5a5', fontSize: '12px',
-      fontFamily: 'monospace', fontWeight: 'bold', lineHeight: '1.6', marginBottom: '20px'
-    }}>
-      ⚠️ SECURE_LINK_EXPIRED: This recovery link has expired or has already been used. Please request a new one.
-    </div>
-    <Link href="/login" className="login-btn-premium" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-      REQUEST NEW RESET LINK →
-    </Link>
-  </div>
-) : (
+          {tokenError ? (
+            <div className="fade-in" style={{ textAlign: 'center', padding: '10px 0' }}>
+              <div style={{
+                padding: '16px', borderRadius: '12px', backgroundColor: '#fef2f2',
+                color: '#991b1b', border: '1px solid #fca5a5', fontSize: '12px',
+                fontFamily: 'monospace', fontWeight: 'bold', lineHeight: '1.6', marginBottom: '20px'
+              }}>
+                ⚠️ SECURE_LINK_EXPIRED: This recovery link has expired or has already been used. Please request a new one.
+              </div>
+              <Link href="/login" className="login-btn-premium" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+                REQUEST NEW RESET LINK →
+              </Link>
+            </div>
+          ) : (
             <form onSubmit={handlePasswordUpdate} className="login-form fade-in">
-              {message && (
+              {message && typeof message === 'object' && message !== null && typeof message.text === 'string' && (
                 <div style={{
                   padding: '12px',
                   borderRadius: '8px',
@@ -320,7 +318,6 @@ export default function ResetPasswordPage() {
                     )}
                   </button>
                 </div>
-                {/* Barra dinamica di forza */}
                 <div className="strength-bar-bg">
                   <div className="strength-bar-fill" style={{ width: strengthInfo.width, backgroundColor: strengthInfo.color }}></div>
                 </div>
