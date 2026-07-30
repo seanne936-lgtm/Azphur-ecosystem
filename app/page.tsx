@@ -356,13 +356,24 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
           border: 1px solid rgba(255, 255, 255, 1); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.08), inset 0 1px 2px rgba(255, 255, 255, 0.8); 
           border-radius: 36px; padding: 50px; position: relative; overflow: hidden; backdrop-filter: blur(20px); 
         }
-        .santrix-header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .santrix-header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
         .santrix-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 18px; letter-spacing: -0.5px; }
-        .santrix-nav-pills { display: flex; gap: 10px; background: rgba(0,0,0,0.04); padding: 6px; border-radius: 100px; }
-        .santrix-pill { padding: 8px 18px; border-radius: 100px; font-size: 11px; font-weight: 700; color: #4b5563; background: transparent; border: none; cursor: pointer; transition: 0.3s; }
+        
+        /* Modificata la barra dei tab per adattarsi fluidamente agli schermi piccoli */
+        .santrix-nav-pills { 
+          display: flex; gap: 10px; background: rgba(0,0,0,0.04); padding: 6px; border-radius: 100px; 
+          flex-wrap: wrap; max-width: 100%; box-sizing: border-box;
+        }
+        .santrix-pill { padding: 8px 18px; border-radius: 100px; font-size: 11px; font-weight: 700; color: #4b5563; background: transparent; border: none; cursor: pointer; transition: 0.3s; white-space: nowrap; }
         .santrix-pill.active { background: #fff; color: #111827; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
         
-        .santrix-grid-dashboard { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: center; }
+        .santrix-grid-dashboard { 
+          display: grid; 
+          grid-template-columns: 1.2fr 1fr; 
+          gap: 40px; 
+          align-items: center; 
+          animation: fadeInOut 0.6s ease-in-out; 
+        }
         .santrix-left-col h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 900; line-height: 1.05; letter-spacing: -0.03em; margin: 15px 0 20px; color: #111827; }
         .santrix-left-col p { font-size: 15px; color: #4b5563; line-height: 1.6; font-weight: 500; margin-bottom: 30px; }
         
@@ -371,7 +382,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
         .santrix-metric-label { font-size: 9px; font-weight: 800; color: #9ca3af; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; display: block; }
         .santrix-metric-value { font-size: 24px; font-weight: 900; color: #111827; font-family: 'JetBrains Mono', monospace; }
         
-        .santrix-right-visual { position: relative; border-radius: 24px; overflow: hidden; border: 4px solid #ffffff; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        .santrix-right-visual { position: relative; border-radius: 24px; overflow: hidden; border: 4px solid #ffffff; box-shadow: 0 20px 40px rgba(0,0,0,0.1); width: 100%; box-sizing: border-box; }
         .santrix-right-visual img { width: 100%; height: 100%; object-fit: cover; display: block; min-height: 380px; }
 
         /* Quick Action Bar */
@@ -473,24 +484,6 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
         .auth-container button.active { background: #06b6d4; }
         .legal-tag { font-size: 10px; font-weight: 900; color: #9ca3af; letter-spacing: 2px; }
 
-        @media (max-width: 900px) {
-          .nav-minimal-lux { padding: 25px 20px; flex-direction: column; gap: 20px; text-align: center; }
-          .nav-items { width: 100%; justify-content: center; flex-wrap: wrap; gap: 15px; }
-          .santrix-grid-dashboard { grid-template-columns: 1fr; gap: 30px; }
-          .santrix-monitor-frame { padding: 30px 20px; border-radius: 24px; }
-          .modular-grid-apple { grid-template-columns: 1fr; }
-          .blueprints-container { grid-template-columns: 1fr; }
-          .about-section { flex-direction: column !important; text-align: center; gap: 30px; }
-        
-        .santrix-grid-dashboard { 
-          display: grid; 
-          grid-template-columns: 1.2fr 1fr; 
-          gap: 40px; 
-          align-items: center; 
-          animation: fadeInOut 0.6s ease-in-out; /* AGGIUNGI QUI */
-        }
-
-        /* AGGIUNGI QUESTA ANIMAZIONE IN FONDO AGLI STILI GLOBALI */
         @keyframes fadeInOut {
           0% {
             opacity: 0;
@@ -501,6 +494,22 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
             transform: translateY(0);
           }
         }
+
+        @media (max-width: 900px) {
+          .nav-minimal-lux { padding: 25px 20px; flex-direction: column; gap: 20px; text-align: center; }
+          .nav-items { width: 100%; justify-content: center; flex-wrap: wrap; gap: 15px; }
+          .santrix-grid-dashboard { grid-template-columns: 1fr; gap: 30px; }
+          .santrix-monitor-frame { padding: 30px 20px; border-radius: 24px; }
+          .modular-grid-apple { grid-template-columns: 1fr; }
+          .blueprints-container { grid-template-columns: 1fr; }
+          .about-section { flex-direction: column !important; text-align: center; gap: 30px; }
+          
+          /* Correzione specifica per non tagliare i tab e il grafico su mobile */
+          .santrix-header-top { flex-direction: column; align-items: flex-start; }
+          .santrix-nav-pills { width: 100%; overflow-x: auto; padding: 4px; justify-content: flex-start; }
+          .santrix-pill { padding: 6px 14px; font-size: 10px; }
+          .santrix-right-visual { padding: 15px !important; }
+        }        }
         
           }
       `}</style>
