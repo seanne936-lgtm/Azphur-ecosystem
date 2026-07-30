@@ -249,7 +249,6 @@ export default function S2BCombinedPortal() {
                       <td className="ref-id-cell">
                         <div className="ref-id">AZ-{ship.id}</div>
                         <div className="asset-sub-info">
-                          {/* Sostituito DUNNO/ship.type con la logica coerente al Provider */}
                           <span className="sub-type">
                             {userRole === 'ADMIN' ? ship.provider : 'International Provider'}
                           </span>
@@ -424,15 +423,53 @@ export default function S2BCombinedPortal() {
           .nav-item { font-size: 11px; }
           .main-logo { height: 32px; }
           
-          table, thead, tbody, th, td, tr { display: block; }
+          table, thead, tbody, th, td, tr { display: block; width: 100%; box-sizing: border-box; }
           thead { display: none; }
-          tr { margin-bottom: 15px; border: 1px solid #eef2f6; border-radius: 16px; background: #fff; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.01); }
-          td { padding: 8px 0; border: none; display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; }
-          td:not(:last-child) { border-bottom: 1px dashed #f1f5f9; }
-          .ref-id-cell { align-items: flex-start; }
-          .asset-sub-info { align-items: flex-end; text-align: right; }
-          .route-text { font-size: 13px; text-align: right; }
-          .provider-text { text-align: right; }
+          tr { 
+            margin-bottom: 16px; 
+            border: 1px solid #eef2f6; 
+            border-radius: 16px; 
+            background: #fff; 
+            padding: 16px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.02); 
+          }
+          td { 
+            padding: 10px 0; 
+            border: none; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            width: 100%; 
+            box-sizing: border-box; 
+          }
+          td:not(:last-child) { 
+            border-bottom: 1px dashed #f1f5f9; 
+          }
+          .ref-id-cell { 
+            flex-direction: row; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+          }
+          .asset-sub-info { 
+            align-items: flex-end; 
+            text-align: right; 
+          }
+          .route-text { 
+            font-size: 13px; 
+            text-align: left; 
+          }
+          .provider-text { 
+            text-align: right; 
+          }
+          td:last-child {
+            justify-content: flex-end;
+            padding-top: 12px;
+          }
+          .status-badge {
+            width: 100%;
+            text-align: center;
+            padding: 8px 12px;
+          }
           .form-row { grid-template-columns: 1fr; gap: 16px; }
         }
       `}</style>

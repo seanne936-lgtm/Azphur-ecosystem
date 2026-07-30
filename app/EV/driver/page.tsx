@@ -65,15 +65,21 @@ export default function DriverHQPage() {
   }, [authorizedDriver]);
 
   // Gestione Notifiche Push FCM
+ // Gestione Notifiche Push FCM Corretta
   const registerPushNotifications = async (driverId: string) => {
     try {
-      if (typeof window === 'undefined' || !('Notification' in window)) return;
+      if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return;
 
       const permission = await Notification.requestPermission();
       
       if (permission === 'granted' && messaging) {
+        // Registriamo esplicitamente il Service Worker per evitare il crash di getToken
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        await navigator.serviceWorker.ready;
+
         const currentToken = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
+          serviceWorkerRegistration: registration
         });
 
         if (currentToken && driverId !== 'admin-override-id') {
@@ -148,16 +154,19 @@ export default function DriverHQPage() {
     }
   };
 
-  // Fetch active assigned ride
+  // Fetch active assigned ride (ignoring stale/old ghost rides older than 12 hours)
   const fetchAssignedRide = async () => {
     if (!authorizedDriver) return;
     setFetchingRide(true);
 
     try {
+      const staleTimeThreshold = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+
       let query = supabase
         .from('rides')
         .select('*')
         .in('status', ['pending', 'accepted', 'in_progress'])
+        .gte('created_at', staleTimeThreshold)
         .order('created_at', { ascending: false })
         .limit(1);
 
@@ -204,6 +213,9 @@ export default function DriverHQPage() {
 
     if (newStatus) {
       registerPushNotifications(authorizedDriver.id);
+      fetchAssignedRide();
+    } else {
+      setActiveRide(null);
     }
 
     if (authorizedDriver.id !== 'admin-override-id') {
@@ -241,7 +253,6 @@ export default function DriverHQPage() {
             .eq('id', authorizedDriver?.id);
         }
 
-        // Invia notifica push al cliente tramite il sistema centralizzato Grab
         if (activeRide.customer_fcm_token) {
           await triggerGrabNotification(
             activeRide.customer_fcm_token,
@@ -293,7 +304,6 @@ export default function DriverHQPage() {
     }
   };
 
-  // Fixed external map navigation link
   const openExternalMaps = (lat: number, lng: number) => {
     window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank');
   };

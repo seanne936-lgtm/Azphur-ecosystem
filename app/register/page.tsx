@@ -10,20 +10,18 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function RegisterPage() {
-  const [fullName, setFullName] = useState(''); // Stato per il nome completo
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('modulo_05');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
-  // Captcha token state
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check if the user completed the Turnstile captcha
     if (!captchaToken) {
       setMessage({ type: 'error', text: 'Please confirm you are not a robot.' });
       return;
@@ -37,7 +35,6 @@ export default function RegisterPage() {
         email,
         password,
         options: {
-          // Passiamo sia il ruolo che il full_name nei metadata dell'utente
           data: { 
             role: role,
             full_name: fullName 
@@ -49,15 +46,44 @@ export default function RegisterPage() {
 
       if (error) throw error;
 
+      // --- GESTIONE MULTI-TABELLA PER IL SOLARE E GLI ALTRI MODULI ---
+      if (role === 'solar_logistic') {
+        // Inserisce contemporaneamente in entrambe le tabelle richieste per il solare
+        const { error: err1 } = await supabase
+          .from('module_01_customers')
+          .insert([{ email: email, full_name: fullName }]);
+
+        const { error: err2 } = await supabase
+          .from('solar_allowed_customer')
+          .insert([{ email: email, full_name: fullName }]);
+
+        if (err1) console.error("Errore module_01_customers:", err1.message);
+        if (err2) console.error("Errore solar_allowed_customer:", err2.message);
+      } else {
+        let targetTable = 'module_05_customers';
+        if (role === 'business') {
+          targetTable = 'allowed_partners';
+        }
+
+        const { error: insertError } = await supabase
+          .from(targetTable)
+          .insert([{ email: email, full_name: fullName }]);
+
+        if (insertError) {
+          console.error("Errore inserimento tabella specifica:", insertError.message);
+        }
+      }
+      // -------------------------------------------------------------
+
       setMessage({
         type: 'success',
         text: 'Registration completed successfully! Your account is active. Click Log In to access your dashboard.'
       });
       
-      setFullName(''); // Reset del campo nome
+      setFullName('');
       setEmail('');
       setPassword('');
-      setCaptchaToken(null); // Reset captcha
+      setCaptchaToken(null);
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'An error occurred during registration.' });
     } finally {
@@ -107,7 +133,6 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
-          {/* Full Name Field (AGGIUNTO) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Full Name</label>
             <input 
@@ -127,7 +152,6 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Email Field */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Corporate Email</label>
             <input 
@@ -147,7 +171,6 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Password Field */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Password</label>
             <input 
@@ -167,7 +190,6 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Portal Selection Dropdown */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase' }}>Select Access Portal</label>
             <select
@@ -189,7 +211,6 @@ export default function RegisterPage() {
             </select>
           </div>
 
-          {/* CLOUDFLARE TURNSTILE (Forced to English) */}
           <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
             <Turnstile
               siteKey="0x4AAAAAAD2fwkWQrLTAP7BI"
@@ -200,7 +221,6 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Cyan Submit Button */}
           <button 
             type="submit"
             disabled={loading}

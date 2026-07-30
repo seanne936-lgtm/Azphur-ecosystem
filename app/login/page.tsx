@@ -181,7 +181,7 @@ export default function LoginPage() {
           return;
         }
 
-        alert("ACCESS_DENIED: Profilo non configurato per i moduli dell'ecosistema AZPHUR.");
+        alert("ACCESS_DENIED: Profile not configured for AZPHUR ecosystem modules.");
         await supabase.auth.signOut();
         setLoading(false);
       }

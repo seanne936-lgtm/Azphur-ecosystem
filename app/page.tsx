@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+
 interface TickerStats {
   co2: number;
   mw: number;
@@ -70,6 +71,21 @@ const TopTicker: React.FC = () => {
 };
 
 export default function Home() {
+
+const tabsList = ['overview', 'analytics', 'outage'] as const;
+
+  useEffect(() => {
+    const autoRotate = setInterval(() => {
+      setActiveTab(prev => {
+        if (prev === 'overview') return 'analytics';
+        if (prev === 'analytics') return 'outage';
+        return 'overview';
+      });
+    }, 10000);
+
+    return () => clearInterval(autoRotate);
+  }, []);
+
   const router = useRouter();
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [staffCode, setStaffCode] = useState<string>("");
@@ -77,6 +93,9 @@ export default function Home() {
   const [scrollPercent, setScrollPercent] = useState<number>(0);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('loading...');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  
+  // STATO PER I TAB DELLA HERO DASHBOARD RICHIESTI
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'outage'>('overview');
   
   const [debugM1, setDebugM1] = useState<string>("Waiting...");
   const [debugM5, setDebugM5] = useState<string>("Waiting...");
@@ -220,23 +239,22 @@ export default function Home() {
     });
 
     async function getCount() {
-  // Richiediamo solo la colonna 'id' senza 'head: true' per non far bloccare la richiesta dalla RLS
-  const { data, error } = await supabase
-    .from('inventory')
-    .select('id');
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('id');
 
-  if (error) {
-    console.error("Errore nel conteggio inventario:", error.message);
-    return;
-  }
+      if (error) {
+        console.error("Errore nel conteggio inventario:", error.message);
+        return;
+      }
 
-  // Contiamo semplicemente quante righe ci ha restituito il database
-  if (data && isMounted) {
-    setInventoryCount(data.length);
-  }
-}
+      if (data && isMounted) {
+        setInventoryCount(data.length);
+      }
+    }
 
-getCount();
+    getCount();
+
     const msInterval = setInterval(() => {
       if (isMounted) setLiveMs(() => Math.floor(Math.random() * 80) + 380);
     }, 1500);
@@ -258,27 +276,22 @@ getCount();
     };
   }, [router]);
 
-  // FIX IMMEDIATO CLICK: Navigazione istantanea senza blocchi
   const handleModuleNavigation = async (path: string, validator?: (email: string) => Promise<boolean>) => {
-    // 1. Reindirizzamento diretto se utente non connesso
     if (currentUserEmail === 'guest@azphur.com' || currentUserEmail === 'loading...') {
       router.push('/login');
       return;
     }
 
-    // 2. Se l'utente è un Admin, entra immediatamente
     if (adminEmails.includes(currentUserEmail)) {
       router.push(path); 
       return;
     }
 
-    // 3. Navigazione diretta se non è richiesta una validazione
     if (!validator) {
       router.push(path);
       return;
     }
 
-    // 4. Esegue la navigazione attiva subito e controlla i permessi senza bloccare l'interfaccia
     router.push(path);
   };
 
@@ -296,158 +309,209 @@ getCount();
   const isAuthorized: boolean = staffCode.trim().toUpperCase() === 'AZ-001';
 
   return (
-    <div className="az-premium-canvas">
+    <div className="az-santrix-canvas">
       <TopTicker />
       <div className="scroll-progress-indicator" style={{ width: `${scrollPercent}%` }}></div>
 
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800;900&family=JetBrains+Mono:wght=800&display=swap');
-        html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; scroll-behavior: smooth; box-sizing: border-box; }
-        .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; overflow-x: hidden; width: 100%; box-sizing: border-box; padding-top: 45px; }
-        .scroll-progress-indicator { position: fixed; top: 0; left: 0; height: 3px; background: #22d3ee; z-index: 2001; transition: width 0.1s ease-out; box-shadow: 0 0 8px #22d3ee; }
-        .nav-minimal-lux { display: flex; justify-content: space-between; align-items: center; padding: 60px 60px 20px; max-width: 1400px; margin: 0 auto; position: relative; z-index: 10; box-sizing: border-box; width: 100%; }
-        .logo-group { display: flex; align-items: center; }
-        .status-orb { width: 8px; height: 8px; background: #22d3ee; border-radius: 50%; margin-left: 12px; box-shadow: 0 0 10px #22d3ee; }
-        .op-status-tag { font-size: 7px; color: #0891b2; border: 1px solid #22d3ee; padding: 2px 6px; border-radius: 3px; margin-left: 15px; font-weight: 900; flex-shrink: 0; }
-        .nav-items { display: flex; gap: 40px; align-items: center; }
-        .network-signal { display: flex; align-items: center; gap: 8px; color: #0891b2; font-size: 8px; font-weight: 800; letter-spacing: 1px; flex-shrink: 0; }
-        .sig-dot { width: 4px; height: 4px; background: #22d3ee; border-radius: 50%; }
-        .btn-cyan-outline { background: none; border: 1px solid #22d3ee; color: #0891b2; padding: 8px 20px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; flex-shrink: 0; }
-        .btn-cyan-outline:hover { background: #22d3ee; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 211, 238, 0.2); }
-        .btn-red-outline { background: none; border: 1px solid #ef4444; color: #ef4444; padding: 8px 20px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; flex-shrink: 0; }
-        .btn-red-outline:hover { background: #ef4444; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@800&display=swap');
         
-        .live-stream-ticker { 
-          width: 100%; height: 120px; 
-          background: linear-gradient(90deg, rgba(253, 251, 247, 0.75) 0%, rgba(255, 254, 252, 0.85) 50%, rgba(253, 251, 247, 0.75) 100%); 
-          backdrop-filter: blur(25px); overflow: hidden; display: flex; align-items: center; position: relative; 
-          border-top: 1px solid rgba(34, 211, 238, 0.35); border-bottom: 1px solid rgba(34, 211, 238, 0.35); 
-          margin-bottom: 80px; box-shadow: inset 0 0 30px rgba(34, 211, 238, 0.03), 0 10px 30px rgba(0, 0, 0, 0.02); box-sizing: border-box; 
+        html, body { 
+          background-color: #f3f4f6 !important; 
+          margin: 0; padding: 0; 
+          font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; 
+          scroll-behavior: smooth; box-sizing: border-box; 
         }
-        .marquee-content { display: flex; align-items: center; white-space: nowrap; animation: marquee 30s linear infinite; z-index: 2; width: max-content; }
-        .marquee-item { display: flex; align-items: center; gap: 15px; margin-right: 80px; font-family: monospace; font-size: 11px; font-weight: 800; color: #1d1d1f; letter-spacing: 1px; }
-        .marquee-item span { color: #0891b2; font-weight: 900; }
-        .ticker-thumb { width: 70px; height: 45px; object-fit: cover; border-radius: 8px; border: 2px solid #1d1d1f; box-shadow: 4px 4px 0px #22d3ee; }
+        .az-santrix-canvas { 
+          background: #f3f4f6; 
+          min-height: 100vh; color: #111827; overflow-x: hidden; width: 100%; box-sizing: border-box; padding-top: 45px; 
+        }
+        .scroll-progress-indicator { 
+          position: fixed; top: 0; left: 0; height: 3px; background: #06b6d4; z-index: 2001; transition: width 0.1s ease-out; box-shadow: 0 0 10px #06b6d4; 
+        }
         
+        /* Navigation Style Santrix */
+        .nav-minimal-lux { 
+          display: flex; justify-content: space-between; align-items: center; 
+          padding: 30px 50px; max-width: 1400px; margin: 0 auto; position: relative; z-index: 10; width: 100%; box-sizing: border-box; 
+        }
+        .logo-group { display: flex; align-items: center; gap: 12px; }
+        .status-orb { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; }
+        .op-status-tag { font-size: 8px; color: #047857; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 8px; border-radius: 6px; font-weight: 800; }
+        .nav-items { display: flex; gap: 30px; align-items: center; }
+        .network-signal { display: flex; align-items: center; gap: 8px; color: #4b5563; font-size: 10px; font-weight: 700; }
+        .sig-dot { width: 6px; height: 6px; background: #06b6d4; border-radius: 50%; box-shadow: 0 0 8px #06b6d4; }
+        
+        .btn-cyan-outline { background: #111827; border: none; color: #fff; padding: 10px 22px; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 11px; transition: 0.3s; }
+        .btn-cyan-outline:hover { background: #06b6d4; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(6, 182, 212, 0.3); }
+        .btn-red-outline { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 8px 18px; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 11px; transition: 0.3s; }
+        .btn-red-outline:hover { background: #ef4444; color: #fff; }
+        .btn-signin-link { background: none; border: none; color: #4b5563; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        .btn-signin-link:hover { color: #111827; }
+
+        /* Santrix Hero Glass Card Interface */
+        .santrix-hero-container { max-width: 1300px; margin: 20px auto 60px; padding: 0 20px; box-sizing: border-box; }
+        .santrix-monitor-frame { 
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(240, 253, 250, 0.9) 100%); 
+          border: 1px solid rgba(255, 255, 255, 1); box-shadow: 0 30px 60px rgba(0, 0, 0, 0.08), inset 0 1px 2px rgba(255, 255, 255, 0.8); 
+          border-radius: 36px; padding: 50px; position: relative; overflow: hidden; backdrop-filter: blur(20px); 
+        }
+        .santrix-header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .santrix-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 18px; letter-spacing: -0.5px; }
+        .santrix-nav-pills { display: flex; gap: 10px; background: rgba(0,0,0,0.04); padding: 6px; border-radius: 100px; }
+        .santrix-pill { padding: 8px 18px; border-radius: 100px; font-size: 11px; font-weight: 700; color: #4b5563; background: transparent; border: none; cursor: pointer; transition: 0.3s; }
+        .santrix-pill.active { background: #fff; color: #111827; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        
+        .santrix-grid-dashboard { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: center; }
+        .santrix-left-col h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 900; line-height: 1.05; letter-spacing: -0.03em; margin: 15px 0 20px; color: #111827; }
+        .santrix-left-col p { font-size: 15px; color: #4b5563; line-height: 1.6; font-weight: 500; margin-bottom: 30px; }
+        
+        .santrix-metrics-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 30px; }
+        .santrix-metric-card { background: #ffffff; padding: 22px; border-radius: 20px; border: 1px solid rgba(0,0,0,0.04); box-shadow: 0 10px 25px rgba(0,0,0,0.02); }
+        .santrix-metric-label { font-size: 9px; font-weight: 800; color: #9ca3af; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; display: block; }
+        .santrix-metric-value { font-size: 24px; font-weight: 900; color: #111827; font-family: 'JetBrains Mono', monospace; }
+        
+        .santrix-right-visual { position: relative; border-radius: 24px; overflow: hidden; border: 4px solid #ffffff; box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        .santrix-right-visual img { width: 100%; height: 100%; object-fit: cover; display: block; min-height: 380px; }
+
+        /* Quick Action Bar */
+        .quick-access-zone { max-width: 1300px; margin: 0 auto 50px; padding: 0 20px; display: flex; justify-content: flex-start; box-sizing: border-box; }
+        .btn-quotation-lux { 
+          background: #0f172a; border: none; color: #fff; padding: 16px 28px; 
+          border-radius: 16px; cursor: pointer; font-weight: 800; font-size: 12px; 
+          transition: 0.3s; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px;
+          box-shadow: 0 10px 25px rgba(15, 23, 42, 0.2); display: flex; align-items: center; gap: 12px;
+        }
+        .btn-quotation-lux:hover { background: #06b6d4; transform: translateY(-2px); box-shadow: 0 15px 30px rgba(6, 182, 212, 0.3); color: #fff; }
+        .blink { animation: blink-ani 1.5s infinite; color: #22d3ee; }
+        @keyframes blink-ani { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* Ticker Live Stream */
+        .live-stream-ticker { 
+          width: 100%; height: 90px; background: #ffffff; 
+          overflow: hidden; display: flex; align-items: center; position: relative; 
+          border-top: 1px solid rgba(0,0,0,0.06); border-bottom: 1px solid rgba(0,0,0,0.06); 
+          margin-bottom: 80px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02); box-sizing: border-box; 
+        }
+        .marquee-content { display: flex; align-items: center; white-space: nowrap; animation: marquee 35s linear infinite; width: max-content; }
+        .marquee-item { display: flex; align-items: center; gap: 15px; margin-right: 60px; font-family: monospace; font-size: 11px; font-weight: 700; color: #374151; }
+        .marquee-item span { color: #06b6d4; font-weight: 900; }
+        .ticker-thumb { width: 50px; height: 35px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
         @keyframes marquee { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(-50%, 0, 0); } }
-        
-        .about-section { max-width: 1100px; margin: 60px auto 100px; padding: 0 20px; display: flex; align-items: center; gap: 60px; text-align: left; box-sizing: border-box; width: 100%; }
+
+        /* About Santrix Sections */
+        .about-section { max-width: 1300px; margin: 0 auto 80px; padding: 0 20px; display: flex; align-items: center; gap: 60px; box-sizing: border-box; width: 100%; }
         .about-section.reverse-layout { flex-direction: row-reverse; }
         .about-content { flex: 1; }
-        .about-visual { flex: 1; position: relative; overflow: hidden; border-radius: 24px; width: 100%; }
-        .about-image { width: 100%; border-radius: 24px; border: 4px solid #1d1d1f; box-shadow: 20px 20px 0px #22d3ee; box-sizing: border-box; }
-        .about-tag { font-size: 9px; font-weight: 900; color: #22d3ee; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 15px; display: block; }
-        .about-title { font-size: 32px; font-weight: 800; margin-bottom: 20px; line-height: 1.2; }
-        .about-text { font-size: 16px; color: #5c5e62; line-height: 1.6; font-weight: 500; }
+        .about-visual { flex: 1; position: relative; overflow: hidden; border-radius: 28px; }
+        .about-image { width: 100%; border-radius: 28px; border: 4px solid #ffffff; box-shadow: 0 25px 50px rgba(0,0,0,0.08); display: block; }
+        .about-tag { font-size: 10px; font-weight: 900; color: #06b6d4; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; display: block; }
+        .about-title { font-size: 32px; font-weight: 900; margin-bottom: 18px; line-height: 1.15; color: #111827; }
+        .about-text { font-size: 15px; color: #4b5563; line-height: 1.7; font-weight: 500; }
+
+        /* Modular Grid Cards */
+        .modular-grid-apple { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 1300px; margin: 0 auto 100px; padding: 0 20px; box-sizing: border-box; width: 100%; }
+        .quad-card-premium { 
+          background: #ffffff; border: 1px solid rgba(0,0,0,0.06); border-radius: 28px; padding: 40px; 
+          transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 300px; 
+          box-shadow: 0 10px 30px rgba(0,0,0,0.02); position: relative; overflow: hidden; box-sizing: border-box;
+        }
+        .phase-label { font-size: 10px; font-weight: 900; color: #9ca3af; letter-spacing: 1.5px; margin-bottom: 15px; display: block; }
+        .text-cyan { color: #0891b2 !important; font-size: 24px; font-weight: 900; margin: 0; transition: color 0.3s; }
+        .quad-card-premium p { font-size: 14px; color: #4b5563; margin: 15px 0; line-height: 1.6; font-weight: 500; }
+        .action-text { font-size: 11px; font-weight: 900; color: #111827; letter-spacing: 1px; margin-top: auto; transition: color 0.3s; display: flex; align-items: center; gap: 6px; }
         
-        .modular-grid-apple { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 1100px; margin: 0 auto 100px; padding: 0 20px; box-sizing: border-box; width: 100%; }
-        .quad-card-premium { background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); border: 4px solid #1d1d1f; border-radius: 24px; padding: 40px; text-align: left; transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 280px; position: relative; overflow: hidden; box-sizing: border-box; }
-        .phase-label { font-size: 9px; font-weight: 900; color: #86868b; letter-spacing: 1.5px; margin-bottom: 15px; display: block; }
-        .text-cyan { color: #0891b2 !important; font-size: 24px; font-weight: 800; margin: 0; transition: color 0.3s; }
-        .quad-card-premium p { font-size: 14px; color: #5c5e62; margin: 15px 0; line-height: 1.5; font-weight: 500; }
-        .action-text { font-size: 11px; font-weight: 900; color: #1d1d1f; letter-spacing: 1px; margin-top: auto; transition: color 0.3s; }
+        .quad-card-premium:hover { transform: translateY(-6px); border-color: #06b6d4; box-shadow: 0 25px 50px rgba(6, 182, 212, 0.12); }
+        .quad-card-premium:hover .text-cyan { color: #06b6d4 !important; }
+        .quad-card-premium:hover .action-text { color: #06b6d4; }
         
-        .quad-card-premium:hover { transform: translateY(-4px); border-color: #22d3ee; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.15); }
-        .quad-card-premium:hover .text-cyan { color: #22d3ee !important; }
-        .quad-card-premium:hover .action-text { color: #22d3ee; }
-        
-        .card-m5:hover { border-color: #3e6ae1 !important; box-shadow: 0 20px 40px rgba(62, 106, 225, 0.15) !important; }
+        .card-m5:hover { border-color: #3e6ae1 !important; box-shadow: 0 25px 50px rgba(62, 106, 225, 0.12) !important; }
         .card-m5:hover .text-m5 { color: #3e6ae1 !important; }
         .card-m5:hover .action-m5 { color: #3e6ae1 !important; }
 
-        .card-driver:hover { border-color: #10b981 !important; box-shadow: 0 20px 40px rgba(16, 185, 129, 0.15) !important; }
+        .card-driver:hover { border-color: #10b981 !important; box-shadow: 0 25px 50px rgba(16, 185, 129, 0.12) !important; }
         .card-driver:hover .text-driver { color: #10b981 !important; }
         .card-driver:hover .action-driver { color: #10b981 !important; }
 
-        .section-header-lux { max-width: 1100px; margin: 80px auto 40px; padding: 0 20px; text-align: left; }
-        .section-header-lux h2 { font-size: 36px; font-weight: 900; margin: 0; letter-spacing: -1px; }
-        .cyan-header { color: #22d3ee !important; font-family: 'JetBrains Mono', monospace !important; letter-spacing: 2px !important; text-transform: uppercase; }
+        /* Blueprints Container */
+        .section-header-lux { max-width: 1300px; margin: 80px auto 30px; padding: 0 20px; text-align: left; }
+        .section-header-lux h2 { font-size: 32px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
+        .cyan-header { color: #06b6d4 !important; font-family: 'JetBrains Mono', monospace !important; letter-spacing: 2px !important; text-transform: uppercase; }
         
-        .blueprints-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1100px; margin: 0 auto 80px; padding: 0 20px; box-sizing: border-box; width: 100%; }
+        .blueprints-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1300px; margin: 0 auto 80px; padding: 0 20px; box-sizing: border-box; width: 100%; }
         .blueprint-card { 
-          background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); 
-          border: 4px solid #1d1d1f; border-radius: 24px; padding: 30px; 
-          transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+          background: #ffffff; border: 1px solid rgba(0,0,0,0.06); border-radius: 24px; padding: 30px; 
+          transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow: 0 10px 30px rgba(0,0,0,0.02);
         }
-        .blueprint-card:hover { transform: translateY(-4px); border-color: #22d3ee; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.15); }
-        .blueprint-title { font-size: 14px; font-weight: 900; color: #1d1d1f; margin-bottom: 12px; font-family: monospace; letter-spacing: 0.5px; }
-        .blueprint-card:hover .blueprint-title { color: #22d3ee; }
-        .blueprint-data { font-size: 11px; color: #5c5e62; font-family: monospace; line-height: 1.6; background: rgba(255, 255, 255, 0.6); padding: 15px; border-radius: 14px; border: 1px solid rgba(34, 211, 238, 0.2); }
+        .blueprint-card:hover { transform: translateY(-4px); border-color: #06b6d4; box-shadow: 0 20px 40px rgba(6, 182, 212, 0.1); }
+        .blueprint-title { font-size: 13px; font-weight: 900; color: #111827; margin-bottom: 12px; font-family: monospace; letter-spacing: 0.5px; }
+        .blueprint-card:hover .blueprint-title { color: #06b6d4; }
+        .blueprint-data { font-size: 11px; color: #4b5563; font-family: monospace; line-height: 1.7; background: #f9fafb; padding: 15px; border-radius: 14px; border: 1px solid rgba(0,0,0,0.04); }
         
-        .faq-container { max-width: 1100px; margin: 0 auto 100px; padding: 0 20px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box; width: 100%; }
+        /* FAQ Section */
+        .faq-container { max-width: 1300px; margin: 0 auto 100px; padding: 0 20px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box; width: 100%; }
         .faq-item-wrapper { 
-          background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); 
-          border: 4px solid #1d1d1f; border-radius: 24px; overflow: hidden; 
-          transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+          background: #ffffff; border: 1px solid rgba(0,0,0,0.06); border-radius: 20px; overflow: hidden; 
+          transition: 0.3s ease; box-shadow: 0 5px 20px rgba(0,0,0,0.02);
         }
-        .faq-item-wrapper:hover { transform: translateY(-4px); border-color: #22d3ee; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.15); }
-        .faq-trigger { width: 100%; border: none; background: none; padding: 30px; text-align: left; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 18px; font-weight: 800; color: #1d1d1f; }
-        .faq-trigger span { transition: 0.3s; color: #0891b2; font-size: 14px; }
-        .faq-item-wrapper:hover .faq-trigger { color: #22d3ee; }
-        .faq-item-wrapper:hover .faq-trigger span { color: #22d3ee; }
-        .faq-content { padding: 0 30px 30px; font-size: 14px; color: #5c5e62; line-height: 1.6; font-weight: 500; border-top: 1px solid rgba(34, 211, 238, 0.15); padding-top: 20px; background: rgba(255,255,255,0.4); }
+        .faq-item-wrapper:hover { border-color: #06b6d4; box-shadow: 0 15px 30px rgba(6, 182, 212, 0.08); }
+        .faq-trigger { width: 100%; border: none; background: none; padding: 25px 30px; text-align: left; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 16px; font-weight: 800; color: #111827; }
+        .faq-trigger span { transition: 0.3s; color: #06b6d4; font-size: 14px; }
+        .faq-content { padding: 0 30px 25px; font-size: 14px; color: #4b5563; line-height: 1.6; font-weight: 500; border-top: 1px solid #f3f4f6; padding-top: 20px; background: #fafafa; }
         
-        .auth-footer-lux { margin: 80px 0 50px; display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 0 20px; box-sizing: border-box; }
+        /* Footer Executive Override */
+        .auth-footer-lux { margin: 80px 0 60px; display: flex; flex-direction: column; align-items: center; gap: 25px; padding: 0 20px; box-sizing: border-box; }
         .staff-box-lux { 
-          background: linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%); 
-          border: 4px solid #1d1d1f; padding: 35px; border-radius: 24px; 
-          width: 400px; max-width: 100%; transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow: none; box-sizing: border-box; 
+          background: #ffffff; border: 1px solid rgba(0,0,0,0.08); padding: 35px; border-radius: 24px; 
+          width: 420px; max-width: 100%; transition: 0.4s; box-shadow: 0 15px 35px rgba(0,0,0,0.04); box-sizing: border-box; 
         }
-        .staff-box-lux:hover { transform: translateY(-4px); border-color: #22d3ee; box-shadow: 0 20px 40px rgba(34, 211, 238, 0.15); }
-        .staff-box-lux:hover .phase-label { color: #22d3ee; }
-        .auth-container { display: flex; gap: 12px; margin-top: 16px; }
-        .auth-container input { flex: 1; border: 1px solid rgba(34, 211, 238, 0.3); padding: 12px; border-radius: 12px; font-family: monospace; font-size: 12px; outline: none; background: rgba(255, 255, 255, 0.8); min-width: 0; color: #1d1d1f; font-weight: 600; }
-        .auth-container button { background: #1d1d1f; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-size: 10px; font-weight: 900; cursor: pointer; flex-shrink: 0; transition: 0.3s; }
-        .staff-box-lux:hover .auth-container button { background: #22d3ee; }
-        .legal-tag { font-size: 9px; font-weight: 900; color: #22d3ee; letter-spacing: 1.5px; }
-
-        .hero-apple-style { padding: 100px 20px 40px; text-align: center; display: flex; flex-direction: column; align-items: center; box-sizing: border-box; width: 100%; }
-        .shaping-text { color: #22d3ee; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 20px; }
-        .hero-title { font-size: clamp(36px, 8vw, 85px); font-weight: 900; line-height: 0.95; letter-spacing: -0.05em; margin: 0; word-break: break-word; max-width: 100%; }
-        .cyan-glitch { color: #22d3ee; text-shadow: 0 0 30px rgba(34, 211, 238, 0.2); }
-        .hero-desc { font-size: clamp(14px, 2vw, 19px); color: #5c5e62; margin: 30px 0; font-weight: 500; max-width: 700px; line-height: 1.5; padding: 0 10px; box-sizing: border-box; }
-        
-        .monitor-grid-apple { display: flex; gap: 60px; margin: 40px auto; padding: 25px 50px; background: rgba(255,255,255,0.5); border-radius: 20px; border: 1px solid rgba(34, 211, 238, 0.2); backdrop-filter: blur(10px); box-sizing: border-box; max-width: 100%; }
-        .monitor-item { display: flex; flex-direction: column; align-items: center; }
-        .m-label { font-size: 8px; font-weight: 900; color: #86868b; letter-spacing: 1px; margin-bottom: 8px; }
-        .m-value { font-size: 20px; font-weight: 900; color: #1d1d1f; font-family: monospace; }
-        .m-value-green { font-size: 20px; font-weight: 900; color: #0891b2; font-family: monospace; }
-
-        .quick-access-zone { max-width: 1100px; margin: 0 auto 40px; padding: 0 20px; display: flex; justify-content: flex-start; width: 100%; box-sizing: border-box; }
-        .btn-quotation-lux { 
-          background: #fff; border: 4px solid #1d1d1f; color: #1d1d1f; padding: 12px 24px; 
-          border-radius: 12px; cursor: pointer; font-weight: 900; font-size: 11px; 
-          transition: 0.3s; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px;
-          box-shadow: 6px 6px 0px #22d3ee;
-        }
-        .btn-quotation-lux:hover { transform: translate(-2px, -2px); box-shadow: 10px 10px 0px #22d3ee; border-color: #22d3ee; color: #0891b2; }
-        .blink { animation: blink-ani 1.5s infinite; color: #22d3ee; margin-right: 10px; }
-        @keyframes blink-ani { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-        .btn-signin-link {
-          background: none; border: none; color: #0891b2; font-size: 10px; font-weight: 800;
-          cursor: pointer; transition: 0.2s; letter-spacing: 0.5px; text-decoration: none;
-        }
-        .btn-signin-link:hover { color: #22d3ee; }
+        .staff-box-lux:hover { border-color: #06b6d4; box-shadow: 0 20px 40px rgba(6, 182, 212, 0.1); }
+        .auth-container { display: flex; gap: 10px; margin-top: 15px; }
+        .auth-container input { flex: 1; border: 1px solid #e5e7eb; padding: 12px 16px; border-radius: 12px; font-family: monospace; font-size: 12px; outline: none; background: #f9fafb; color: #111827; font-weight: 600; }
+        .auth-container input:focus { border-color: #06b6d4; background: #fff; }
+        .auth-container button { background: #111827; color: white; border: none; padding: 12px 20px; border-radius: 12px; font-size: 10px; font-weight: 900; cursor: pointer; transition: 0.3s; }
+        .auth-container button.active { background: #06b6d4; }
+        .legal-tag { font-size: 10px; font-weight: 900; color: #9ca3af; letter-spacing: 2px; }
 
         @media (max-width: 900px) {
-          .nav-minimal-lux { padding: 40px 20px 20px; flex-direction: column; gap: 20px; text-align: center; }
-          .nav-items { width: 100%; justify-content: space-between; gap: 15px; }
-          .hero-apple-style { padding: 60px 20px 40px; }
-          .monitor-grid-apple { gap: 20px; padding: 20px; flex-wrap: wrap; justify-content: center; margin: 20px auto; }
-          .modular-grid-apple { grid-template-columns: 1fr; gap: 20px; margin-bottom: 60px; }
-          .quad-card-premium { padding: 25px; min-height: auto; }
-          .about-section { flex-direction: column !important; text-align: center; gap: 30px; margin-bottom: 60px; }
-          .blueprints-container { grid-template-columns: 1fr; gap: 15px; }
+          .nav-minimal-lux { padding: 25px 20px; flex-direction: column; gap: 20px; text-align: center; }
+          .nav-items { width: 100%; justify-content: center; flex-wrap: wrap; gap: 15px; }
+          .santrix-grid-dashboard { grid-template-columns: 1fr; gap: 30px; }
+          .santrix-monitor-frame { padding: 30px 20px; border-radius: 24px; }
+          .modular-grid-apple { grid-template-columns: 1fr; }
+          .blueprints-container { grid-template-columns: 1fr; }
+          .about-section { flex-direction: column !important; text-align: center; gap: 30px; }
+        
+        .santrix-grid-dashboard { 
+          display: grid; 
+          grid-template-columns: 1.2fr 1fr; 
+          gap: 40px; 
+          align-items: center; 
+          animation: fadeInOut 0.6s ease-in-out; /* AGGIUNGI QUI */
         }
+
+        /* AGGIUNGI QUESTA ANIMAZIONE IN FONDO AGLI STILI GLOBALI */
+        @keyframes fadeInOut {
+          0% {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+          }
       `}</style>
 
+      {/* NAVBAR */}
       <nav className="nav-minimal-lux">
         <div className="logo-group">
           <img 
             src="/logo-azphur.avif" 
             alt="AZPHUR Logo" 
-            style={{ height: '26px', width: 'auto', cursor: 'pointer' }} 
+            style={{ height: '28px', width: 'auto', cursor: 'pointer' }} 
             onClick={() => router.push('/')} 
           />
           <div className="status-orb"></div>
@@ -460,7 +524,7 @@ getCount();
           </div>
           {currentUserEmail && currentUserEmail !== 'loading...' && currentUserEmail !== 'guest@azphur.com' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <span style={{ fontSize: '10px', fontWeight: '800', color: '#0891b2', background: 'rgba(34, 211, 238, 0.1)', padding: '6px 12px', borderRadius: '100px' }}>
+              <span style={{ fontSize: '10px', fontWeight: '800', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.1)', padding: '6px 14px', borderRadius: '100px' }}>
                 {currentUserEmail}
               </span>
               <button className="btn-red-outline" onClick={handleLogout}>LOGOUT 🚪</button>
@@ -472,78 +536,194 @@ getCount();
             </div>
           )}
         </div>
-      </nav>
+      </nav> 
 
       <main>
-        <section className="hero-apple-style">
-          <div className="shaping-text">Shaping Sustainable Possibilities</div>
-          <h1 className="hero-title">
-            THE ENERGY <br /><span className="cyan-glitch">EXCHANGE</span>
-          </h1>
-          <p className="hero-desc">
-            The transactional nervous system for Energy, EV, and Infrastructure operations.<br/>
-            We enforce complete control over leads, transactions, and critical infrastructure data.
-          </p>
+        {/* SANTRIX HERO DASHBOARD CONTAINER */}
+        <section className="santrix-hero-container">
+          <div className="santrix-monitor-frame">
+            <div className="santrix-header-top">
+              <div className="santrix-brand">
+                <span style={{ color: '#06b6d4' }}>⚡</span> AZPHUR_EXCHANGE
+              </div>
+              <div className="santrix-nav-pills">
+                <button 
+                  className={`santrix-pill ${activeTab === 'overview' ? 'active' : ''}`} 
+                  onClick={() => setActiveTab('overview')}
+                >
+                  Overview
+                </button>
+                <button 
+                  className={`santrix-pill ${activeTab === 'analytics' ? 'active' : ''}`} 
+                  onClick={() => setActiveTab('analytics')}
+                >
+                  Analytics
+                </button>
+                <button 
+                  className={`santrix-pill ${activeTab === 'outage' ? 'active' : ''}`} 
+                  onClick={() => setActiveTab('outage')}
+                >
+                  Outage Reports
+                </button>
+              </div>
+            </div>
 
-          <div className="monitor-grid-apple">
-            <div className="monitor-item">
-              <span className="m-label">ACTIVE_TRANSACTIONS</span>
-              <span className="m-value">1,402.00</span>
-            </div>
-            <div className="monitor-item">
-              <span className="m-label">SUPPLIER_NODES</span>
-              <span className="m-value">{inventoryCount || '0'}</span>
-            </div>
-            <div className="monitor-item">
-              <span className="m-label">REVENUE_FLOW</span>
-              <span className="m-value-green">ENFORCED</span>
-            </div>
+            {/* TAB CONTENT: OVERVIEW */}
+            {activeTab === 'overview' && (
+              <div key={activeTab} className="santrix-grid-dashboard" style={{ animation: 'fadeInOut 0.5s ease-in-out' }}>
+                <div className="santrix-left-col">
+                  <span className="phase-label" style={{ color: '#06b6d4' }}>SHAPING SUSTAINABLE POSSIBILITIES</span>
+                  <h1>THE ENERGY <br /><span style={{ color: '#06b6d4' }}>EXCHANGE</span></h1>
+                  <p>
+                    The transactional nervous system for Energy, EV, and Infrastructure operations. 
+                    We enforce complete control over leads, transactions, and critical infrastructure data.
+                  </p>
+
+                  <div className="santrix-metrics-grid">
+                    <div className="santrix-metric-card">
+                      <span className="santrix-metric-label">Active Transactions</span>
+                      <span className="santrix-metric-value">1,402.00</span>
+                    </div>
+                    <div className="santrix-metric-card">
+                      <span className="santrix-metric-label">Supplier Nodes</span>
+                      <span className="santrix-metric-value">{inventoryCount || '0'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="santrix-right-visual">
+                  <img 
+                    src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=1000" 
+                    alt="AZPHUR Energy Grid Infrastructure" 
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: ANALYTICS (Grafico e statistiche generali in inglese) */}
+            {activeTab === 'analytics' && (
+              <div className="santrix-grid-dashboard">
+                <div className="santrix-left-col">
+                  <span className="phase-label" style={{ color: '#06b6d4' }}>PERFORMANCE METRICS & TELEMETRY</span>
+                  <h1>GLOBAL GRID <br /><span style={{ color: '#06b6d4' }}>ANALYTICS</span></h1>
+                  <p>
+                    Real-time computational analysis of distributed energy resources, load balancing performance, 
+                    and cryptographic transaction throughput across active continental nodes.
+                  </p>
+
+                  <div className="santrix-metrics-grid">
+                    <div className="santrix-metric-card">
+                      <span className="santrix-metric-label">Peak Efficiency</span>
+                      <span className="santrix-metric-value">99.4%</span>
+                    </div>
+                    <div className="santrix-metric-card">
+                      <span className="santrix-metric-label">Avg Latency</span>
+                      <span className="santrix-metric-value">{liveMs} ms</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '900', fontFamily: 'monospace', color: '#111827', marginBottom: '15px' }}>
+                    [SYSTEM_LOAD_DISTRIBUTION_CHART]
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '180px', paddingBottom: '10px', borderBottom: '2px solid #e5e7eb' }}>
+                    <div style={{ flex: 1, background: '#06b6d4', height: '65%', borderRadius: '6px 6px 0 0' }}></div>
+                    <div style={{ flex: 1, background: '#0891b2', height: '85%', borderRadius: '6px 6px 0 0' }}></div>
+                    <div style={{ flex: 1, background: '#22d3ee', height: '45%', borderRadius: '6px 6px 0 0' }}></div>
+                    <div style={{ flex: 1, background: '#0f172a', height: '95%', borderRadius: '6px 6px 0 0' }}></div>
+                    <div style={{ flex: 1, background: '#06b6d4', height: '75%', borderRadius: '6px 6px 0 0' }}></div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontFamily: 'monospace', color: '#9ca3af', marginTop: '10px' }}>
+                    <span>NODE_01</span>
+                    <span>NODE_02</span>
+                    <span>NODE_03</span>
+                    <span>NODE_04</span>
+                    <span>NODE_05</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: OUTAGE REPORTS (Reportistica outage e anomalie in inglese) */}
+            {activeTab === 'outage' && (
+              <div className="santrix-grid-dashboard">
+                <div className="santrix-left-col">
+                  <span className="phase-label" style={{ color: '#ef4444' }}>FAILSAFE & INCIDENT LOGS</span>
+                  <h1>SYSTEM OUTAGE <br /><span style={{ color: '#ef4444' }}>REPORTS</span></h1>
+                  <p>
+                    Automated circuit breaker diagnostics, node exception logs, and uninterrupted failover records 
+                    tracking grid stability and emergency recovery protocols.
+                  </p>
+
+                  <div className="santrix-metrics-grid">
+                    <div className="santrix-metric-card">
+                      <span className="santrix-metric-label">Active Incidents</span>
+                      <span className="santrix-metric-value" style={{ color: '#10b981' }}>00 (Stable)</span>
+                    </div>
+                    <div className="santrix-metric-card">
+                      <span className="santrix-metric-label">Failover Readiness</span>
+                      <span className="santrix-metric-value">100%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '900', color: '#111827', marginBottom: '15px' }}>
+                    [RECENT_LOG_ENTRIES]
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px', color: '#4b5563' }}>
+                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #10b981' }}>
+                      <strong style={{ color: '#111827' }}>[2026-07-30 14:00]</strong> All regional grid substations operating within normal parameters.
+                    </div>
+                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #06b6d4' }}>
+                      <strong style={{ color: '#111827' }}>[2026-07-30 11:15]</strong> Scheduled micro-inverter sync completed successfully.
+                    </div>
+                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #10b981' }}>
+                      <strong style={{ color: '#111827' }}>[2026-07-30 08:30]</strong> Redundant webhook fallback verified across European nodes.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         </section>
 
+        {/* QUICK ACCESS ZONE */}
         <div className="quick-access-zone">
           <button onClick={() => router.push('/solar-quote')} className="btn-quotation-lux">
              <span className="blink">⚡</span> [ DX_LINK // SOLAR_QUOTATION ]
           </button>
         </div>
 
+        {/* LIVE STREAM TICKER */}
         <div className="live-stream-ticker">
           <div className="marquee-content">
             <div className="marquee-item">
               <span>[NODE-PHILIPPINES]</span> SOLAR ARRAY ALLOCATION SECURED // CONFIRMED
-              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
+              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-GERMANY]</span> EV CHARGE EXPANSION CONTRACT // INGESTED
-              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
+              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-SINGAPORE]</span> SUBSTATION PROCURED VIA HUB_01 // ACTIVE
-              <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
+              <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-PHILIPPINES]</span> SOLAR ARRAY ALLOCATION SECURED // CONFIRMED
-              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
-            </div>
-            <div className="marquee-item">
-              <span>[NODE-PHILIPPINES]</span> SOLAR ARRAY ALLOCATION SECURED // CONFIRMED
-              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
+              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-GERMANY]</span> EV CHARGE EXPANSION CONTRACT // INGESTED
-              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=120" className="ticker-thumb" alt="Node Visual" />
-            </div>
-            <div className="marquee-item">
-              <span>[NODE-SINGAPORE]</span> SUBSTATION PROCURED VIA HUB_01 // ACTIVE
-              <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
-            </div>
-            <div className="marquee-item">
-              <span>[NODE-PHILIPPINES]</span> SOLAR ARRAY ALLOCATION SECURED // CONFIRMED
-              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node Visual" />
+              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
             </div>
           </div>
         </div>
 
+        {/* ABOUT SECTIONS */}
         {aboutData.map((item, index) => (
           <section key={item.id} className={`about-section ${index % 2 !== 0 ? 'reverse-layout' : ''}`}>
             <div className="about-content">
@@ -557,6 +737,7 @@ getCount();
           </section>
         ))}
 
+        {/* MODULAR GRID (ALL 6 MODULES) */}
         <section className="modular-grid-apple">
           <div onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)} className="quad-card-premium">
             <div>
@@ -597,7 +778,6 @@ getCount();
           <div 
             onClick={() => handleModuleNavigation('/EV', verifyCustomerAccessM5)} 
             className="quad-card-premium card-m5" 
-            style={{ border: '4px solid #1d1d1f' }}
           >
             <div>
               <span className="phase-label" style={{ color: '#3e6ae1' }}>MODULE_05 // GO</span>
@@ -607,11 +787,9 @@ getCount();
             <div className="action-text action-m5" style={{ color: '#3e6ae1' }}>LAUNCH_TERMINAL →</div>
           </div>
 
-          {/* NUOVO MODULO DRIVER COMPATTO */}
           <div 
             onClick={() => handleModuleNavigation('/EV/driver')} 
             className="quad-card-premium card-driver" 
-            style={{ border: '4px solid #1d1d1f' }}
           >
             <div>
               <span className="phase-label" style={{ color: '#10b981' }}>MODULE_06 // DRIVER</span>
@@ -622,6 +800,7 @@ getCount();
           </div>
         </section>
 
+        {/* BLUEPRINTS SECTION */}
         <div className="section-header-lux">
           <h2 className="cyan-header">BLUEPRINTS</h2>
         </div>
@@ -655,6 +834,7 @@ getCount();
           </div>
         </section>
 
+        {/* FAQS SECTION */}
         <div className="section-header-lux">
           <h2 className="cyan-header">Faqs</h2>
         </div>
@@ -674,6 +854,7 @@ getCount();
           ))}
         </section>
 
+        {/* FOOTER */}
         <footer className="auth-footer-lux">
           <div className="staff-box-lux">
             <span className="phase-label">EXECUTIVE_OVERRIDE</span>
