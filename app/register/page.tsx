@@ -46,35 +46,6 @@ export default function RegisterPage() {
 
       if (error) throw error;
 
-      // --- GESTIONE MULTI-TABELLA PER IL SOLARE E GLI ALTRI MODULI ---
-      if (role === 'solar_logistic') {
-        // Inserisce contemporaneamente in entrambe le tabelle richieste per il solare
-        const { error: err1 } = await supabase
-          .from('module_01_customers')
-          .insert([{ email: email, full_name: fullName }]);
-
-        const { error: err2 } = await supabase
-          .from('solar_allowed_customer')
-          .insert([{ email: email, full_name: fullName }]);
-
-        if (err1) console.error("Errore module_01_customers:", err1.message);
-        if (err2) console.error("Errore solar_allowed_customer:", err2.message);
-      } else {
-        let targetTable = 'module_05_customers';
-        if (role === 'business') {
-          targetTable = 'allowed_partners';
-        }
-
-        const { error: insertError } = await supabase
-          .from(targetTable)
-          .insert([{ email: email, full_name: fullName }]);
-
-        if (insertError) {
-          console.error("Errore inserimento tabella specifica:", insertError.message);
-        }
-      }
-      // -------------------------------------------------------------
-
       setMessage({
         type: 'success',
         text: 'Registration completed successfully! Your account is active. Click Log In to access your dashboard.'
@@ -205,9 +176,9 @@ export default function RegisterPage() {
                 cursor: 'pointer'
               }}
             >
-              <option value="modulo_05">🚗 EV Mobility (Module 5)</option>
-              <option value="business">💼 Allowed Partners (Module 2 / Investors)</option>
-              <option value="solar_logistic">☀️ Solar & S2B Logistics (Portal & Module 1)</option>
+              <option value="modulo_05">EV Mobility (Module 5)</option>
+              <option value="business">Allowed Partners (Module 2 / Investors)</option>
+              <option value="solar_logistic">Solar & S2B Logistics (Portal & Module 1)</option>
             </select>
           </div>
 
@@ -236,8 +207,6 @@ export default function RegisterPage() {
               transition: 'background-color 0.2s',
               marginTop: '5px'
             }}
-            onMouseOver={(e) => !loading && (e.currentTarget.style.backgroundColor = '#06b6d4')}
-            onMouseOut={(e) => !loading && (e.currentTarget.style.backgroundColor = '#22d3ee')}
           >
             {loading ? 'PROCESSING REGISTRATION...' : 'REQUEST AUTOMATIC ACCESS'}
           </button>
