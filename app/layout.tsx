@@ -6,11 +6,28 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'AZPHUR PLATFORM',
+  title: 'AZPHUR | Global Energy & Infrastructure Exchange',
+  description: 'AZPHUR is the advanced transactional platform connecting global B2B markets. We specialize in solar installation projects, EV mobility networks, electric vehicle charging infrastructure, and secure enterprise supply chain logistics across international nodes.',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
     title: 'AZPHUR',
+  },
+  openGraph: {
+    title: 'AZPHUR | Global Energy & Infrastructure Exchange',
+    description: 'AZPHUR is the advanced transactional platform connecting global B2B markets. We specialize in solar installation projects, EV mobility networks, electric vehicle charging infrastructure, and secure enterprise supply chain logistics across international nodes.',
+    url: 'https://azphur.com',
+    siteName: 'AZPHUR',
+    images: [
+      {
+        url: 'https://azphur.com/logo-azphur.avif',
+        width: 800,
+        height: 600,
+        alt: 'AZPHUR Logo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
   },
 };
 
