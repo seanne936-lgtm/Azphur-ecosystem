@@ -55,6 +55,9 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false); 
   
+  // Stato per gestire la scelta multipla del cliente (Solar + S2B)
+  const [isDualCustomer, setIsDualCustomer] = useState(false);
+  
   // Stati per la gestione del Password Recovery integrato
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
@@ -136,7 +139,43 @@ export default function LoginPage() {
         const user = data.user;
         const userEmail = user.email ? user.email.toLowerCase().trim() : '';
 
-        // CHECK DRIVER IN DRIVER_PROFILES
+        // 1. VERIFICA SE IL CLIENTE È PRESENTE IN ENTRAMBE LE TABELLE (solar_leads & module_01_customers)
+        const [solarCheck, mod1Check] = await Promise.all([
+          supabase.from('solar_allowed_customers').select('email').eq('email', userEmail).maybeSingle(),
+          supabase.from('module_01_customers').select('email').eq('email', userEmail).maybeSingle()
+        ]);
+
+        if (solarCheck.data && mod1Check.data) {
+          setIsDualCustomer(true);
+          setLoading(false);
+          return;
+        }
+
+        // 2. CHECK INSTALLER IN INSTALLERS_WHITELIST (Modulo 4 - Installatori)
+        const { data: isInstaller } = await supabase
+          .from('installers_whitelist')
+          .select('email')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (isInstaller) {
+          router.push('/partner'); // Reindirizza al modulo condiviso dei partner/installatori
+          return;
+        }
+
+        // 3. CHECK PARTNER IN PARTNER_WHITELIST (Modulo 4 - Provider)
+        const { data: isPartner } = await supabase
+          .from('partner_whitelist')
+          .select('email')
+          .eq('email', userEmail)
+          .maybeSingle(); 
+
+        if (isPartner) {
+          router.push('/partner'); 
+          return;
+        }
+
+        // 4. CHECK DRIVER IN DRIVER_PROFILES
         const { data: isDriver } = await supabase
           .from('driver_profiles')
           .select('email')
@@ -148,6 +187,7 @@ export default function LoginPage() {
           return;
         }
 
+        // 5. CHECK EV CUSTOMER
         const { data: isEvCustomer } = await supabase
           .from('module_05_customers')
           .select('email')
@@ -159,25 +199,17 @@ export default function LoginPage() {
           return;
         }
 
-        const { data: isPartner } = await supabase
-          .from('allowed_partners')
-          .select('email')
-          .eq('email', userEmail)
-          .maybeSingle(); 
+    
 
-        if (isPartner) {
-          router.push('/b2b'); 
+        // 7. CHECK SOLO SOLAR (solar_leads)
+        if (solarCheck.data) {
+          router.push('/solar-quote');
           return;
         }
 
-        const { data: isMod1Customer } = await supabase
-          .from('module_01_customers')
-          .select('email')
-          .eq('email', userEmail)
-          .maybeSingle();
-
-        if (isMod1Customer) {
-          router.push('/s2b'); 
+        // 8. CHECK SOLO MODULO 1 (module_01_customers)
+        if (mod1Check.data) {
+          router.push('/s2b');
           return;
         }
 
@@ -235,7 +267,7 @@ export default function LoginPage() {
       <TopTicker />
       
       <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
         html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; scroll-behavior: smooth; box-sizing: border-box; }
         .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; overflow-x: hidden; width: 100%; box-sizing: border-box; padding-top: 45px; display: flex; flex-direction: column; }
       `}</style>
@@ -266,9 +298,21 @@ export default function LoginPage() {
         <div className="login-box-premium">
           <div className="login-header">
             <span className="phase-label">SYSTEM_AUTHENTICATION</span>
-            <h2 className="text-cyan">{showRecovery ? 'Account Recovery' : 'AZPHUR Universal Portal'}</h2>
+            <h2 className="text-cyan">
+              {isAdmin 
+                ? 'Admin Access Portal' 
+                : isDualCustomer 
+                ? 'Select Destination Module' 
+                : showRecovery 
+                ? 'Account Recovery' 
+                : 'AZPHUR Universal Portal'}
+            </h2>
             <p className="login-desc">
-              {showRecovery 
+              {isAdmin 
+                ? 'Select destination gateway for administrative privileges.' 
+                : isDualCustomer 
+                ? 'Your profile is authorized for multiple sectors. Choose where you want to go:' 
+                : showRecovery 
                 ? 'Provide your registered corporate email to generate a secure credential override uplink.' 
                 : 'Enter authorization credentials to initialize your ecosystem profile uplink.'}
             </p>
@@ -278,7 +322,11 @@ export default function LoginPage() {
             <div className="admin-routing-panel fade-in">
               <span className="phase-label admin-alert-tag">⚠️ ADMIN_ACCESS_GRANTED // SELECT_DESTINATION</span>
               
-              <button onClick={() => navigateToModule('/b2b')} className="login-btn-premium btn-admin-dark">
+              <button onClick={() => navigateToModule('/partner')} className="login-btn-premium btn-admin-partner">
+                GO TO PARTNER & INSTALLERS PORTAL (MOD_04) 🌐
+              </button>
+
+              <button onClick={() => navigateToModule('/solar-quote')} className="login-btn-premium btn-admin-dark">
                 GO TO B2B ENTERPRISE ⚡
               </button>
 
@@ -294,8 +342,19 @@ export default function LoginPage() {
                 GO TO S2B LOGISTICS →
               </button>
             </div>
+          ) : isDualCustomer ? (
+            <div className="admin-routing-panel fade-in">
+              <span className="phase-label admin-alert-tag">⚡ DUAL_PROFILE_DETECTED // CHOOSE_DESTINATION</span>
+              
+              <button onClick={() => navigateToModule('/solar-quote')} className="login-btn-premium btn-admin-partner">
+                GO TO SOLAR QUOTATIONS (MODULE 2 / SOLAR) ☀️
+              </button>
+
+              <button onClick={() => navigateToModule('/s2b')} className="login-btn-premium btn-admin-dark">
+                GO TO S2B LOGISTICS (MODULE 01 CUSTOMERS) 📦
+              </button>
+            </div>
           ) : showRecovery ? (
-            /* PANNELLO DI RECUPERO PASSWORD (Dinamico e in Inglese) */
             <form onSubmit={handleRecoveryRequest} className="login-form fade-in">
               {recoveryMessage && (
                 <div style={{
@@ -334,12 +393,11 @@ export default function LoginPage() {
                   onClick={() => { setShowRecovery(false); setRecoveryMessage(null); }}
                   style={{ background: 'none', border: 'none', color: '#0891b2', fontSize: '9px', fontWeight: '900', letterSpacing: '1px', cursor: 'pointer' }}
                 >
-                  ← BACK TO SIGN IN
+                  ← BACK TO LOG IN
                 </button>
               </div>
             </form>
           ) : (
-            /* FORM DI LOGIN ORIGINALE TRATTENUTO CON RIGORE */
             <form onSubmit={handleLogin} className="login-form">
               <div className="input-group">
                 <label>ACCOUNT_EMAIL</label>
@@ -448,6 +506,7 @@ export default function LoginPage() {
         .admin-routing-panel { display: flex; flex-direction: column; gap: 14px; margin-top: 15px; }
         .admin-alert-tag { color: #0891b2 !important; font-weight: 900; margin-bottom: 5px; }
         
+        .btn-admin-partner { background: #0891b2 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }
         .btn-admin-dark { background: #1d1d1f !important; color: #fff !important; border: 2px solid #22d3ee !important; }
         .btn-admin-blue { background: #3e6ae1 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }
         .btn-admin-green { background: #10b981 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }

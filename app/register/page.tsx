@@ -1,12 +1,23 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Dichiariamo window.turnstile e il callback globale per TypeScript
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (container: string | HTMLElement, options: Record<string, any>) => string;
+      reset: (widgetId: string) => void;
+    };
+    onloadTurnstileCallback?: () => void;
+  }
+}
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('');
@@ -16,14 +27,49 @@ export default function RegisterPage() {
   const [role, setRole] = useState('modulo_05');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  // Inserimento dello script di Cloudflare Turnstile con chiave di test per localhost
+  useEffect(() => {
+    const scriptId = 'cloudflare-turnstile-script';
+    
+    const renderWidget = () => {
+      if (window.turnstile) {
+       window.turnstile.render('#turnstile-container', {
+  sitekey: '0x4AAAAAAEO-yMYoMp05tpFf', // La tua chiave ufficiale di Cloudflare
+  callback: (token: string) => setCaptchaToken(token),
+  'expired-callback': () => setCaptchaToken(null),
+});
+      }
+    }; 
+
+    window.onloadTurnstileCallback = renderWidget;
+
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback&render=explicit';
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    } else {
+      renderWidget();
+    }
+  }, []);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!captchaToken) {
+      setMessage({ type: 'error', text: 'Please complete the human verification challenge.' });
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -45,6 +91,7 @@ export default function RegisterPage() {
       setFullName('');
       setEmail('');
       setPassword('');
+      setCaptchaToken(null);
     } catch (err: unknown) {
       let errorText = 'An error occurred during registration.';
 
@@ -209,10 +256,14 @@ export default function RegisterPage() {
                 boxSizing: 'border-box'
               }}
             >
-              <option value="modulo_05">⚡ EV Mobility (Module 5)</option>
-              <option value="business">💼 Allowed Partners (Module 2 / Investors)</option>
-              <option value="solar_logistic">☀️ Solar & S2B Logistics (Portal & Module 1)</option>
+              <option value="modulo_05">⚡ EV Charging Points & EV Mobility 🚗 (Module 5)</option>
+              <option value="solar_logistic">📦 S2B Logistics & Solar B2B ☀️ (Module 1 & Module 2)</option>
             </select>
+          </div>
+
+          {/* Cloudflare Turnstile Widget Container */}
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '2px 0' }}>
+            <div id="turnstile-container"></div>
           </div>
 
           <button 
@@ -228,7 +279,7 @@ export default function RegisterPage() {
               fontWeight: 'bold',
               cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'background-color 0.2s',
-              marginTop: '6px',
+              marginTop: '2px',
               boxShadow: '0 4px 12px rgba(34, 211, 238, 0.2)'
             }}
           >

@@ -45,10 +45,10 @@ const TopTicker: React.FC = () => {
   return (
     <div className={`top-ticker-lux ${mounted ? 'visible' : ''}`}>
       <div className="ticker-inner">
-        <span className="live-pill">SYSTEM_OK</span>
-        <span className="stat">CO2_SAVED: <strong>{formatCo2(stats.co2)}</strong></span>
+        <span className="live-pill">SYSTEM OK</span>
+        <span className="stat">CO2 SAVED: <strong>{formatCo2(stats.co2)}</strong></span>
         <div className="sep"></div>
-        <span className="stat">NET_POWER: <strong>{stats.mw.toFixed(2)}</strong> MW</span>
+        <span className="stat">NET POWER: <strong>{stats.mw.toFixed(2)}</strong> MW</span>
       </div>
       <style jsx>{`
         .top-ticker-lux { 
@@ -70,22 +70,137 @@ const TopTicker: React.FC = () => {
   );
 };
 
-export default function Home() {
+// --- AGGIUNTO: COMPONENTE ASSISTENTE IA PER LA MAIN PAGE ---
+function MainAiAssistant() {
+  const [messages, setMessages] = useState([
+    { sender: 'ai', text: 'Hello! I am the AZPHUR AI Concierge. How can I assist you today? (e.g., How to request a quote, how to access my terminal, etc.)' }
+  ]);
+  const [inputQuery, setInputQuery] = useState('');
+  const [loading, setLoading] = useState(false);
 
-const tabsList = ['overview', 'analytics', 'outage'] as const;
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputQuery.trim()) return;
 
-  useEffect(() => {
-    const autoRotate = setInterval(() => {
-      setActiveTab(prev => {
-        if (prev === 'overview') return 'analytics';
-        if (prev === 'analytics') return 'outage';
-        return 'overview';
+    const userText = inputQuery;
+    setInputQuery('');
+    setMessages(prev => [...prev, { sender: 'user', text: userText }]);
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/v1/ai-advisor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ objective: `Guide the user about the website navigation: ${userText}` })
       });
-    }, 10000);
+      const data = await res.json();
 
-    return () => clearInterval(autoRotate);
-  }, []);
+      if (res.ok && data.success) {
+        setMessages(prev => [...prev, { sender: 'ai', text: data.recommendation }]);
+      } else {
+        setMessages(prev => [...prev, { sender: 'ai', text: 'I am here to help you navigate AZPHUR. Please try asking about our solar quotes or login instructions.' }]);
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, { sender: 'ai', text: 'Network connection error. Please use the top menu to access your private terminal.' }]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #ffffff 0%, #e6f7f9 100%)',
+      padding: '30px',
+      borderRadius: '20px',
+      border: '3px solid #1d1d1f',
+      maxWidth: '600px',
+      margin: '60px auto',
+      boxShadow: '0 15px 30px rgba(34, 211, 238, 0.1)',
+      boxSizing: 'border-box'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
+        <div style={{ width: '10px', height: '10px', background: '#22d3ee', borderRadius: '50%', boxShadow: '0 0 10px #22d3ee' }}></div>
+        <span style={{ fontSize: '10px', fontWeight: 900, color: '#0891b2', letterSpacing: '1.5px' }}>
+          AZPHUR MAIN PAGE CONCIERGE
+        </span>
+      </div>
+
+      <h3 style={{ fontSize: '20px', color: '#0891b2', fontWeight: 800, margin: '0 0 15px 0' }}>
+        Need help navigating or requesting a quote?
+      </h3>
+
+      <div style={{
+        background: '#fff',
+        border: '1px solid rgba(34, 211, 238, 0.3)',
+        borderRadius: '12px',
+        padding: '15px',
+        height: '200px',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        marginBottom: '15px'
+      }}>
+        {messages.map((msg, index) => (
+          <div key={index} style={{
+            alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+            background: msg.sender === 'user' ? '#0891b2' : '#f0f9fa',
+            color: msg.sender === 'user' ? '#fff' : '#1e293b',
+            padding: '10px 14px',
+            borderRadius: '10px',
+            fontSize: '12px',
+            maxWidth: '85%',
+            fontFamily: msg.sender === 'ai' ? 'monospace' : 'inherit',
+            lineHeight: '1.4'
+          }}>
+            {msg.text}
+          </div>
+        ))}
+        {loading && (
+          <div style={{ alignSelf: 'flex-start', color: '#86868b', fontSize: '11px', fontStyle: 'italic' }}>
+            AI is typing...
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '10px' }}>
+        <input 
+          type="text" 
+          placeholder="Ask e.g., 'How do I log in?' or 'How do I get a quote?'" 
+          value={inputQuery}
+          onChange={(e) => setInputQuery(e.target.value)}
+          style={{
+            flex: 1,
+            padding: '12px',
+            borderRadius: '10px',
+            border: '1px solid #cbd5e1',
+            fontSize: '12px',
+            outline: 'none'
+          }}
+        />
+        <button 
+          type="submit"
+          disabled={loading}
+          style={{
+            background: '#1d1d1f',
+            color: '#fff',
+            border: 'none',
+            padding: '12px 20px',
+            borderRadius: '10px',
+            fontWeight: 900,
+            fontSize: '10px',
+            cursor: 'pointer',
+            letterSpacing: '1px'
+          }}
+        >
+          SEND
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function Home() {
   const router = useRouter();
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [staffCode, setStaffCode] = useState<string>("");
@@ -132,7 +247,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
     },
     {
       question: "How are node access privileges managed?",
-      answer: "Access depends entirely on verified registration tables inside our production database (e.g., module_05_customers). Privileged configurations require explicit cryptographic or whitelist validation."
+      answer: "Access depends entirely on verified registration tables inside our production database (e.g., module 05 customers). Privileged configurations require explicit cryptographic or whitelist validation."
     },
     {
       question: "Can third-party manufacturers sync hardware directly?",
@@ -152,6 +267,18 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
     }
   ];
 
+  useEffect(() => {
+    const autoRotate = setInterval(() => {
+      setActiveTab(prev => {
+        if (prev === 'overview') return 'analytics';
+        if (prev === 'analytics') return 'outage';
+        return 'overview';
+      });
+    }, 10000);
+
+    return () => clearInterval(autoRotate);
+  }, []);
+
   const verifyCustomerAccessM5 = async (userEmail: string): Promise<boolean> => {
     const emailClean = userEmail.toLowerCase().trim();
     if (adminEmails.includes(emailClean)) {
@@ -160,7 +287,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
     }
     try {
       const { data, error } = await supabase
-        .from('module_05_customers')
+        .from('module 05 customers')
         .select('email')
         .eq('email', emailClean)
         .maybeSingle();
@@ -186,7 +313,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
     }
     try {
       const { data, error } = await supabase
-        .from('module_01_customers')
+        .from('module 01 customers')
         .select('email')
         .eq('email', emailClean)
         .maybeSingle();
@@ -359,7 +486,6 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
         .santrix-header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
         .santrix-brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 18px; letter-spacing: -0.5px; }
         
-        /* Modificata la barra dei tab per adattarsi fluidamente agli schermi piccoli */
         .santrix-nav-pills { 
           display: flex; gap: 10px; background: rgba(0,0,0,0.04); padding: 6px; border-radius: 100px; 
           flex-wrap: wrap; max-width: 100%; box-sizing: border-box;
@@ -504,14 +630,11 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
           .blueprints-container { grid-template-columns: 1fr; }
           .about-section { flex-direction: column !important; text-align: center; gap: 30px; }
           
-          /* Correzione specifica per non tagliare i tab e il grafico su mobile */
           .santrix-header-top { flex-direction: column; align-items: flex-start; }
           .santrix-nav-pills { width: 100%; overflow-x: auto; padding: 4px; justify-content: flex-start; }
           .santrix-pill { padding: 6px 14px; font-size: 10px; }
           .santrix-right-visual { padding: 15px !important; }
-        }        }
-        
-          }
+        }
       `}</style>
 
       {/* NAVBAR */}
@@ -529,7 +652,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
         <div className="nav-items">
           <div className="network-signal">
             <span className="sig-dot"></span>
-            <span>UPLINK_ACTIVE // {liveMs}ms</span>
+            <span>UPLINK ACTIVE // {liveMs}ms</span>
           </div>
           {currentUserEmail && currentUserEmail !== 'loading...' && currentUserEmail !== 'guest@azphur.com' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -540,20 +663,21 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <button className="btn-signin-link" onClick={() => router.push('/register')}>SIGN_IN</button>
-              <button className="btn-cyan-outline" onClick={() => router.push('/login')}>ENTER_PORTAL</button>
+              <button className="btn-signin-link" onClick={() => router.push('/register')}>SIGN IN</button>
+              <button className="btn-cyan-outline" onClick={() => router.push('/login')}>ENTER PORTAL</button>
             </div>
           )}
         </div>
       </nav> 
 
       <main>
-        {/* SANTRIX HERO DASHBOARD CONTAINER */}
+       {/* SANTRIX HERO DASHBOARD CONTAINER */}
         <section className="santrix-hero-container">
           <div className="santrix-monitor-frame">
             <div className="santrix-header-top">
-              <div className="santrix-brand">
-                <span style={{ color: '#06b6d4' }}>⚡</span> AZPHUR_EXCHANGE
+              <div className="santrix-brand" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img src="/logo-azphur.avif" alt="AZPHUR Logo" style={{ height: '20px', width: 'auto' }} />
+                <span>AZPHUR EXCHANGE</span>
               </div>
               <div className="santrix-nav-pills">
                 <button 
@@ -576,13 +700,12 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
                 </button>
               </div>
             </div>
-
             {/* TAB CONTENT: OVERVIEW */}
             {activeTab === 'overview' && (
               <div key={activeTab} className="santrix-grid-dashboard" style={{ animation: 'fadeInOut 0.5s ease-in-out' }}>
                 <div className="santrix-left-col">
                   <span className="phase-label" style={{ color: '#06b6d4' }}>SHAPING SUSTAINABLE POSSIBILITIES</span>
-                  <h1>THE ENERGY <br /><span style={{ color: '#06b6d4' }}>EXCHANGE</span></h1>
+                  <h1>THE ENERGY  <br /><span style={{ color: '#06b6d4' }}>EXCHANGE</span></h1>
                   <p>
                     The transactional nervous system for Energy, EV, and Infrastructure operations. 
                     We enforce complete control over leads, transactions, and critical infrastructure data.
@@ -602,14 +725,14 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
 
                 <div className="santrix-right-visual">
                   <img 
-                    src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=1000" 
+                    src="https://images.unsplash.com/photo-1611365892117-00ac5ef43c90?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" 
                     alt="AZPHUR Energy Grid Infrastructure" 
                   />
                 </div>
               </div>
             )}
 
-            {/* TAB CONTENT: ANALYTICS (Grafico e statistiche generali in inglese) */}
+            {/* TAB CONTENT: ANALYTICS */}
             {activeTab === 'analytics' && (
               <div className="santrix-grid-dashboard">
                 <div className="santrix-left-col">
@@ -634,7 +757,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
 
                 <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px' }}>
                   <div style={{ fontSize: '12px', fontWeight: '900', fontFamily: 'monospace', color: '#111827', marginBottom: '15px' }}>
-                    [SYSTEM_LOAD_DISTRIBUTION_CHART]
+                    [SYSTEM LOAD DISTRIBUTION CHART]
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '180px', paddingBottom: '10px', borderBottom: '2px solid #e5e7eb' }}>
                     <div style={{ flex: 1, background: '#06b6d4', height: '65%', borderRadius: '6px 6px 0 0' }}></div>
@@ -644,17 +767,17 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
                     <div style={{ flex: 1, background: '#06b6d4', height: '75%', borderRadius: '6px 6px 0 0' }}></div>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontFamily: 'monospace', color: '#9ca3af', marginTop: '10px' }}>
-                    <span>NODE_01</span>
-                    <span>NODE_02</span>
-                    <span>NODE_03</span>
-                    <span>NODE_04</span>
-                    <span>NODE_05</span>
+                    <span>NODE 01</span>
+                    <span>NODE 02</span>
+                    <span>NODE 03</span>
+                    <span>NODE 04</span>
+                    <span>NODE 05</span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* TAB CONTENT: OUTAGE REPORTS (Reportistica outage e anomalie in inglese) */}
+            {/* TAB CONTENT: OUTAGE REPORTS */}
             {activeTab === 'outage' && (
               <div className="santrix-grid-dashboard">
                 <div className="santrix-left-col">
@@ -679,7 +802,7 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
 
                 <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px', fontFamily: 'monospace' }}>
                   <div style={{ fontSize: '12px', fontWeight: '900', color: '#111827', marginBottom: '15px' }}>
-                    [RECENT_LOG_ENTRIES]
+                    [RECENT LOG ENTRIES]
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px', color: '#4b5563' }}>
                     <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #10b981' }}>
@@ -699,23 +822,18 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
           </div>
         </section>
 
-        {/* QUICK ACCESS ZONE */}
-        <div className="quick-access-zone">
-          <button onClick={() => router.push('/solar-quote')} className="btn-quotation-lux">
-             <span className="blink">⚡</span> [ DX_LINK // SOLAR_QUOTATION ]
-          </button>
-        </div>
+      
 
         {/* LIVE STREAM TICKER */}
         <div className="live-stream-ticker">
           <div className="marquee-content">
             <div className="marquee-item">
               <span>[NODE-PHILIPPINES]</span> SOLAR ARRAY ALLOCATION SECURED // CONFIRMED
-              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
+              <img src="https://plus.unsplash.com/premium_photo-1664476874028-bf37a953ee66?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8cGhpbGlwcGluZXMlMjB3b3JrfGVufDB8fDB8fHww" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-GERMANY]</span> EV CHARGE EXPANSION CONTRACT // INGESTED
-              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
+              <img src="https://images.unsplash.com/photo-1564347288827-3e4293543e07?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-SINGAPORE]</span> SUBSTATION PROCURED VIA HUB_01 // ACTIVE
@@ -723,11 +841,11 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
             </div>
             <div className="marquee-item">
               <span>[NODE-PHILIPPINES]</span> SOLAR ARRAY ALLOCATION SECURED // CONFIRMED
-              <img src="https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
+              <img src="https://plus.unsplash.com/premium_photo-1664476874028-bf37a953ee66?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8cGhpbGlwcGluZXMlMjB3b3JrfGVufDB8fDB8fHww" className="ticker-thumb" alt="Node" />
             </div>
             <div className="marquee-item">
               <span>[NODE-GERMANY]</span> EV CHARGE EXPANSION CONTRACT // INGESTED
-              <img src="https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=120" className="ticker-thumb" alt="Node" />
+              <img src="https://images.unsplash.com/photo-1564347288827-3e4293543e07?q=80&w=688&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" className="ticker-thumb" alt="Node" />
             </div>
           </div>
         </div>
@@ -746,99 +864,155 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
           </section>
         ))}
 
+        {/* --- INSERITO QUI IL WIDGET DELL'ASSISTENTE IA NELLA MAIN PAGE --- */}
+        <MainAiAssistant />
+
         {/* MODULAR GRID (ALL 6 MODULES) */}
         <section className="modular-grid-apple">
-          <div onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)} className="quad-card-premium">
-            <div>
-              <span className="phase-label">MODULE_01 // SUPPLY</span>
-              <h3 className="text-cyan">Supply Chain Hub & Nodes Tracking</h3>
-              <p>Onboard vetted industrial suppliers, manage profiles, and catalog high-capacity hardware assets across Solar Installation, EV Infrastructure, Electrical Works, and Energy Equipment categories.</p>
+          
+          {/* MODULE 01 */}
+          <div 
+            onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)} 
+            className="quad-card-premium"
+            style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease' }}
+          >
+            <div style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=800&q=80")', backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(6px)', transform: 'scale(1.08)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}></div>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 5, 5, 0.55)', zIndex: 2 }}></div>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <span className="phase-label" style={{ color: '#38bdf8', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MODULE 01 // SUPPLY</span>
+                <h3 className="text-cyan" style={{ color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.95)' }}>Supply Chain Hub & Nodes Tracking</h3>
+                <p style={{ color: '#f3f4f6', textShadow: '0 2px 6px rgba(0,0,0,0.95)', fontWeight: '600' }}>Onboard vetted industrial suppliers, manage profiles, and catalog high-capacity hardware assets across Solar Installation, EV Infrastructure, Electrical Works, and Energy Equipment categories.</p>
+              </div>
+              <div className="action-text" style={{ color: '#38bdf8', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MANAGE LISTINGS →</div>
             </div>
-            <div className="action-text">MANAGE_LISTINGS →</div>
           </div>
 
-          <div onClick={() => handleModuleNavigation('/b2b')} className="quad-card-premium">
-            <div>
-              <span className="phase-label">MODULE_02 // BUILD</span>
-              <h3 className="text-cyan">Matching Engine</h3>
-              <p>Direct B2B lead generation and quote request system. Captures utility-scale project demands and dispatches structured opportunities directly to high-ranking verified suppliers.</p>
+         {/* MODULE 02 */}
+<div 
+  onClick={() => handleModuleNavigation('/solar-quote')} 
+  className="quad-card-premium"
+  style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease' }}
+>
+  <div style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=800&q=80")', backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(6px)', transform: 'scale(1.08)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}></div>
+  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 5, 5, 0.55)', zIndex: 2 }}></div>
+  <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+    <div>
+      <span className="phase-label" style={{ color: '#38bdf8', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MODULE 02 // BUILD</span> 
+      
+      <h3 className="text-cyan" style={{ color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.95)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span>Matching Engine</span>
+        <span className="blink">⚡</span>
+      </h3>
+      <p style={{ color: '#f3f4f6', textShadow: '0 2px 6px rgba(0,0,0,0.95)', fontWeight: '600' }}>Direct B2B lead generation and quote request system. Captures utility-scale project demands and dispatches structured opportunities directly to high-ranking verified suppliers.</p>
+    </div>
+    <div className="action-text" style={{ color: '#38bdf8', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>TRACK LEADS →</div>
+  </div>
+</div>
+
+          {/* MODULE 03 */}
+          <div 
+            onClick={() => router.push('/b2c')} 
+            className="quad-card-premium"
+            style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease' }}
+          >
+            <div style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=800&q=80")', backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(6px)', transform: 'scale(1.08)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}></div>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 5, 5, 0.55)', zIndex: 2 }}></div>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <span className="phase-label" style={{ color: '#38bdf8', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MODULE 03 // STORE</span>
+                <h3 className="text-cyan" style={{ color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.95)' }}>Merchant Layer</h3>
+                <p style={{ color: '#f3f4f6', textShadow: '0 2px 6px rgba(0,0,0,0.95)', fontWeight: '600' }}>Unified product commercialization and automated fulfillment layer. Built to map global inventory SKUs and scale recurring retail revenue through integrated checkout pipelines.</p>
+              </div>
+              <div className="action-text" style={{ color: '#38bdf8', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>INITIALIZE NODE →</div>
             </div>
-            <div className="action-text">TRACK_LEADS →</div>
           </div>
 
-          <div onClick={() => router.push('/b2c')} className="quad-card-premium">
-            <div>
-              <span className="phase-label">MODULE_03 // STORE</span>
-              <h3 className="text-cyan">Merchant Layer</h3>
-              <p>Unified product commercialization and automated fulfillment layer. Built to map global inventory SKUs and scale recurring retail revenue through integrated checkout pipelines.</p>
+          {/* MODULE 04 */}
+          <div 
+            onClick={() => router.push('/partner')} 
+            className="quad-card-premium"
+            style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease' }}
+          >
+            <div style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=800&q=80")', backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(6px)', transform: 'scale(1.08)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}></div>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 5, 5, 0.55)', zIndex: 2 }}></div>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <span className="phase-label" style={{ color: '#38bdf8', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MODULE 04 // PARTNER</span>
+                <h3 className="text-cyan" style={{ color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.95)' }}>Partner Portal</h3>
+                <p style={{ color: '#f3f4f6', textShadow: '0 2px 6px rgba(0,0,0,0.95)', fontWeight: '600' }}>SaaS administration and ledger deployment node for decentralized supply chains, providing absolute transparency over contract parameters, commission tracking, and billing operations.</p>
+              </div>
+              <div className="action-text" style={{ color: '#38bdf8', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>NODE LOGIN →</div>
             </div>
-            <div className="action-text">INITIALIZE_NODE →</div>
           </div>
 
-          <div onClick={() => router.push('/partner')} className="quad-card-premium">
-            <div>
-              <span className="phase-label">MODULE_04 // PARTNER</span>
-              <h3 className="text-cyan">Partner Portal</h3>
-              <p>SaaS administration and ledger deployment node for decentralized supply chains, providing absolute transparency over contract parameters, commission tracking, and billing operations.</p>
-            </div>
-            <div className="action-text">NODE_LOGIN →</div>
-          </div>
-
+          {/* MODULE 05 */}
           <div 
             onClick={() => handleModuleNavigation('/EV', verifyCustomerAccessM5)} 
             className="quad-card-premium card-m5" 
+            style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease' }}
           >
-            <div>
-              <span className="phase-label" style={{ color: '#3e6ae1' }}>MODULE_05 // GO</span>
-              <h3 className="text-cyan text-m5" style={{ color: '#3e6ae1' }}>AZPHUR GO Mobility Hub</h3>
-              <p>Real-time EV charging session creation and transaction logging layer. Built to map localized station nodes and scale recurring revenue streams through automated payment gateways.</p>
+            <div style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?auto=format&fit=crop&w=800&q=80")', backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(6px)', transform: 'scale(1.08)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}></div>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 5, 5, 0.55)', zIndex: 2 }}></div>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <span className="phase-label text-m5" style={{ color: '#60a5fa', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MODULE 05 // GO</span>
+                <h3 className="text-cyan text-m5" style={{ color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.95)' }}>AZPHUR GO Mobility Hub</h3>
+                <p style={{ color: '#f3f4f6', textShadow: '0 2px 6px rgba(0,0,0,0.95)', fontWeight: '600' }}>Real-time EV charging session creation and transaction logging layer. Built to map localized station nodes and scale recurring revenue streams through automated payment gateways.</p>
+              </div>
+              <div className="action-text action-m5" style={{ color: '#60a5fa', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>LAUNCH TERMINAL →</div>
             </div>
-            <div className="action-text action-m5" style={{ color: '#3e6ae1' }}>LAUNCH_TERMINAL →</div>
           </div>
 
+          {/* MODULE 06 */}
           <div 
             onClick={() => handleModuleNavigation('/EV/driver')} 
             className="quad-card-premium card-driver" 
+            style={{ position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'all 0.3s ease' }}
           >
-            <div>
-              <span className="phase-label" style={{ color: '#10b981' }}>MODULE_06 // DRIVER</span>
-              <h3 className="text-cyan text-driver" style={{ color: '#10b981' }}>Driver Dispatch HQ</h3>
-              <p>Dedicated terminal for verified EV fleet drivers. Accept live trip dispatches, track passenger GPS coordinates, and manage online/offline status in real-time.</p>
+            <div style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?auto=format&fit=crop&w=800&q=80")', backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(6px)', transform: 'scale(1.08)', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}></div>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5, 5, 5, 0.55)', zIndex: 2 }}></div>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <span className="phase-label text-driver" style={{ color: '#34d399', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>MODULE 06 // DRIVER</span>
+                <h3 className="text-cyan text-driver" style={{ color: '#ffffff', textShadow: '0 2px 10px rgba(0,0,0,0.95)' }}>Driver Dispatch HQ</h3>
+                <p style={{ color: '#f3f4f6', textShadow: '0 2px 6px rgba(0,0,0,0.95)', fontWeight: '600' }}>Dedicated terminal for verified EV fleet drivers. Accept live trip dispatches, track passenger GPS coordinates, and manage online/offline status in real-time.</p>
+              </div>
+              <div className="action-text action-driver" style={{ color: '#34d399', fontWeight: 'bold', textShadow: '0 2px 8px rgba(0,0,0,0.9)' }}>DRIVER HQ →</div>
             </div>
-            <div className="action-text action-driver" style={{ color: '#10b981' }}>DRIVER_HQ →</div>
           </div>
         </section>
-
+        
         {/* BLUEPRINTS SECTION */}
         <div className="section-header-lux">
           <h2 className="cyan-header">BLUEPRINTS</h2>
         </div>
         <section className="blueprints-container">
           <div className="blueprint-card">
-            <div className="blueprint-title">M01_LEDGER_INTEGRATION</div>
+            <div className="blueprint-title">M01 LEDGER INTEGRATION</div>
             <div className="blueprint-data">
               STATUS: OPERATIONAL<br/>
-              TYPE: DISTRIBUTED_INVENTORY<br/>
-              NODES_SYNCED: {inventoryCount || '0'}<br/>
+              TYPE: DISTRIBUTED INVENTORY<br/>
+              NODES SYNCED: {inventoryCount || '0'}<br/>
               COMPLIANCE: ENFORCED
             </div>
           </div>
           <div className="blueprint-card">
-            <div className="blueprint-title">M05_ROUTING_ENGINE</div>
+            <div className="blueprint-title">M05 ROUTING ENGINE</div>
             <div className="blueprint-data">
-              STATUS: LIVE_STREAMING<br/>
-              ALGORITHM: DIJKSTRA_GRID_v4<br/>
-              LATENCY_TARGET: &lt; 450ms<br/>
+              STATUS: LIVE STREAMING<br/>
+              ALGORITHM: DIJKSTRA GRID v4<br/>
+              LATENCY TARGET: &lt; 450ms<br/>
               FAILSAFE: ACTIVE
             </div>
           </div>
           <div className="blueprint-card">
-            <div className="blueprint-title">CORE_SECURITY_LAYER</div>
+            <div className="blueprint-title">CORE SECURITY LAYER</div>
             <div className="blueprint-data">
               STATUS: LOCKED<br/>
-              AUTH_PROVIDER: SUPABASE_JWT<br/>
-              OVERRIDE: EXECUTIVE_ONLY<br/>
-              CIPHER: AES_256_GCM
+              AUTH PROVIDER: SUPABASE JWT<br/>
+              OVERRIDE: EXECUTIVE ONLY<br/>
+              CIPHER: AES 256 GCM
             </div>
           </div>
         </section>
@@ -863,26 +1037,140 @@ const tabsList = ['overview', 'analytics', 'outage'] as const;
           ))}
         </section>
 
-        {/* FOOTER */}
-        <footer className="auth-footer-lux">
-          <div className="staff-box-lux">
-            <span className="phase-label">EXECUTIVE_OVERRIDE</span>
-            <div className="auth-container">
+{/* FOOTER */}
+        <footer className="auth-footer-lux" style={{ padding: '40px 15px 30px 15px', backgroundColor: '#ffffff', color: '#050505', boxSizing: 'border-box', width: '100%', overflowX: 'hidden' }}>
+          
+          {/* Sezione Principale Logo + Contatti */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px', maxWidth: '1200px', margin: '0 auto 30px auto', borderBottom: '1px solid #eaeaea', paddingBottom: '25px', textAlign: 'center' }}>
+            
+            {/* Logo e Nome */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap', width: '100%', maxWidth: 'none' }}>
+              <img src="/logo-azphur.avif" alt="AZPHUR Logo" style={{ height: '42px', width: 'auto', objectFit: 'contain' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: '#050505' }}>
+                  AZPHUR INC.
+                </h2>
+                <p style={{ margin: 0, fontSize: '10px', letterSpacing: '1.2px', color: '#06b6d4', textTransform: 'uppercase' }}>
+                  Shaping Sustainable Possibilities
+                </p>
+              </div>
+            </div>
+
+            {/* Email & Social Media */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: '15px', fontSize: '13px', width: '100%' }}>
+              <span style={{ color: '#555', fontStyle: 'italic', fontSize: '12px' }}>Do you need a hand? Contact us:</span>
+              
+              <a href="mailto:azphur@gmail.com" style={{ color: '#06b6d4', textDecoration: 'none', fontWeight: '500', wordBreak: 'break-all' }}>
+               azphur@gmail.com
+              </a>
+
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', justifyContent: 'center', width: '100%', marginTop: '5px' }}>
+                <a href="https://www.facebook.com/azphur.inc/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', textDecoration: 'none' }}>
+                  <svg style={{ width: '22px', height: '22px', fill: '#06b6d4' }} viewBox="0 0 24 24">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                </a>
+
+                <a href="https://www.linkedin.com/search/results/all/?keywords=Azphur%20Inc." target="_blank" rel="noopener noreferrer" style={{ display: 'flex', textDecoration: 'none' }}>
+                  <svg style={{ width: '22px', height: '22px', fill: '#06b6d4' }} viewBox="0 0 24 24">
+                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                  </svg>
+                </a>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* EXECUTIVE OVERRIDE - BOX OVALE PANNA / SI ACCENDE DI CYAN */}
+          <div style={{ 
+            maxWidth: '380px', 
+            margin: '0 auto 30px auto', 
+            padding: '16px 24px', 
+            background: isAuthorized ? '#06b6d4' : '#fbfbf9', 
+            borderRadius: '60px', 
+            border: isAuthorized ? '2px solid #0891b2' : '1px solid #e7e7e3', 
+            boxShadow: isAuthorized ? '0 8px 25px rgba(6, 182, 212, 0.35)' : '0 6px 20px rgba(0, 0, 0, 0.05)', 
+            boxSizing: 'border-box',
+            transition: 'all 0.3s ease'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '10px' }}>
+              <span style={{ 
+                fontSize: '9px', 
+                fontWeight: 900, 
+                color: isAuthorized ? '#000' : '#888882', 
+                letterSpacing: '2px', 
+                fontFamily: 'monospace', 
+                textTransform: 'uppercase',
+                transition: 'color 0.3s ease'
+              }}>
+                {isAuthorized ? "⚡ AUTHORIZED ACCESS" : "🔒 EXECUTIVE OVERRIDE"}
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <input 
                 type="password" 
-                placeholder="CTO_ACCESS_KEY" 
+                placeholder="ENTER PIN" 
                 value={staffCode}
                 onChange={(e) => setStaffCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isAuthorized) {
+                    router.push('/admin');
+                  }
+                }}
+                style={{ 
+                  flex: 1,
+                  boxSizing: 'border-box', 
+                  padding: '10px 14px', 
+                  fontSize: '12px', 
+                  background: isAuthorized ? 'rgba(255, 255, 255, 0.9)' : '#fff', 
+                  border: isAuthorized ? '1px solid rgba(0,0,0,0.1)' : '1px solid #dcdce0', 
+                  borderRadius: '30px', 
+                  color: '#050505', 
+                  outline: 'none',
+                  textAlign: 'center',
+                  fontFamily: 'monospace',
+                  letterSpacing: '2px'
+                }}
               />
               <button 
                 onClick={() => isAuthorized && router.push('/admin')} 
-                className={isAuthorized ? 'active' : ''}
+                style={{ 
+                  padding: '10px 18px', 
+                  fontSize: '11px', 
+                  fontWeight: 900,
+                  letterSpacing: '1px',
+                  borderRadius: '30px', 
+                  cursor: isAuthorized ? 'pointer' : 'not-allowed',
+                  border: 'none',
+                  background: isAuthorized ? '#000' : '#e4e4dc',
+                  color: isAuthorized ? '#06b6d4' : '#888884',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.2s ease'
+                }}
               >
-                {isAuthorized ? "GO_TO_CORE" : "LOCKED"}
+                {isAuthorized ? "GO ➔" : "LOCKED"}
               </button>
             </div>
           </div>
-          <div className="legal-tag">2026. ALL RIGHTS RESERVED</div>
+
+          {/* Link Legali (Privacy & Terms) */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', gap: '15px', margin: '0 auto 15px auto', fontSize: '12px' }}>
+            <a href="/policy" style={{ color: '#06b6d4', textDecoration: 'none', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              Privacy Policy
+            </a>
+            <span style={{ color: '#ccc' }}>•</span>
+            <a href="/terms" style={{ color: '#06b6d4', textDecoration: 'none', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              Terms & Conditions
+            </a>
+          </div>
+
+          {/* Copyright */}
+          <div className="legal-tag" style={{ fontSize: '10px', letterSpacing: '1px', color: '#666', textAlign: 'center', marginTop: '15px', wordBreak: 'break-word' }}>
+            © 2026 AZPHUR. All rights reserved.
+          </div>
+
         </footer>
       </main>
     </div>
