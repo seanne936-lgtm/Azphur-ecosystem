@@ -320,7 +320,7 @@ export async function PUT(request: Request) {
       } else if (Array.isArray(rawAcceptedInst)) {
         existingAcceptedInst = rawAcceptedInst;
       }
-      
+       
       if (!existingAcceptedInst.includes(entity_name)) {
         existingAcceptedInst.push(entity_name);
       }
