@@ -82,13 +82,10 @@ const TopTicker: React.FC = () => {
   );
 };
 
-// --- ASSISTENTE IA: WIDGET FLOTTANTE STILE "NEWSLETTER DINAMICA" ---
-// Stessa identica logica (stesso endpoint, stesso stato messaggi) dell'assistente precedente:
-// cambia SOLO il contenitore, che ora e' un pill flottante che segue lo scroll invece di un blocco fisso in pagina.
 function MainAiAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { sender: 'ai', text: 'Hello! I am the AZPHUR AI Concierge. How can I assist you today? (e.g., How to request a quote, how to access my terminal, etc.)' }
+    { sender: 'ai', text: 'Hello! I am the AZPHUR AI Concierge. How can I assist you today? (e.g., What is Azphur, how to login, etc.)' }
   ]);
   const [inputQuery, setInputQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -103,20 +100,21 @@ function MainAiAssistant() {
     setLoading(true);
 
     try {
+      // CORRETTO: Passiamo userMessage invece di objective in modo che l'API lo legga correttamente
       const res = await fetch('/api/v1/ai-advisor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ objective: `Guide the user about the website navigation: ${userText}` })
+        body: JSON.stringify({ userMessage: userText })
       });
       const data = await res.json();
 
       if (res.ok && data.success) {
         setMessages(prev => [...prev, { sender: 'ai', text: data.recommendation }]);
       } else {
-        setMessages(prev => [...prev, { sender: 'ai', text: 'I am here to help you navigate AZPHUR. Please try asking about our solar quotes or login instructions.' }]);
+        setMessages(prev => [...prev, { sender: 'ai', text: data.error || 'Connection error with the neural core.' }]);
       }
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'ai', text: 'Network connection error. Please use the top menu to access your private terminal.' }]);
+      setMessages(prev => [...prev, { sender: 'ai', text: 'Network connection error. Please try again.' }]);
     } finally {
       setLoading(false);
     }
@@ -146,7 +144,7 @@ function MainAiAssistant() {
           <form onSubmit={handleSendMessage} className="ai-float-form">
             <input
               type="text"
-              placeholder="Ask e.g., 'How do I get a quote?'"
+              placeholder="Ask e.g., 'What is Azphur?'"
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
               className="ai-float-input"
@@ -227,6 +225,7 @@ function MainAiAssistant() {
 }
 
 export default function Home() {
+  
   const router = useRouter();
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [staffCode, setStaffCode] = useState<string>("");
@@ -239,6 +238,7 @@ export default function Home() {
   
   const [debugM1, setDebugM1] = useState<string>("Waiting...");
   const [debugM5, setDebugM5] = useState<string>("Waiting...");
+  const [activeTransactionsCount, setActiveTransactionsCount] = useState<number | null>(null);
 
   // --- STATO SOLO-UX: ricerca moduli + filtro chip stile Grab (nessuna chiamata backend) ---
   const [moduleSearch, setModuleSearch] = useState<string>("");
@@ -251,6 +251,9 @@ export default function Home() {
     "tuofratello@email.com", 
     "tuamailprincipale@email.com"
   ];
+
+
+  
 
   const aboutData: AboutItem[] = [
     {
@@ -298,6 +301,9 @@ export default function Home() {
     }
   ];
 
+
+
+
   useEffect(() => {
     const autoRotate = setInterval(() => {
       setActiveTab(prev => {
@@ -310,7 +316,25 @@ export default function Home() {
     return () => clearInterval(autoRotate);
   }, []);
 
-  
+
+useEffect(() => {
+  async function fetchLiveTransactions() {
+    try {
+      // Conta i record presenti nella tabella 'leads' o 'transactions'
+      const { count, error } = await supabase
+        .from('leads') // Oppure la tabella dei pagamenti/transazioni
+        .select('*', { count: 'exact', head: true });
+
+      if (!error && count !== null) {
+        setActiveTransactionsCount(count);
+      }
+    } catch (err) {
+      console.error("Error fetching live transactions:", err);
+    }
+  }
+
+  fetchLiveTransactions();
+}, []);
 
   const verifyCustomerAccessM5 = async (userEmail: string): Promise<boolean> => {
     const emailClean = userEmail.toLowerCase().trim();
@@ -391,6 +415,7 @@ const verifyModule01Access = async (userEmail: string): Promise<boolean> => {
         }
       }
     };
+    
 
     const runImmediateAuthCheck = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -491,6 +516,12 @@ const verifyAndRedirectUser = async (userEmail: string, targetPath: string, vali
 };
 
 const handleModuleNavigation = async (targetPath: string, validator?: (email: string) => Promise<boolean>) => {
+    // NUOVO: Modulo 02 (/solar-quote) libero, accessibile anche senza login
+    if (targetPath.includes('/solar-quote')) {
+      router.push(targetPath);
+      return;
+    }
+
     // 1. Prendi subito la sessione attiva da Supabase
     const { data: { session } } = await supabase.auth.getSession();
     const activeEmail = session?.user?.email ? session.user.email.toLowerCase().trim() : '';
@@ -511,9 +542,8 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
       return;
     }
 
-    // 4. Per /s2b e /solar-quote: se vuoi mantenere un controllo tollerante, 
-    // facciamo passare l'utente se la sessione è valida, oppure eseguiamo il controllo senza bloccare l'intera app
-    if (targetPath.includes('/s2b') || targetPath.includes('/solar-quote')) {
+    // 4. Per /s2b: manteniamo un controllo tollerante (Modulo 01 resta protetto da login)
+    if (targetPath.includes('/s2b')) {
       router.push(targetPath);
       return;
     }
@@ -599,7 +629,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
     },
     {
       id: 'm05',
-      label: 'EV Charge',
+      label: 'EV & Charge',
       tag: 'MODULE 05 // GO',
       title: 'AZPHUR GO Mobility Hub',
       description: 'Real-time EV charging session creation and transaction logging layer across localized station nodes with automated payment gateways.',
@@ -939,16 +969,18 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             </div>
 
             <div className="grab-stats-row">
-              <div className="grab-stat-pill" onClick={() => router.push('/partner')}>
-                <div className="grab-stat-left">
-                  <div className="grab-stat-icon" style={{ background: 'rgba(6,182,212,0.12)' }}>💠</div>
-                  <div>
-                    <span className="grab-stat-label">Active Transactions</span>
-                    <span className="grab-stat-value">1,402.00</span>
-                  </div>
-                </div>
-                <span className="grab-stat-chevron">›</span>
-              </div>
+             <div className="grab-stat-pill" onClick={() => router.push('/partner')}>
+  <div className="grab-stat-left">
+    <div className="grab-stat-icon" style={{ background: 'rgba(6,182,212,0.12)' }}>⚡</div>
+    <div>
+      <span className="grab-stat-label">Active Transactions</span>
+      <span className="grab-stat-value">
+        {activeTransactionsCount !== null ? activeTransactionsCount.toLocaleString() : '0'}
+      </span>
+    </div>
+  </div>
+  <span className="grab-stat-chevron">›</span>
+</div>
               <div className="grab-stat-pill" onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)}>
                 <div className="grab-stat-left">
                   <div className="grab-stat-icon" style={{ background: 'rgba(139,92,246,0.12)' }}>👑</div>
@@ -1065,7 +1097,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
               </div>
             </div>
 
-            {/* TAB CONTENT: OVERVIEW */}
+         {/* TAB CONTENT: OVERVIEW */}
             {activeTab === 'overview' && (
               <div key={activeTab} className="santrix-grid-dashboard" style={{ animation: 'fadeInOut 0.5s ease-in-out' }}>
                 <div className="santrix-left-col">
@@ -1079,7 +1111,9 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                   <div className="santrix-metrics-grid">
                     <div className="santrix-metric-card">
                       <span className="santrix-metric-label">Active Transactions</span>
-                      <span className="santrix-metric-value">1,402.00</span>
+                      <span className="santrix-metric-value">
+                        {activeTransactionsCount !== null ? activeTransactionsCount.toLocaleString() : '0'}
+                      </span>
                     </div>
                     <div className="santrix-metric-card">
                       <span className="santrix-metric-label">Supplier Nodes</span>
@@ -1141,6 +1175,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 </div>
               </div>
             )}
+            
 
             {/* TAB CONTENT: OUTAGE REPORTS */}
             {activeTab === 'outage' && (

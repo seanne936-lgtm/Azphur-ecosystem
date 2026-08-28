@@ -165,7 +165,7 @@ const handleDownloadPDF = async (q, type) => {
       const fileIdSnippet = lead?.id ? lead.id.split('-')[0].toUpperCase() : 'PROPOSAL';
       const opt = {
         margin: 10,
-        filename: `AZPHUR_Proposal_${type}_${entityNameDisplay.replace(/\s+/g, '_')}_${fileIdSnippet}.pdf`,
+        filename: `AZPHUR Proposal ${type} ${entityNameDisplay.replace(/\s+/g, ' ')} ${fileIdSnippet}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -257,7 +257,7 @@ const handleDownloadPDF = async (q, type) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session || !session.user?.email) {
-        setAuthError('ACCESS_DENIED: Please sign in with an authorized partner or installer account.');
+        setAuthError('ACCESS DENIED: Please sign in with an authorized partner or installer account.');
         setCheckingAuth(false);
         return;
       }
@@ -553,7 +553,7 @@ const handleDownloadPDF = async (q, type) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `AZPHUR_Broadcast_${clientName.replace(/\s+/g, '_')}.html`;
+    link.download = `AZPHUR Broadcast ${clientName.replace(/\s+/g, ' ')}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

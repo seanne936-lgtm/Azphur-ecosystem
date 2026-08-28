@@ -267,9 +267,9 @@ export default function S2BCombinedPortal() {
                       <td>
                         <span 
                           onClick={() => handleStatusUpdate(ship.id, ship.status)}
-                          className={`status-badge st-${ship.status.toLowerCase().replace(' ', '_')} ${userRole === 'ADMIN' ? 'clickable' : 'readonly'}`}
+                          className={`status-badge st-${ship.status.toLowerCase().replace(' ', ' ')} ${userRole === 'ADMIN' ? 'clickable' : 'readonly'}`}
                         >
-                          {ship.status.replace('_', ' ').toUpperCase()}
+                          {ship.status.replace(' ', ' ').toUpperCase()}
                         </span>
                       </td>
                     </tr>

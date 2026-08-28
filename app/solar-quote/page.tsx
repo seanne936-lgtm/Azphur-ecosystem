@@ -433,7 +433,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
         const opt = {
           margin: 10,
-          filename: `AZPHUR_Proposal_${type}_${String(normalizedEntityName || 'Partner').replace(/\s+/g, '_')}.pdf`,
+          filename: `AZPHUR Proposal ${type} ${String(normalizedEntityName || 'Partner').replace(/\s+/g, '')}.pdf`,
           image: { type: 'jpeg' as const, quality: 0.98 },
           html2canvas: { scale: 2 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -543,7 +543,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
       const opt = {
         margin: 10,
-        filename: `AZPHUR_Paid_Receipt_${type}_${targetMilestone}_${q.id?.split('-')[0].toUpperCase()}.pdf`,
+        filename: `AZPHUR Paid Receipt ${type} ${targetMilestone} ${q.id?.split('-')[0].toUpperCase()}.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -558,6 +558,25 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
   
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // NUOVO: validazione foto obbligatorie prima di procedere
+    if (!mdpPhotos || mdpPhotos.length === 0) {
+      alert("PHOTOS_REQUIRED: Please upload at least one photo of the MDP (Main Distribution Panel) before submitting.");
+      return;
+    }
+    if (!housePhotos || housePhotos.length === 0) {
+      alert("PHOTOS_REQUIRED: Please upload at least one photo of the Client House (Overview) before submitting.");
+      return;
+    }
+    if (!meterPhotos || meterPhotos.length === 0) {
+      alert("PHOTOS_REQUIRED: Please upload at least one photo of the Electric Meter before submitting.");
+      return;
+    }
+    if (!inverterPhotos || inverterPhotos.length === 0) {
+      alert("PHOTOS_REQUIRED: Please upload at least one photo of the Inverter Placement Area before submitting.");
+      return;
+    }
+
     setLoadingForm(true);
     const submittedEmail = emailForm.toLowerCase().trim();
 
@@ -629,7 +648,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
           const opt = {
             margin: 10,
-            filename: `AZPHUR_Solar_Broadcast_${fullName.replace(/\s+/g, '_')}.pdf`,
+            filename: `AZPHUR Solar Broadcast ${fullName.replace(/\s+/g, ' ')}.pdf`,
             image: { type: 'jpeg' as const, quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -682,6 +701,12 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       const data = await response.json();
       if (response.ok && data.success) {
         setSuccessForm(true);
+
+        // NUOVO: notifica solo se il cliente NON è loggato / non ha un account
+        if (!session) {
+          alert("NOTICE: It looks like you're not signed in or don't have an account yet. Create one to track this request and view all your quotes in one place.");
+        }
+
         // Reset pulito di TUTTI i campi del form (inclusi i file state)
         setFullName('');
         setEmailForm('');
@@ -1237,40 +1262,40 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
         ) : (
           <form onSubmit={handleFormSubmit} className="login-form">
             <div className="input-group">
-              <label>FULL_NAME / COMPANY</label>
+              <label>FULL NAME / COMPANY</label>
               <input type="text" placeholder="Full Name or Enterprise Entity" required value={fullName} onChange={e => setFullName(e.target.value)} />
             </div>
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>EMAIL_ADDRESS</label>
+              <label>EMAIL ADDRESS</label>
               <input type="email" placeholder="example@domain.com" required value={emailForm} onChange={e => setEmailForm(e.target.value)} />
             </div>
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>MOBILE_PHONE</label>
+              <label>MOBILE PHONE</label>
               <input type="tel" placeholder="+63 9XX XXX XXXX" required value={phone} onChange={e => setPhone(e.target.value)} />
             </div>
             
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>INSTALLATION_ADDRESS</label>
+              <label>INSTALLATION ADDRESS</label>
               <input type="text" placeholder="Street, City, Province" required value={address} onChange={e => setAddress(e.target.value)} />
             </div>
 
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>AVERAGE_MONTHLY_BILL (PHP)</label>
+              <label>AVERAGE MONTHLY BILL (PHP)</label>
               <input type="number" placeholder="Average monthly utility expenses" required value={monthlyBill} onChange={e => setMonthlyBill(e.target.value)} />
             </div>
 
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>ENERGY_OBJECTIVE</label>
+              <label>ENERGY OBJECTIVE</label>
               <input type="text" placeholder="e.g. Lower bills, Power backup" required value={objective} onChange={e => setObjective(e.target.value)} />
             </div>
 
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>PROJECT_DESCRIPTION</label>
+              <label>PROJECT DESCRIPTION</label>
               <textarea rows={3} placeholder="Describe your project details or specific requirements..." value={projectDescription} onChange={e => setProjectDescription(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             </div>
 
             <div className="input-group" style={{ marginTop: '15px' }}>
-              <label>ROOF_STRUCTURE</label>
+              <label>ROOF STRUCTURE</label>
               <select value={roofType} onChange={e => setRoofType(e.target.value)} className="select-lux">
                 <option value="Flat">Flat Roof</option>
                 <option value="Pitched">Pitched Roof</option>
@@ -1280,11 +1305,11 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
 {/* SITE_SURVEY // SITE PHOTOS (MAX 4 EACH) */}
 <div style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
-  <span className="phase-label" style={{ color: '#0891b2' }}>SITE_SURVEY // SITE PHOTOS (MAX 4 EACH)</span>
+  <span className="phase-label" style={{ color: '#0891b2' }}>SITE SURVEY // SITE PHOTOS (MAX 4 EACH)</span>
   
   {/* MDP */}
   <div className="input-group" style={{ marginTop: '12px' }}>
-    <label>MDP (MAIN DISTRIBUTION PANEL)</label>
+    <label>MDP (MAIN DISTRIBUTION PANEL) <span style={{ color: '#ef4444', fontWeight: 900 }}>(REQUIRED)</span></label>
     <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0 6px 0' }}>Upload clear photos of your main circuit breaker panel to evaluate electrical capacity and safety compliance.</p>
     <input 
       type="file" 
@@ -1340,7 +1365,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
   {/* HOUSE OVERVIEW */}
   <div className="input-group" style={{ marginTop: '12px' }}>
-    <label>CLIENT HOUSE (OVERVIEW)</label>
+    <label>CLIENT HOUSE (OVERVIEW) <span style={{ color: '#ef4444', fontWeight: 900 }}>(REQUIRED)</span></label>
     <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0 6px 0' }}>Provide wide-angle exterior shots of your roof structure and property to assess optimal solar layout orientation.</p>
     <input 
       type="file" 
@@ -1396,7 +1421,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
   {/* ELECTRIC METER */}
   <div className="input-group" style={{ marginTop: '12px' }}>
-    <label>ELECTRIC METER</label>
+    <label>ELECTRIC METER <span style={{ color: '#ef4444', fontWeight: 900 }}>(REQUIRED)</span></label>
     <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0 6px 0' }}>Capture a legible image of your utility power meter for grid integration and net metering compatibility checks.</p>
     <input 
       type="file" 
@@ -1452,7 +1477,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
   {/* INVERTER PLACEMENT AREA */}
   <div className="input-group" style={{ marginTop: '12px' }}>
-    <label>INVERTER PLACEMENT AREA</label>
+    <label>INVERTER PLACEMENT AREA <span style={{ color: '#ef4444', fontWeight: 900 }}>(REQUIRED)</span></label>
     <p style={{ fontSize: '10px', color: '#64748b', margin: '2px 0 6px 0' }}>Select a shaded, well-ventilated location at ambient temperature (e.g., utility room, garage, or under-stairs area close to the MDP).</p>
     <input 
       type="file" 

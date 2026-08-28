@@ -10,14 +10,15 @@ export async function POST(req: Request) {
   try {
     const { objective, roofType, monthlyBill, userMessage } = await req.json();
 
-    // Scarichiamo inventario e installatori solo se serve davvero (cioè se ci sono parametri di preventivo o richiesta mirata)
     let inventory = [];
     let installers = [];
 
-    if (objective || roofType || monthlyBill || (userMessage && userMessage.toLowerCase().includes('install'))) {
+    const isQuoteRequest = objective || roofType || monthlyBill || (userMessage && (userMessage.toLowerCase().includes('quote') || userMessage.toLowerCase().includes('preventivo') || userMessage.toLowerCase().includes('install')));
+
+    if (isQuoteRequest) {
       const [inventoryRes, installersRes] = await Promise.all([
         supabaseAdmin.from('provider_inventory').select('*').gt('quantity', 0),
-        supabaseAdmin.from('installers').select('*') // Modifica 'installers' con il nome esatto della tua tabella su Supabase se è diverso
+        supabaseAdmin.from('installers').select('*')
       ]);
 
       inventory = inventoryRes.data || [];
@@ -25,22 +26,15 @@ export async function POST(req: Request) {
     }
 
     const systemInstruction = `
-      You are the official AI neural advisor and platform architect for AZPHUR, an intelligent digital bridge connecting users with verified green energy providers.
+      You are the official AI neural advisor for AZPHUR Inc., a digital platform and transactional ecosystem for clean energy, EV, and infrastructure operations.
 
-      ### CORE BEHAVIORAL & FORMATTING RULES:
-      - **BE DIRECT AND CONCISE**: Avoid fluff, long introductions, or filler text. Get straight to the point while remaining professional, helpful, and clear.
-      - **CONDITIONAL ANALYSIS MANDATE**: 
-        1. If the user asks general questions about AZPHUR, its architecture, or its services (e.g. "What is Azphur?"), answer purely based on the brand and module reference below. Do NOT mention inventory, hardware, or installer recommendations unless explicitly requested.
-        2. If the user specifically provides quotation parameters (objective, roof type, monthly bill) or explicitly asks for a quote/hardware/installer recommendation, analyze both the live Module 4 inventory data and the verified installers data below to recommend the best setup and matching partner.
-      - **TONE**: Professional, futuristic, highly competent, and concise.
-
-      ### AZPHUR MODULE & BRAND REFERENCE:
-      - Module 1: Supply Chain & Logistics (Hardware catalog and inventory backbone).
-      - Module 2: B2B Lead Generation & Enterprise Network.
-      - Module 3: AZPHUR E-Commerce Store (Retail hardware store).
-      - Module 4: Partner Operations Dashboard (Hub for certified local providers, inventory sync, and project tracking).
-      - Module 5: EV Charging Stations & Fleet Integration.
-      - Module 6: Driver Portal (Secure zone for verified EV drivers and technicians).
+      ### CORE RULES:
+      - NEVER use canned, canned error responses, or repetitive boilerplate text. 
+      - Always provide a direct, human-like, and comprehensive response.
+      - **BRAND & GENERAL QUESTIONS:** If asked "What is Azphur?", "Chi è Azphur?", or what the platform does, explain clearly that AZPHUR Inc is an advanced digital bridge connecting users with verified green energy providers, certified installers, and smart grid infrastructure.
+      - **UI ICONS & ACTIONS:** If asked about icons (Pay, Active Transactions, Supplier Nodes) or actions (like login, signup, or resetting a password), explain them directly. For example, for password recovery, guide them to the login page and tell them to click "Forgot Password".
+      - **QUOTES & HARDWARE:** Only analyze inventory/installers data if the user explicitly asks for a quote or installation parameters.
+      - **TONE:** Professional, futuristic, direct, and helpful.
 
       ### LIVE DATABASE CONTEXT:
       - Active Inventory Data: ${JSON.stringify(inventory)}
@@ -49,7 +43,7 @@ export async function POST(req: Request) {
 
     const promptContent = userMessage 
       ? `User Question: ${userMessage}` 
-      : `User Objective: ${objective}, Roof Type: ${roofType}, Monthly Bill: ${monthlyBill}. Analyze the inventory and available installers directly, then recommend the best partner and hardware setup concisely.`;
+      : `User Objective: ${objective}, Roof Type: ${roofType}, Monthly Bill: ${monthlyBill}. Analyze inventory and installers directly to recommend the best setup.`;
 
     const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -58,12 +52,12 @@ export async function POST(req: Request) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b', // <-- Usiamo esattamente il modello preso dal tuo Playground
         messages: [
           { role: 'system', content: systemInstruction },
           { role: 'user', content: promptContent }
         ],
-        temperature: 0.1
+        temperature: 0.3
       })
     });
 
