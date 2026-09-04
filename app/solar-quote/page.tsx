@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import AZPHURFundingOptionsPanel from './AZPHUR_FundingOptionsPanel';
 
 export default function SolarQuoteMarketplacePage() {
   const router = useRouter();
@@ -107,9 +108,11 @@ const totalPhotosCount = (mdpPhotos?.length || 0) + (housePhotos?.length || 0) +
       const resData = await response.json();
       
       if (response.ok && resData.success) {
-        setDebugStatus(`Connected - Records: ${resData.quotations?.length || 0}`);
+        const quotations = resData.quotations || [];
+
+        setDebugStatus(`Connected - Records: ${quotations.length}`);
         setIsAuthorizedCustomer(true);
-        setMyQuotations(resData.quotations || []);
+        setMyQuotations(quotations);
         return true;
       } else {
         setDebugStatus("No records found for email");
@@ -239,34 +242,136 @@ const handleSubmitLead = async (e: React.FormEvent<HTMLFormElement>) => {
 };
 
 
-  const handleSimulatedPayment = async (leadId: string, paymentTarget: 'provider_initial' | 'provider_final' | 'installer_initial' | 'installer_final') => {
+  type ProjectPaymentStage = 'downpayment' | 'final';
+
+  const calculatePayableAmount = (
+    baseAmount: number,
+    vatRegistered: boolean,
+    vatRate: number,
+    pricesIncludeTax: boolean
+  ) => {
+    const safeBase = Number.isFinite(baseAmount) ? Math.max(baseAmount, 0) : 0;
+    const safeRate = vatRegistered && Number.isFinite(vatRate) ? Math.max(vatRate, 0) : 0;
+
+    if (!vatRegistered || safeRate === 0) {
+      return { base: safeBase, vat: 0, total: safeBase };
+    }
+
+    if (pricesIncludeTax) {
+      const netBase = safeBase / (1 + safeRate / 100);
+      return { base: netBase, vat: safeBase - netBase, total: safeBase };
+    }
+
+    const vat = safeBase * (safeRate / 100);
+    return { base: safeBase, vat, total: safeBase + vat };
+  };
+
+  // MOCK ONLY: one AZPHUR project payment updates both internal allocations.
+  // When Xendit is connected, replace this function with a backend-created
+  // checkout session. Never accept the amount or beneficiary from the browser.
+  const handleSimulatedProjectPayment = async (leadId: string, stage: ProjectPaymentStage) => {
     try {
-      const payload = { lead_id: leadId, payment_target: paymentTarget };
+      const paymentTarget = stage === 'downpayment' ? 'project_downpayment' : 'project_final';
+
       const response = await fetch('/api/v1/solar-leads', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+       headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${session?.access_token}`
+},
+        body: JSON.stringify({ lead_id: leadId, payment_target: paymentTarget })
       });
 
-      const resData = await response.json();
-      if (response.ok && resData.success) {
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         setMyQuotations(prev => prev.map(q => {
           if (q.id === leadId) {
-            const updated = { ...q };
-            if (paymentTarget === 'provider_initial') updated.provider_paid = true;
-            if (paymentTarget === 'provider_final') updated.provider_balance_paid = true;
-            if (paymentTarget === 'installer_initial') updated.installer_paid = true;
-            if (paymentTarget === 'installer_final') updated.installer_balance_paid = true;
-            return updated;
+            return stage === 'downpayment'
+              ? { ...q, provider_paid: true, installer_paid: true }
+              : { ...q, provider_balance_paid: true, installer_balance_paid: true };
           }
           return q;
         }));
-        alert(`PAYMENT_CONFIRMED (${paymentTarget.toUpperCase()}) successfully processed via Escrow.`);
+
+        if (session?.user?.email) {
+          await verifyMarketplaceAccess(session.user.email.toLowerCase().trim());
+        }
+
+        alert(`TEST PAYMENT CONFIRMED: AZPHUR PROJECT ${stage.toUpperCase()}. NO REAL MONEY MOVED.`);
       } else {
-        alert("PAYMENT_FAILED: " + (resData.error || "Error"));
+        alert(`TEST_PAYMENT_FAILED: ${data.error || 'Mock allocation failed'}`);
       }
     } catch (err) {
-      alert("PAYMENT_ERROR");
+      alert("TEST_PAYMENT_ERROR");
+    }
+  };
+
+  const handleDownloadProjectReceipt = async (q: any, stage: ProjectPaymentStage) => {
+    if (typeof window === 'undefined') return;
+
+    const isDownpayment = stage === 'downpayment';
+    const isPaid = isDownpayment
+      ? Boolean(q.provider_paid && q.installer_paid)
+      : Boolean(q.provider_balance_paid && q.installer_balance_paid);
+
+    if (!isPaid) {
+      alert('RECEIPT_LOCKED: The complete AZPHUR project payment is not confirmed.');
+      return;
+    }
+
+    const providerBase = Number(isDownpayment ? q.provider_downpayment : q.provider_balance) || 0;
+    const installerBase = Number(isDownpayment ? q.installer_downpayment : q.installer_balance) || 0;
+    const providerTax = calculatePayableAmount(
+      providerBase,
+      Boolean(q.provider_vat_registered),
+      Number(q.provider_vat_rate) || 0,
+      Boolean(q.provider_prices_include_tax)
+    );
+    const installerTax = calculatePayableAmount(
+      installerBase,
+      Boolean(q.installer_vat_registered),
+      Number(q.installer_vat_rate) || 0,
+      Boolean(q.installer_prices_include_tax)
+    );
+    const projectTotal = providerTax.total + installerTax.total;
+
+    try {
+      const html2pdfModule = await import('html2pdf.js');
+      const html2pdf = html2pdfModule.default || html2pdfModule;
+      const element = document.createElement('div');
+      element.innerHTML = `
+        <div style="padding:35px;font-family:Arial,sans-serif;color:#1d1d1f;max-width:700px;margin:auto;background:#fff;">
+          <div style="border-bottom:2px solid #0891b2;padding-bottom:18px;margin-bottom:20px;display:flex;justify-content:space-between;gap:20px;">
+            <div><h1 style="margin:0;color:#0891b2;letter-spacing:2px;">AZPHUR</h1><p style="margin:4px 0;font-size:10px;">Shaping Sustainable Possibilities</p></div>
+            <div style="text-align:right;font-size:10px;"><strong>TEST PROJECT PAYMENT RECEIPT</strong><br/>${stage.toUpperCase()}<br/>TX: ${q.id?.split('-')[0].toUpperCase()}</div>
+          </div>
+          <div style="background:#f0f9fa;padding:15px;border-radius:8px;font-size:11px;line-height:1.7;margin-bottom:18px;">
+            <strong>Customer:</strong> ${q.customer_name || 'Valued Customer'}<br/>
+            <strong>Project address:</strong> ${q.address || 'N/A'}<br/>
+            <strong>Payment status:</strong> TEST CONFIRMED - NO REAL MONEY MOVED
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead><tr style="background:#0891b2;color:#fff;"><th style="padding:9px;text-align:left;">Allocation</th><th style="padding:9px;text-align:right;">Base</th><th style="padding:9px;text-align:right;">VAT</th><th style="padding:9px;text-align:right;">Payable</th></tr></thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #ddd;"><td style="padding:9px;">Provider - ${parseEntityName(q.assigned_provider)}</td><td style="padding:9px;text-align:right;">₱${providerTax.base.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td style="padding:9px;text-align:right;">₱${providerTax.vat.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td style="padding:9px;text-align:right;">₱${providerTax.total.toLocaleString(undefined,{minimumFractionDigits:2})}</td></tr>
+              <tr style="border-bottom:1px solid #ddd;"><td style="padding:9px;">Installer - ${parseEntityName(q.assigned_installer)}</td><td style="padding:9px;text-align:right;">₱${installerTax.base.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td style="padding:9px;text-align:right;">₱${installerTax.vat.toLocaleString(undefined,{minimumFractionDigits:2})}</td><td style="padding:9px;text-align:right;">₱${installerTax.total.toLocaleString(undefined,{minimumFractionDigits:2})}</td></tr>
+            </tbody>
+          </table>
+          <div style="margin-top:16px;padding:14px;background:#ecfeff;border:1px solid #0891b2;border-radius:8px;text-align:right;font-size:14px;font-weight:bold;">PROJECT ${stage.toUpperCase()} TOTAL: ₱${projectTotal.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+          <p style="margin-top:20px;font-size:9px;color:#64748b;">Test document generated in PAYMENT_PROVIDER=mock mode. This is not a tax invoice, official receipt, escrow confirmation, or proof of movement of real funds.</p>
+        </div>`;
+
+      await (html2pdf() as any).set({
+        margin: 10,
+        filename: `AZPHUR TEST Project ${stage} ${q.id?.split('-')[0].toUpperCase()}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(element).save();
+    } catch (err) {
+      console.error('Project receipt generation error:', err);
+      alert('PROJECT_RECEIPT_GENERATION_FAILED');
     }
   };
 
@@ -284,7 +389,10 @@ const handleSubmitLead = async (e: React.FormEvent<HTMLFormElement>) => {
 
       const response = await fetch('/api/v1/solar-chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+     headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${session?.access_token}`
+},
         body: JSON.stringify(payload)
       });
 
@@ -666,7 +774,10 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       // Invio dei dati completi inclusi i file convertiti in Base64
       const response = await fetch('/api/v1/solar-leads', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+     headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${session?.access_token}`
+},
         body: JSON.stringify({
           customer_name: fullName,
           customer_email: submittedEmail,
@@ -841,7 +952,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                 ACCESS_DENIED: No quotation requests found linked to your authenticated email.
               </div>
             ) : loadingQuotes ? (
-              <div className="system-ops-label">FETCHING_REQUEST_STATUS...</div>
+              <div className="system-ops-label">FETCHING REQUEST STATUS...</div>
             ) : myQuotations.length === 0 ? (
               <div className="no-records">No active broadcast found. Submit a new requirement below to broadcast to the platform.</div>
             ) : (
@@ -866,14 +977,39 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                     const providerEmail = q.provider_email || 'partner@azphur.com';
                     const installerEmail = q.installer_email || 'installer@azphur.com';
 
-                    const provInitialAmt = q.provider_downpayment !== null && q.provider_downpayment !== undefined ? Number(q.provider_downpayment) : 0;
-                    const provFinalAmt = q.provider_balance !== null && q.provider_balance !== undefined ? Number(q.provider_balance) : 0;
-                    const providerTotal = provInitialAmt + provFinalAmt;
+                    const providerFinalQuoteReady = Boolean(
+                      q.assigned_provider &&
+                      q.provider_downpayment_pct !== null && q.provider_downpayment_pct !== undefined &&
+                      q.provider_downpayment !== null && q.provider_downpayment !== undefined &&
+                      q.provider_balance !== null && q.provider_balance !== undefined
+                    );
+                    const installerFinalQuoteReady = Boolean(
+                      q.assigned_installer &&
+                      q.installer_downpayment_pct !== null && q.installer_downpayment_pct !== undefined &&
+                      q.installer_downpayment !== null && q.installer_downpayment !== undefined &&
+                      q.installer_balance !== null && q.installer_balance !== undefined
+                    );
+                    const bothFinalQuotesReady = providerFinalQuoteReady && installerFinalQuoteReady;
 
-                    const instInitialAmt = q.installer_downpayment !== null && q.installer_downpayment !== undefined ? Number(q.installer_downpayment) : 0;
-                    const instFinalAmt = q.installer_balance !== null && q.installer_balance !== undefined ? Number(q.installer_balance) : 0;
-                    const installerTotal = instInitialAmt + instFinalAmt;
-                    
+                    // Customer payment values come only from the FINAL quote entered after selection.
+                    // Earlier proposal prices are never treated as project-payment values.
+                    const provInitialAmt = providerFinalQuoteReady && q.provider_downpayment !== null && q.provider_downpayment !== undefined ? Number(q.provider_downpayment) : 0;
+                    const provFinalAmt = providerFinalQuoteReady && q.provider_balance !== null && q.provider_balance !== undefined ? Number(q.provider_balance) : 0;
+
+                    const instInitialAmt = installerFinalQuoteReady && q.installer_downpayment !== null && q.installer_downpayment !== undefined ? Number(q.installer_downpayment) : 0;
+                    const instFinalAmt = installerFinalQuoteReady && q.installer_balance !== null && q.installer_balance !== undefined ? Number(q.installer_balance) : 0;
+
+                    const providerInitialTax = calculatePayableAmount(provInitialAmt, Boolean(q.provider_vat_registered), Number(q.provider_vat_rate) || 0, Boolean(q.provider_prices_include_tax));
+                    const providerFinalTax = calculatePayableAmount(provFinalAmt, Boolean(q.provider_vat_registered), Number(q.provider_vat_rate) || 0, Boolean(q.provider_prices_include_tax));
+                    const installerInitialTax = calculatePayableAmount(instInitialAmt, Boolean(q.installer_vat_registered), Number(q.installer_vat_rate) || 0, Boolean(q.installer_prices_include_tax));
+                    const installerFinalTax = calculatePayableAmount(instFinalAmt, Boolean(q.installer_vat_registered), Number(q.installer_vat_rate) || 0, Boolean(q.installer_prices_include_tax));
+
+                    const projectDownpaymentTotal = providerInitialTax.total + installerInitialTax.total;
+                    const projectFinalTotal = providerFinalTax.total + installerFinalTax.total;
+                    const projectTotal = projectDownpaymentTotal + projectFinalTotal;
+                    const projectDownpaymentPaid = Boolean(q.provider_paid && q.installer_paid);
+                    const projectFinalPaid = Boolean(q.provider_balance_paid && q.installer_balance_paid);
+                    const projectFinalUnlocked = Boolean(q.provider_balance_unlocked && q.installer_balance_unlocked);
 
                     
 
@@ -940,7 +1076,10 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                                               try {
                                                 const res = await fetch('/api/v1/solar-leads', {
                                                   method: 'PATCH',
-                                                  headers: { 'Content-Type': 'application/json' },
+                                              headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${session?.access_token}`
+},
                                                   body: JSON.stringify({
                                                     lead_id: q.id,
                                                     action: 'select_partner',
@@ -952,12 +1091,6 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                                                 const data = await res.json();
 
                                                 if (res.ok && data.success) {
-                                                  await supabase
-                                                    .from('provider_proposals')
-                                                    .update({ status: 'rejected_by_customer' })
-                                                    .eq('lead_id', q.id)
-                                                    .neq('entity_name', cleanName);
-
                                                   setMyQuotations(prev => prev.map(item => item.id === q.id ? { ...item, assigned_provider: cleanName, status: 'provider_selected' } : item));
                                                   alert(`Provider "${cleanName}" successfully selected! Notifications dispatched.`); 
                                                 } else {
@@ -1032,7 +1165,10 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                                               try {
                                                 const res = await fetch('/api/v1/solar-leads', {
                                                   method: 'PATCH',
-                                                  headers: { 'Content-Type': 'application/json' },
+                                                headers: {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${session?.access_token}`
+},
                                                   body: JSON.stringify({
                                                     lead_id: q.id,
                                                     action: 'select_partner',
@@ -1044,12 +1180,6 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                                                 const data = await res.json();
 
                                                 if (res.ok && data.success) {
-                                                  await supabase
-                                                    .from('installer_proposals')
-                                                    .update({ status: 'rejected_by_customer' })
-                                                    .eq('lead_id', q.id)
-                                                    .neq('entity_name', cleanName);
-
                                                   setMyQuotations(prev => prev.map(item => 
                                                     item.id === q.id 
                                                       ? { ...item, assigned_installer: cleanName, status: 'installer_selected' } 
@@ -1126,100 +1256,73 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                             </div>
                           )}
 
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', width: '100%', boxSizing: 'border-box' }}>
-                            
-                            {/* PROVIDER ESCROW PANEL */}
-                            <div style={{ background: '#ffffff', padding: '18px', borderRadius: '14px', border: '2px solid #0891b2', display: 'flex', flexDirection: 'column', gap: '15px', boxSizing: 'border-box', overflow: 'hidden' }}>
-                              <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', wordBreak: 'break-word' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 900, color: '#0891b2', letterSpacing: '1px' }}>HARDWARE PROVIDER ESCROW</span>
-                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1d1d1f', marginTop: '4px' }}>{cleanAssignedProvName}</div>
-                                <div style={{ fontSize: '10px', color: '#0891b2', fontWeight: 700, wordBreak: 'break-all' }}>Email: {providerEmail}</div>
-                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#0369a1', marginTop: '2px' }}>
-                                  Agreed Total Deal: {providerTotal !== null ? '₱' + providerTotal.toLocaleString() : 'PENDING'}
-                                </div>
-                              </div>
+                          <AZPHURFundingOptionsPanel
+                            lead={q}
+                            session={session}
+                            canRequestFinancing={bothFinalQuotesReady && projectTotal > 0}
+                            onLeadUpdated={(updatedLead: any) => {
+                              setMyQuotations(previous => previous.map(item =>
+                                item.id === q.id ? { ...item, ...updatedLead } : item
+                              ));
+                            }}
+                          />
 
-                              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '5px' }}>
-                                  <span style={{ fontSize: '9px', fontWeight: 900, color: '#0891b2' }}>1. PROV INITIAL DOWNPAYMENT</span>
-                                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d1d1f' }}>{provInitialAmt !== null ? '₱' + provInitialAmt.toLocaleString() : 'PENDING'}</span>
-                                </div>
-                                {q.provider_paid ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                                    <span style={{ background: '#dcfce7', color: '#166534', padding: '6px', borderRadius: '6px', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>✓ ESCROW PAID</span>
-                                    <button onClick={() => handleDownloadPDF(q, 'provider', 'initial')} className="btn-cyan-outline" style={{ padding: '6px', fontSize: '8px', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>📄 DOWNLOAD PAID RECEIPT PDF</button>
-                                  </div>
-                                ) : provInitialAmt !== null ? (
-                                  <button onClick={() => handleSimulatedPayment(q.id, 'provider_initial')} className="login-btn-premium" style={{ margin: '8px 0 0 0', padding: '10px', fontSize: '9px', background: '#0891b2', width: '100%', boxSizing: 'border-box' }}>Pay Initial</button>
-                                ) : (
-                                  <div style={{ fontSize: '8px', color: '#b45309', background: '#fef9c3', padding: '8px', borderRadius: '6px', fontWeight: 800, textAlign: 'center', marginTop: '8px' }}>⏳ WAITING PRICE PENDING</div>
-                                )}
-                              </div>
-
-                              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '5px' }}>
-                                  <span style={{ fontSize: '9px', fontWeight: 900, color: '#0891b2' }}>2. PROV FINAL BALANCE</span>
-                                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d1d1f' }}>{provFinalAmt !== null ? '₱' + provFinalAmt.toLocaleString() : 'PENDING'}</span>
-                                </div>
-                                {q.provider_balance_paid ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                                    <span style={{ background: '#dcfce7', color: '#166534', padding: '6px', borderRadius: '6px', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>✓ ESCROW PAID</span>
-                                    <button onClick={() => handleDownloadPDF(q, 'provider', 'final')} className="btn-cyan-outline" style={{ padding: '6px', fontSize: '8px', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>📄 DOWNLOAD PAID RECEIPT PDF</button>
-                                  </div>
-                                ) : q.provider_balance_unlocked && provFinalAmt !== null ? (
-                                  <button onClick={() => handleSimulatedPayment(q.id, 'provider_final')} className="login-btn-premium" style={{ margin: '8px 0 0 0', padding: '10px', fontSize: '9px', background: '#0891b2', width: '100%', boxSizing: 'border-box' }}>Pay Final</button>
-                                ) : (
-                                  <div style={{ fontSize: '8px', color: '#b45309', background: '#fef9c3', padding: '8px', borderRadius: '6px', fontWeight: 800, textAlign: 'center', marginTop: '8px' }}>🔒 FINAL PENDING</div>
-                                )}
-                              </div>
+                          {/* AZPHUR CONSOLIDATED PROJECT PAYMENT - MOCK MODE */}
+                          <div style={{ background: '#ffffff', padding: '18px', borderRadius: '14px', border: '2px solid #0891b2', display: 'flex', flexDirection: 'column', gap: '15px', boxSizing: 'border-box', overflow: 'hidden' }}>
+                            <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+                              <span style={{ fontSize: '9px', fontWeight: 900, color: '#0891b2', letterSpacing: '1px' }}>AZPHUR PROJECT PAYMENT FLOW</span>
+                              <div style={{ marginTop: '6px', padding: '7px', borderRadius: '7px', background: '#fef9c3', color: '#854d0e', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>TEST PAYMENT - NO REAL MONEY</div>
+                              <div style={{ marginTop: '10px', fontSize: '13px', fontWeight: 900 }}>Project Total: {bothFinalQuotesReady ? `₱${projectTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'PENDING FINAL QUOTES'}</div>
+                              <div style={{ marginTop: '4px', fontSize: '10px', color: '#64748b' }}>One customer flow. Internal allocations remain visible and auditable.</div>
                             </div>
 
-                            {/* INSTALLER ESCROW PANEL */}
-                            <div style={{ background: '#ffffff', padding: '18px', borderRadius: '14px', border: '2px solid #166534', display: 'flex', flexDirection: 'column', gap: '15px', boxSizing: 'border-box', overflow: 'hidden' }}>
-                              <div style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '10px', wordBreak: 'break-word' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 900, color: '#166534', letterSpacing: '1px' }}>INSTALLATION PARTNER ESCROW</span>
-                                <div style={{ fontSize: '13px', fontWeight: 900, color: '#1d1d1f', marginTop: '4px' }}>{cleanAssignedInstName}</div>
-                                <div style={{ fontSize: '10px', color: '#166534', fontWeight: 700, wordBreak: 'break-all' }}>Email: {installerEmail}</div>
-                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#15803d', marginTop: '2px' }}>
-                                  Agreed Total Deal: {installerTotal !== null ? '₱' + installerTotal.toLocaleString() : 'PENDING'}
-                                </div>
+                            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #0891b2' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 900, color: '#0891b2' }}>1. PROJECT DOWN PAYMENT</span>
+                                <span style={{ fontSize: '13px', fontWeight: 900 }}>{bothFinalQuotesReady ? `₱${projectDownpaymentTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'PENDING'}</span>
                               </div>
-
-                              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '5px' }}>
-                                  <span style={{ fontSize: '9px', fontWeight: 900, color: '#166534' }}>INST INITIAL DOWNPAYMENT</span>
-                                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d1d1f' }}>{instInitialAmt !== null ? '₱' + instInitialAmt.toLocaleString() : 'PENDING'}</span>
-                                </div>
-                                {q.installer_paid ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                                    <span style={{ background: '#dcfce7', color: '#166534', padding: '6px', borderRadius: '6px', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>✓ ESCROW PAID</span>
-                                    <button onClick={() => handleDownloadPDF(q, 'installer', 'initial')} className="btn-cyan-outline" style={{ borderColor: '#166534', color: '#166534', padding: '6px', fontSize: '8px', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>📄 DOWNLOAD PAID RECEIPT PDF</button>
-                                  </div>
-                                ) : instInitialAmt !== null ? (
-                                  <button onClick={() => handleSimulatedPayment(q.id, 'installer_initial')} className="login-btn-premium" style={{ margin: '8px 0 0 0', padding: '10px', fontSize: '9px', background: '#166534', width: '100%', boxSizing: 'border-box' }}>Pay Initial</button>
-                                ) : (
-                                  <div style={{ fontSize: '8px', color: '#b45309', background: '#fef9c3', padding: '8px', borderRadius: '6px', fontWeight: 800, textAlign: 'center', marginTop: '8px' }}>⏳ PENDING PARTNER QUOTE</div>
-                                )}
+                              <div style={{ marginTop: '9px', fontSize: '10px', lineHeight: 1.7, color: '#475569' }}>
+                                <div>Provider allocation: {providerFinalQuoteReady ? `₱${providerInitialTax.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pending final quote'} {providerFinalQuoteReady ? (q.provider_vat_registered ? `(VAT ${Number(q.provider_vat_rate) || 0}%)` : '(Non-VAT)') : ''}</div>
+                                <div>Installer allocation: {installerFinalQuoteReady ? `₱${installerInitialTax.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pending final quote'} {installerFinalQuoteReady ? (q.installer_vat_registered ? `(VAT ${Number(q.installer_vat_rate) || 0}%)` : '(Non-VAT)') : ''}</div>
                               </div>
-
-                              <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '5px' }}>
-                                  <span style={{ fontSize: '9px', fontWeight: 900, color: '#166534' }}>4. INST FINAL BALANCE</span>
-                                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d1d1f' }}>{instFinalAmt !== null ? '₱' + instFinalAmt.toLocaleString() : 'PENDING'}</span>
+                              {projectDownpaymentPaid ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginTop: '10px' }}>
+                                  <span style={{ background: '#dcfce7', color: '#166534', padding: '7px', borderRadius: '6px', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>✓ PROJECT DOWN PAYMENT TEST CONFIRMED</span>
+                                  <button onClick={() => handleDownloadProjectReceipt(q, 'downpayment')} className="btn-cyan-outline" style={{ padding: '7px', fontSize: '8px', width: '100%' }}>📄 DOWNLOAD CONSOLIDATED TEST RECEIPT</button>
                                 </div>
-                                {q.installer_balance_paid ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                                    <span style={{ background: '#dcfce7', color: '#166534', padding: '6px', borderRadius: '6px', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>✓ ESCROW PAID</span>
-                                    <button onClick={() => handleDownloadPDF(q, 'installer', 'final')} className="btn-cyan-outline" style={{ borderColor: '#166534', color: '#166534', padding: '6px', fontSize: '8px', textAlign: 'center', width: '100%', boxSizing: 'border-box' }}>📄 DOWNLOAD PAID RECEIPT PDF</button>
-                                  </div>
-                                ) : q.installer_balance_unlocked && instFinalAmt !== null ? (
-                                  <button onClick={() => handleSimulatedPayment(q.id, 'installer_final')} className="login-btn-premium" style={{ margin: '8px 0 0 0', padding: '10px', fontSize: '9px', background: '#166534', width: '100%', boxSizing: 'border-box' }}>Pay Final</button>
-                                ) : (
-                                  <div style={{ fontSize: '8px', color: '#b45309', background: '#fef9c3', padding: '8px', borderRadius: '6px', fontWeight: 800, textAlign: 'center', marginTop: '8px' }}>🔒 FINAL PENDING</div>
-                                )}
-                              </div>
+                              ) : q.payment_method === 'financing' ? (
+                                <div style={{ marginTop: '10px', background: '#e0f2fe', color: '#0e7490', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>⌛ WAITING FOR THE SELECTED FUNDING PARTNER TO FUND THIS MILESTONE</div>
+                              ) : q.payment_method !== 'direct' ? (
+                                <div style={{ marginTop: '10px', background: '#fef9c3', color: '#854d0e', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>🔒 CHOOSE PAY DIRECT OR REQUEST FINANCING ABOVE BEFORE PAYING</div>
+                              ) : (
+                                <button onClick={() => handleSimulatedProjectPayment(q.id, 'downpayment')} className="login-btn-premium" style={{ margin: '10px 0 0', padding: '11px', fontSize: '9px', background: '#0891b2', width: '100%' }}>TEST PAY PROJECT DOWN PAYMENT</button>
+                              )}
                             </div>
 
+                            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #166534' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 900, color: '#166534' }}>2. PROJECT FINAL BALANCE</span>
+                                <span style={{ fontSize: '13px', fontWeight: 900 }}>{bothFinalQuotesReady ? `₱${projectFinalTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'PENDING'}</span>
+                              </div>
+                              <div style={{ marginTop: '9px', fontSize: '10px', lineHeight: 1.7, color: '#475569' }}>
+                                <div>Provider allocation: {providerFinalQuoteReady ? `₱${providerFinalTax.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pending final quote'} {providerFinalQuoteReady ? (q.provider_vat_registered ? `(VAT ${Number(q.provider_vat_rate) || 0}%)` : '(Non-VAT)') : ''}</div>
+                                <div>Installer allocation: {installerFinalQuoteReady ? `₱${installerFinalTax.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'Pending final quote'} {installerFinalQuoteReady ? (q.installer_vat_registered ? `(VAT ${Number(q.installer_vat_rate) || 0}%)` : '(Non-VAT)') : ''}</div>
+                              </div>
+                              {projectFinalPaid ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginTop: '10px' }}>
+                                  <span style={{ background: '#dcfce7', color: '#166534', padding: '7px', borderRadius: '6px', fontSize: '9px', fontWeight: 900, textAlign: 'center' }}>✓ PROJECT FINAL PAYMENT TEST CONFIRMED</span>
+                                  <button onClick={() => handleDownloadProjectReceipt(q, 'final')} className="btn-cyan-outline" style={{ borderColor: '#166534', color: '#166534', padding: '7px', fontSize: '8px', width: '100%' }}>📄 DOWNLOAD CONSOLIDATED TEST RECEIPT</button>
+                                </div>
+                              ) : q.payment_method === 'financing' ? (
+                                <div style={{ marginTop: '10px', background: '#e0f2fe', color: '#0e7490', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>⌛ FINAL BALANCE WILL BE FUNDED BY THE SELECTED FUNDING PARTNER AFTER BOTH PARTNERS RELEASE IT</div>
+                              ) : q.payment_method !== 'direct' ? (
+                                <div style={{ marginTop: '10px', background: '#fef9c3', color: '#854d0e', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>🔒 CHOOSE PAY DIRECT OR REQUEST FINANCING ABOVE BEFORE PAYING</div>
+                              ) : projectFinalUnlocked && projectDownpaymentPaid ? (
+                                <button onClick={() => handleSimulatedProjectPayment(q.id, 'final')} className="login-btn-premium" style={{ margin: '10px 0 0', padding: '11px', fontSize: '9px', background: '#166534', width: '100%' }}>TEST PAY PROJECT FINAL BALANCE</button>
+                              ) : (
+                                <div style={{ marginTop: '10px', background: '#fef9c3', color: '#854d0e', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>🔒 FINAL PAYMENT LOCKED UNTIL BOTH FINAL ALLOCATIONS ARE APPROVED</div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}

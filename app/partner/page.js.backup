@@ -70,22 +70,6 @@ export default function PartnerDashboard() {
     pricesIncludeTax: Boolean(record.prices_include_tax ?? false)
   });
 
-  const normalizeEntityName = (value = '') =>
-    String(value || '').replace(/[\[\]"]/g, '').toLowerCase().replace(/[\s_-]/g, '').trim();
-
-  const parseEntityList = (raw) => {
-    if (Array.isArray(raw)) return raw;
-    if (typeof raw === 'string' && raw.trim() !== '') {
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [parsed];
-      } catch {
-        return raw.split(',').map(item => item.trim()).filter(Boolean);
-      }
-    }
-    return raw ? [raw] : [];
-  };
-
   const calculateTaxBreakdown = (amount, profile = taxProfile) => {
     const safeAmount = Math.max(Number(amount) || 0, 0);
     const rate = profile.vatRegistered ? Math.max(Number(profile.vatRate) || 0, 0) : 0;
@@ -222,7 +206,7 @@ export default function PartnerDashboard() {
     }
   };
   
-  async function saveDetailedQuotation(leadId, currentEntityType, isFinalQuote = false) {
+  async function saveDetailedQuotation(leadId, currentEntityType) {
     const inputState = quoteInputs[leadId] || {};
     let cleanEntityName = (selectedEntityName || '').trim();
 
@@ -252,13 +236,6 @@ export default function PartnerDashboard() {
       ? Number(inputState.basePrice || 0)
       : Number(inputState.laborCost || 0);
     const dpPercentVal = inputState.downpaymentPercent !== undefined ? Number(inputState.downpaymentPercent) : 30;
-
-    // FINAL QUOTE: the selected provider/installer must set a fresh final price here.
-    // Do not reuse the earlier proposal price as the final contract price.
-    if (!Number.isFinite(partnerBaseAmount) || partnerBaseAmount <= 0) {
-      alert('Enter the final project price before locking the quote.');
-      return;
-    }
     const partnerTaxBreakdown = calculateTaxBreakdown(partnerBaseAmount);
     const calculatedDownpayment = (partnerTaxBreakdown.total * dpPercentVal) / 100;
     const calculatedBalance = partnerTaxBreakdown.total - calculatedDownpayment;
@@ -287,7 +264,7 @@ export default function PartnerDashboard() {
           action: 'save_quotation',
           entity_type: currentEntityType,
           ...proposalPayload,
-          ...(isFinalQuote ? leadUpdatePayload : {})
+          ...leadUpdatePayload
         })
       });
       const notificationResult = await notificationResponse.json();
@@ -295,46 +272,16 @@ export default function PartnerDashboard() {
         throw new Error(notificationResult.error || 'Unable to finalize the quotation notification.');
       }
 
-      if (isFinalQuote) {
-        const percentageColumn = currentEntityType === 'provider'
-          ? 'provider_downpayment_pct'
-          : 'installer_downpayment_pct';
-        const { error: percentageError } = await supabase
-          .from('leads')
-          .update({ [percentageColumn]: dpPercentVal })
-          .eq('id', leadId);
-        if (percentageError) throw percentageError;
+      const percentageColumn = currentEntityType === 'provider'
+        ? 'provider_downpayment_pct'
+        : 'installer_downpayment_pct';
+      const { error: percentageError } = await supabase
+        .from('leads')
+        .update({ [percentageColumn]: dpPercentVal })
+        .eq('id', leadId);
+      if (percentageError) throw percentageError;
 
-        // Persist the FINAL-quote lock independently for provider and installer.
-        // Old proposal values do not count as a final quote and one role cannot lock the other.
-        const { data: latestLead, error: latestLeadError } = await supabase
-          .from('leads')
-          .select('quote_details')
-          .eq('id', leadId)
-          .maybeSingle();
-        if (latestLeadError) throw latestLeadError;
-
-        const existingQuoteDetails = latestLead?.quote_details && typeof latestLead.quote_details === 'object'
-          ? latestLead.quote_details
-          : {};
-        const finalQuoteLockKey = currentEntityType === 'provider'
-          ? 'provider_final_quote_locked'
-          : 'installer_final_quote_locked';
-        const { error: lockError } = await supabase
-          .from('leads')
-          .update({
-            quote_details: {
-              ...existingQuoteDetails,
-              [finalQuoteLockKey]: true
-            }
-          })
-          .eq('id', leadId);
-        if (lockError) throw lockError;
-      }
-
-      alert(isFinalQuote
-        ? `${currentEntityType.toUpperCase()} final quote and payment pricing successfully saved & locked!`
-        : `${currentEntityType.toUpperCase()} proposal successfully saved!`);
+      alert(`${currentEntityType.toUpperCase()} proposal and payment pricing successfully saved & locked!`);
       
       setUnlockedLeads(prev => ({ ...prev, [`saved_${leadId}`]: true }));
       await fetchIncomingLeads();
@@ -686,7 +633,7 @@ export default function PartnerDashboard() {
 
       const { data: authData } = await supabase.auth.getSession();
       const currentUserId = authData.session?.user?.id;
-      const { data: hiddenRows } = currentUserId && activeEntityType && activeEntityType !== 'admin' && !activeIsAdmin
+      const { data: hiddenRows, error: hiddenRowsError } = currentUserId && activeEntityType && activeEntityType !== 'admin' && !activeIsAdmin
         ? await supabase
             .from('partner_hidden_leads')
             .select('lead_id')
@@ -694,7 +641,9 @@ export default function PartnerDashboard() {
             .eq('entity_type', activeEntityType)
         : { data: [], error: null };
 
-     
+      if (hiddenRowsError) {
+        console.warn('Unable to load personally hidden leads; continuing with the shared lead pool.');
+      }
       const personalHiddenIds = new Set((hiddenRows || []).map(row => row.lead_id));
 
       const { data: leadsData, error: leadsError } = await supabase
@@ -767,9 +716,14 @@ export default function PartnerDashboard() {
       const cleanName = (selectedEntityName || '').trim();
 
       if (entityType === 'provider') {
-        let currentRejected = parseEntityList(leadObj?.partner_rejected_by);
+        let currentRejected = [];
+        if (Array.isArray(leadObj?.partner_rejected_by)) {
+          currentRejected = [...leadObj.partner_rejected_by];
+        } else if (typeof leadObj?.partner_rejected_by === 'string' && leadObj.partner_rejected_by.trim() !== '') {
+          currentRejected = [leadObj.partner_rejected_by];
+        }
 
-        if (!currentRejected.some(name => normalizeEntityName(name) === normalizeEntityName(cleanName))) {
+        if (!currentRejected.some(name => name.toLowerCase().trim() === cleanName.toLowerCase())) {
           currentRejected.push(cleanName);
         }
 
@@ -781,9 +735,14 @@ export default function PartnerDashboard() {
         if (error) throw error;
 
       } else if (entityType === 'installer') {
-        let currentRejected = parseEntityList(leadObj?.installer_rejected_by);
+        let currentRejected = [];
+        if (Array.isArray(leadObj?.installer_rejected_by)) {
+          currentRejected = [...leadObj.installer_rejected_by];
+        } else if (typeof leadObj?.installer_rejected_by === 'string' && leadObj.installer_rejected_by.trim() !== '') {
+          currentRejected = [leadObj.installer_rejected_by];
+        }
 
-        if (!currentRejected.some(name => normalizeEntityName(name) === normalizeEntityName(cleanName))) {
+        if (!currentRejected.some(name => name.toLowerCase().trim() === cleanName.toLowerCase())) {
           currentRejected.push(cleanName);
         }
 
@@ -926,8 +885,14 @@ export default function PartnerDashboard() {
       return false;
     }
 
-    const rejectedList = parseEntityList(entityType === 'provider' ? lead.partner_rejected_by : lead.installer_rejected_by);
-    const isRejectedByMe = rejectedList.some(item => normalizeEntityName(item) === cleanCurrentEntity);
+    const rejectedList = entityType === 'provider' 
+      ? (Array.isArray(lead.partner_rejected_by) ? lead.partner_rejected_by : (lead.partner_rejected_by ? [lead.partner_rejected_by] : []))
+      : (Array.isArray(lead.installer_rejected_by) ? lead.installer_rejected_by : (lead.installer_rejected_by ? [lead.installer_rejected_by] : []));
+    
+    const isRejectedByMe = rejectedList.some(item => {
+      let itemName = typeof item === 'string' ? item : JSON.stringify(item);
+      return itemName.replace(/[\[\]"]/g, '').toLowerCase().replace(/[\s_-]/g, '').trim() === cleanCurrentEntity;
+    });
     if (isRejectedByMe) return false;
 
     const myProposal = entityType === 'provider'
@@ -941,8 +906,14 @@ export default function PartnerDashboard() {
     );
     if (hasThisEntitySubmitted) return false;
 
-    const acceptedList = parseEntityList(entityType === 'provider' ? lead.partner_accepted_by : lead.installer_accepted_by);
-    const isAcceptedByMe = acceptedList.some(item => normalizeEntityName(item) === cleanCurrentEntity);
+    const acceptedList = entityType === 'provider' 
+      ? (Array.isArray(lead.partner_accepted_by) ? lead.partner_accepted_by : (lead.partner_accepted_by ? [lead.partner_accepted_by] : []))
+      : (Array.isArray(lead.installer_accepted_by) ? lead.installer_accepted_by : (lead.installer_accepted_by ? [lead.installer_accepted_by] : []));
+    
+    const isAcceptedByMe = acceptedList.some(item => {
+      let itemName = typeof item === 'string' ? item : JSON.stringify(item);
+      return itemName.replace(/[\[\]"]/g, '').toLowerCase().replace(/[\s_-]/g, '').trim() === cleanCurrentEntity;
+    });
 
     return !isAcceptedByMe;
   }).length;
@@ -954,14 +925,20 @@ export default function PartnerDashboard() {
       return false;
     }
 
-    const acceptedList = parseEntityList(entityType === 'provider' ? lead.partner_accepted_by : lead.installer_accepted_by);
-    const isAcceptedByMe = acceptedList.some(item => normalizeEntityName(item) === cleanCurrentEntity);
+    const acceptedList = entityType === 'provider' 
+      ? (Array.isArray(lead.partner_accepted_by) ? lead.partner_accepted_by : (lead.partner_accepted_by ? [lead.partner_accepted_by] : []))
+      : (Array.isArray(lead.installer_accepted_by) ? lead.installer_accepted_by : (lead.installer_accepted_by ? [lead.installer_accepted_by] : []));
+    
+    const isAcceptedByMe = acceptedList.some(item => {
+      let itemName = typeof item === 'string' ? item : JSON.stringify(item);
+      return itemName.replace(/[\[\]"]/g, '').toLowerCase().trim() === cleanCurrentEntity;
+    });
 
     if (!isAcceptedByMe) return false;
 
     const myProposal = entityType === 'provider'
-      ? (lead.provider_proposals || []).find(p => normalizeEntityName(p.entity_name) === cleanCurrentEntity)
-      : (lead.installer_proposals || []).find(p => normalizeEntityName(p.entity_name) === cleanCurrentEntity);
+      ? (lead.provider_proposals || []).find(p => (p.entity_name || '').toLowerCase().trim() === cleanCurrentEntity)
+      : (lead.installer_proposals || []).find(p => (p.entity_name || '').toLowerCase().trim() === cleanCurrentEntity);
 
     // FIX: Usiamo la stessa soglia pulita (> 100) ed eliminiamo il >= 0 sulla manodopera
     const hasThisEntitySubmitted = Boolean(
@@ -1126,32 +1103,22 @@ return (
             : (lead.installer_proposals || []).find(p => (p.entity_name || '').toLowerCase().trim() === cleanCurrentEntity);
 
           const currentInput = quoteInputs[lead.id] || {};
-          const isProvider = entityType === 'provider';
-          const finalDownpayment = isProvider ? lead.provider_downpayment : lead.installer_downpayment;
-          const finalBalance = isProvider ? lead.provider_balance : lead.installer_balance;
-          const finalPercent = isProvider ? lead.provider_downpayment_pct : lead.installer_downpayment_pct;
-          const finalQuoteLockKey = isProvider ? 'provider_final_quote_locked' : 'installer_final_quote_locked';
-          const hasThisEntitySubmitted = Boolean(lead.quote_details?.[finalQuoteLockKey]);
-          const savedFinalTotal = hasThisEntitySubmitted
-            ? Number(finalDownpayment || 0) + Number(finalBalance || 0)
-            : '';
+          
+          const rawDbPrice = myProposal?.base_price;
+          const validDbPrice = Number(rawDbPrice) > 10 ? rawDbPrice : '';
 
-          // Initial proposal values are only for customer selection.
-          // The ACTIVE PROJECT final quote is independent and starts blank.
           const inputState = {
-            basePrice: currentInput.basePrice !== undefined
-              ? currentInput.basePrice
-              : (isProvider && hasThisEntitySubmitted ? savedFinalTotal : ''),
-            recommendedPrice: currentInput.recommendedPrice ?? '',
-            downpaymentPercent: currentInput.downpaymentPercent ?? (hasThisEntitySubmitted ? Number(finalPercent) : 30),
-            panelModel: currentInput.panelModel ?? '',
-            inverterBattery: currentInput.inverterBattery ?? '',
-            installPeriod: currentInput.installPeriod ?? '',
-            workmanshipTerms: currentInput.workmanshipTerms ?? '',
-            laborCost: currentInput.laborCost !== undefined
-              ? currentInput.laborCost
-              : (!isProvider && hasThisEntitySubmitted ? savedFinalTotal : '')
+            basePrice: currentInput.basePrice !== undefined ? currentInput.basePrice : validDbPrice,
+            recommendedPrice: currentInput.recommendedPrice ?? myProposal?.recommended_price ?? '',
+            downpaymentPercent: currentInput.downpaymentPercent ?? 30,
+            panelModel: currentInput.panelModel ?? myProposal?.panel_model ?? '',
+            inverterBattery: currentInput.inverterBattery ?? myProposal?.inverter_battery ?? '',
+            installPeriod: currentInput.installPeriod ?? myProposal?.install_period ?? '',
+            workmanshipTerms: currentInput.workmanshipTerms ?? myProposal?.workmanship_terms ?? '',
+            laborCost: currentInput.laborCost !== undefined ? currentInput.laborCost : (myProposal?.labor_cost ?? '')
           };
+
+          const hasThisEntitySubmitted = Boolean(myProposal && Number(myProposal.base_price || myProposal.labor_cost || 0) > 0);
           
           const isDbUnlocked = entityType === 'provider' ? lead.provider_balance_unlocked : lead.installer_balance_unlocked;
           const isManuallyUnlocked = Boolean(unlockedLeads[`${lead.id}_${cleanCurrentEntity}`] ?? isDbUnlocked);
@@ -1162,6 +1129,7 @@ return (
           const customerBill = lead.monthly_bill || lead.quote_details?.monthly_bill || lead.average_monthly_bill || '0';
           const roofType = lead.roof_type || lead.quote_details?.roof_type || '';
 
+          const isProvider = entityType === 'provider';
           const downpayment = isProvider ? (lead.provider_downpayment || 0) : (lead.installer_downpayment || 0);
           const balance = isProvider ? (lead.provider_balance || 0) : (lead.installer_balance || 0);
           const isPaidInitial = isProvider ? lead.provider_paid : lead.installer_paid;
@@ -1174,8 +1142,6 @@ return (
           const dpPercent = Number(inputState.downpaymentPercent || 30);
           const calculatedDownpayment = (liveTaxBreakdown.total * dpPercent) / 100;
           const calculatedBalance = liveTaxBreakdown.total - calculatedDownpayment;
-          const displayedDownpayment = hasThisEntitySubmitted ? Number(downpayment || 0) : calculatedDownpayment;
-          const displayedBalance = hasThisEntitySubmitted ? Number(balance || 0) : calculatedBalance;
 
           const isPriceLocked = Boolean(hasThisEntitySubmitted) || Boolean(isPaidInitial);
 
@@ -1263,9 +1229,9 @@ return (
                   </div>
                   <input 
                     type="range" 
-                    min="1" 
+                    min="10" 
                     max="100" 
-                    step="1"
+                    step="5"
                     value={dpPercent} 
                     onChange={e => handleQuoteInputChange(lead.id, 'downpaymentPercent', Number(e.target.value))}
                     disabled={isPriceLocked}
@@ -1280,7 +1246,7 @@ return (
                 <button 
                   onClick={() => {
                     if (isPriceLocked) return;
-                    saveDetailedQuotation(lead.id, entityType, true);
+                    saveDetailedQuotation(lead.id, entityType);
                   }}
                   disabled={isPriceLocked}
                   style={{ 
@@ -1311,7 +1277,7 @@ return (
                 
                 <div style={{ fontSize: '10px', color: '#475569', fontFamily: 'monospace', marginBottom: '12px', wordBreak: 'break-word', lineHeight: '1.5' }}>
                   BASE: ₱{liveTaxBreakdown.base.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} | VAT: ₱{liveTaxBreakdown.vat.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}<br/>
-                  YOUR DOWN-PAYMENT ALLOCATION: ₱{displayedDownpayment.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} | YOUR FINAL ALLOCATION: ₱{displayedBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  YOUR DOWN-PAYMENT ALLOCATION: ₱{Number(calculatedDownpayment || downpayment).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} | YOUR FINAL ALLOCATION: ₱{Number(calculatedBalance || balance).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', fontSize: '10px', color: '#475569', gap: '8px', marginBottom: '15px' }}>

@@ -582,7 +582,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
     return 'Good Evening';
   }, []);
 
-  // --- Solo-UX: stessi 6 moduli, stesse identiche azioni/rotte/validator di prima ---
+  // --- Solo-UX: 7 moduli organizzati in formato "icona + etichetta" stile Grab e ricercabili. ---
   // Vengono solo riorganizzati in formato "icona + etichetta" stile Grab e resi cercabili.
  const grabModules: GrabModule[] = [
     {
@@ -609,13 +609,14 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
     },
     {
       id: 'm03',
-      label: 'Shop',
-      tag: 'MODULE 03 // STORE',
-      title: 'Merchant Layer',
-      description: 'Unified product commercialization and automated fulfillment layer, mapping global inventory SKUs through integrated checkout pipelines.',
-      imageUrl: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=400&q=80',
+      label: 'Funding Partners',
+      tag: 'MODULE 03 // FUNDING',
+      title: 'Funding Partner Network',
+      description: 'Private financing terminal for verified banks, financing companies, cooperatives and qualified funding partners supporting AZPHUR projects.',
+      imageUrl: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=400&q=80',
       accent: '#38bdf8',
-      action: () => router.push('/b2c')
+      isNew: true,
+      action: () => router.push('/funding-partners')
     },
     {
       id: 'm04',
@@ -646,6 +647,16 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
       imageUrl: 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?auto=format&fit=crop&w=400&q=80',
       accent: '#34d399',
       action: () => handleModuleNavigation('/EV/driver')
+    },
+    {
+      id: 'm07',
+      label: 'Shop',
+      tag: 'MODULE 07 // STORE',
+      title: 'Merchant Layer',
+      description: 'Unified product commercialization and automated fulfillment layer, mapping global inventory SKUs through integrated checkout pipelines.',
+      imageUrl: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=400&q=80',
+      accent: '#38bdf8',
+      action: () => router.push('/b2c')
     }
   ];
 
@@ -1002,7 +1013,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             <input
               type="text"
               className="grab-search-input"
-              placeholder="Search a module: quote, EV charge, driver, shop..."
+              placeholder="Search a module: quote, funding, EV charge, driver, shop..."
               value={moduleSearch}
               onChange={(e) => setModuleSearch(e.target.value)}
               onFocus={() => setSearchFocused(true)}
@@ -1048,7 +1059,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           ))}
         </div>
 
-        {/* Griglia dei 6 moduli, stile icona Grab: stesse identiche azioni/rotte di prima */}
+        {/* Griglia dei 7 moduli, stile icona Grab */}
         <section className="grab-module-grid">
           {visibleModules.length > 0 ? (
             visibleModules.map((m) => (
@@ -1457,4 +1468,3 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
     </div>
   );
 }
-

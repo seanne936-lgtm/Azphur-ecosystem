@@ -51,6 +51,7 @@ const TopTicker: React.FC = () => {
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false); 
@@ -138,6 +139,34 @@ export default function LoginPage() {
 
         const user = data.user;
         const userEmail = user.email ? user.email.toLowerCase().trim() : '';
+
+        // CHECK FUNDING PARTNER: access is verified server-side against
+        // funding_partner_whitelist before opening the private portal.
+        try {
+          const fundingPartnerResponse = await fetch('/api/v1/funding-engine?scope=partner', {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${data.session.access_token}`
+            }
+          });
+          const fundingPartnerContentType = fundingPartnerResponse.headers.get('content-type') || '';
+
+          if (!fundingPartnerContentType.includes('application/json')) {
+            console.error(
+              `Funding partner access check returned a non-JSON response (${fundingPartnerResponse.status}). ` +
+              'Verify that app/api/v1/funding-engine/route.ts exists.'
+            );
+          } else {
+            const fundingPartnerData = await fundingPartnerResponse.json();
+
+            if (fundingPartnerResponse.ok && fundingPartnerData.success && fundingPartnerData.partner) {
+              router.push('/funding-partners');
+              return;
+            }
+          }
+        } catch (fundingPartnerCheckError) {
+          console.error('Funding partner access check failed:', fundingPartnerCheckError);
+        }
 
         // 1. VERIFICA SE IL CLIENTE È PRESENTE IN ENTRAMBE LE TABELLE (solar_leads & module_01_customers)
         const [solarCheck, mod1Check] = await Promise.all([
@@ -421,13 +450,25 @@ export default function LoginPage() {
                     Forgot security code?
                   </button>
                 </div>
-                <input 
-                  type="password" 
-                  placeholder="••••••••" 
-                  required 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••" 
+                    required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{ paddingRight: '44px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', color: '#0891b2', fontSize: '16px', cursor: 'pointer', padding: '4px', lineHeight: 1 }}
+                  >
+                    {showPassword ? '◉' : '👁'}
+                  </button>
+                </div>
               </div>
 
               <button type="submit" disabled={loading} className="login-btn-premium">

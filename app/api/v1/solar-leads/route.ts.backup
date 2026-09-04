@@ -320,9 +320,6 @@ export async function PUT(request: Request) {
     }
 
     let updatePayload: Record<string, any> = {};
-    let acceptanceWasNew = false;
-
-    const normalizeEntityName = (value: any) => String(value || '').replace(/[\[\]"]/g, '').toLowerCase().replace(/[\s_-]/g, '').trim();
 
     if (selection_type === 'provider') {
       let existingAccepted: string[] = [];
@@ -333,12 +330,8 @@ export async function PUT(request: Request) {
         existingAccepted = rawAccepted;
       }
       
-      const alreadyAccepted = existingAccepted.some((acceptedName: string) =>
-        normalizeEntityName(acceptedName) === normalizeEntityName(entity_name)
-      );
-      if (!alreadyAccepted) {
+      if (!existingAccepted.includes(entity_name)) {
         existingAccepted.push(entity_name);
-        acceptanceWasNew = true;
       }
 
       updatePayload = {
@@ -354,12 +347,8 @@ export async function PUT(request: Request) {
         existingAcceptedInst = rawAcceptedInst;
       }
        
-      const alreadyAccepted = existingAcceptedInst.some((acceptedName: string) =>
-        normalizeEntityName(acceptedName) === normalizeEntityName(entity_name)
-      );
-      if (!alreadyAccepted) {
+      if (!existingAcceptedInst.includes(entity_name)) {
         existingAcceptedInst.push(entity_name);
-        acceptanceWasNew = true;
       }
 
       updatePayload = {
@@ -387,7 +376,7 @@ export async function PUT(request: Request) {
     const customerName = updatedLead?.customer_name || 'Valued Customer';
 
     try {
-      if (customerEmail && acceptanceWasNew) {
+      if (customerEmail) {
         await resend.emails.send({
           from: 'AZPHUR Operations <notifications@azphur.com>',
           to: [customerEmail],
@@ -508,8 +497,6 @@ export async function PATCH(request: Request) {
     const updateData: Record<string, any> = {};
     let quotationNotification: { entityName: string; entityType: 'provider' | 'installer' } | null = null;
     let selectionCompletesProjectTeam = false;
-    const providerFinalPriceReadyBefore = Number(currentLead.provider_downpayment || 0) > 0 && Number(currentLead.provider_balance || 0) > 0;
-    const installerFinalPriceReadyBefore = Number(currentLead.installer_downpayment || 0) > 0 && Number(currentLead.installer_balance || 0) > 0;
 
     // 1. Gestione indipendente per nascondere il record completato al provider o all'installer
     if (hide_for) {
@@ -705,6 +692,25 @@ export async function PATCH(request: Request) {
 
     let triggeredPaymentTarget: string | null = null;
 
+    const invoiceUnlockNotifications: Array<{
+      partnerType: 'provider' | 'installer';
+      milestone: 'initial payment' | 'final payment';
+      amount: number;
+    }> = [];
+
+    if (provider_downpayment !== undefined && Number(provider_downpayment) > 0 && Number(provider_downpayment) !== Number(currentLead.provider_downpayment || 0)) {
+      invoiceUnlockNotifications.push({ partnerType: 'provider', milestone: 'initial payment', amount: Number(provider_downpayment) });
+    }
+    if (provider_balance !== undefined && Number(provider_balance) > 0 && Number(provider_balance) !== Number(currentLead.provider_balance || 0)) {
+      invoiceUnlockNotifications.push({ partnerType: 'provider', milestone: 'final payment', amount: Number(provider_balance) });
+    }
+    if (installer_downpayment !== undefined && Number(installer_downpayment) > 0 && Number(installer_downpayment) !== Number(currentLead.installer_downpayment || 0)) {
+      invoiceUnlockNotifications.push({ partnerType: 'installer', milestone: 'initial payment', amount: Number(installer_downpayment) });
+    }
+    if (installer_balance !== undefined && Number(installer_balance) > 0 && Number(installer_balance) !== Number(currentLead.installer_balance || 0)) {
+      invoiceUnlockNotifications.push({ partnerType: 'installer', milestone: 'final payment', amount: Number(installer_balance) });
+    }
+
     if (payment_target === 'project_downpayment') {
       const providerAmount = Number(currentLead.provider_downpayment || 0);
       const installerAmount = Number(currentLead.installer_downpayment || 0);
@@ -761,96 +767,26 @@ export async function PATCH(request: Request) {
       const customerEmail = updatedLead.customer_email || updatedLead.quote_details?.email;
       const customerName = updatedLead.customer_name || 'Valued Customer';
       if (customerEmail) {
-        void resend.emails.send({
+        try {
+          await resend.emails.send({
             from: 'AZPHUR Operations <notifications@azphur.com>',
             to: [customerEmail],
             bcc: ADMIN_NOTIFY_LIST,
-            subject: `AZPHUR Update: ${quotationNotification.entityName} submitted project pricing`,
+            subject: `New ${quotationNotification.entityType} proposal from ${quotationNotification.entityName}`,
             html: `
               <div style="font-family: Arial, sans-serif; color: #1d1d1f; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                <h2 style="color: #0891b2; margin-top: 0;">Project Pricing Submitted</h2>
+                <h2 style="color: #0891b2; margin-top: 0;">A New Project Proposal Is Ready</h2>
                 <p>Hi <strong>${customerName}</strong>,</p>
-                <p><strong>${quotationNotification.entityName}</strong> has submitted its ${quotationNotification.entityType} pricing and project terms for your solar project.</p>
-                <p>Open AZPHUR to review the updated proposal and track the remaining project pricing steps.</p>
-                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;" />
-                <p style="font-size: 10px; color: #64748b; text-align: center;">AZPHUR Distributed Network System</p>
-              </div>
-            `
-          }).catch((proposalEmailError) => console.error('Failed to send pricing-submitted email:', proposalEmailError));
-      }
-    }
-
-    const providerFinalPriceReadyNow = Number(updatedLead?.provider_downpayment || 0) > 0 && Number(updatedLead?.provider_balance || 0) > 0;
-    const installerFinalPriceReadyNow = Number(updatedLead?.installer_downpayment || 0) > 0 && Number(updatedLead?.installer_balance || 0) > 0;
-    const providerJustCompletedPricing = providerFinalPriceReadyNow && !providerFinalPriceReadyBefore;
-    const installerJustCompletedPricing = installerFinalPriceReadyNow && !installerFinalPriceReadyBefore;
-    const finalPriceJustBecameReady =
-      providerFinalPriceReadyNow && installerFinalPriceReadyNow &&
-      !(providerFinalPriceReadyBefore && installerFinalPriceReadyBefore);
-
-    if (updatedLead && (providerJustCompletedPricing || installerJustCompletedPricing || finalPriceJustBecameReady)) {
-      const customerEmail = updatedLead.customer_email || updatedLead.quote_details?.email;
-      const customerName = updatedLead.customer_name || 'Valued Customer';
-      const readyBy = [
-        providerJustCompletedPricing ? updatedLead.assigned_provider || 'Provider' : null,
-        installerJustCompletedPricing ? updatedLead.assigned_installer || 'Installer' : null
-      ].filter(Boolean).join(' and ');
-
-      if (customerEmail && readyBy) {
-        void resend.emails.send({
-          from: 'AZPHUR Operations <notifications@azphur.com>',
-          to: [customerEmail],
-          bcc: ADMIN_NOTIFY_LIST,
-          subject: finalPriceJustBecameReady
-            ? 'AZPHUR Final Project Price Is Ready'
-            : `AZPHUR Pricing Update from ${readyBy}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; color: #1d1d1f; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-              <h2 style="color: #0891b2; margin-top: 0;">${finalPriceJustBecameReady ? 'Final Project Price Available' : 'Project Pricing Updated'}</h2>
-              <p>Hi <strong>${customerName}</strong>,</p>
-              <p><strong>${readyBy}</strong> has completed its final project pricing for your AZPHUR solar project.</p>
-              <p>${finalPriceJustBecameReady ? 'Both provider and installer final prices are now ready. Open AZPHUR to choose Pay Direct or Request Financing.' : 'The remaining project partner must still complete its final pricing before the full project total is available.'}</p>
-              <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;" />
-              <p style="font-size: 10px; color: #64748b; text-align: center;">AZPHUR Distributed Network System</p>
-            </div>
-          `
-        }).catch((finalPricingEmailError) => console.error('Failed to send final pricing email:', finalPricingEmailError));
-      }
-
-      if (finalPriceJustBecameReady) {
-        void (async () => {
-          const { data: contract } = await supabase
-            .from('funding_contracts')
-            .select('funding_partner_id')
-            .eq('lead_id', updatedLead.id)
-            .in('contract_status', ['pending_customer_acceptance', 'active'])
-            .maybeSingle();
-          if (!contract?.funding_partner_id) return;
-
-          const { data: fundingPartner } = await supabase
-            .from('funding_partner_whitelist')
-            .select('email,display_name')
-            .eq('id', contract.funding_partner_id)
-            .maybeSingle();
-          if (!fundingPartner?.email) return;
-
-          await resend.emails.send({
-            from: 'AZPHUR Operations <notifications@azphur.com>',
-            to: [fundingPartner.email],
-            bcc: ADMIN_NOTIFY_LIST,
-            subject: 'AZPHUR Final Project Price Is Ready for Your Funded Deal',
-            html: `
-              <div style="font-family: Arial, sans-serif; color: #1d1d1f; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-                <h2 style="color: #0891b2; margin-top: 0;">Final Project Price Available</h2>
-                <p>Hi <strong>${fundingPartner.display_name || 'Funding Partner'}</strong>,</p>
-                <p>Both provider and installer final prices are ready for a project linked to your AZPHUR funding workflow.</p>
-                <p>Open your funding portal to review the project and continue the authorized financing process.</p>
+                <p><strong>${quotationNotification.entityName}</strong> has completed and submitted its ${quotationNotification.entityType} proposal for your solar project.</p>
+                <p>Open AZPHUR to review the proposal details and compare it with the other available partners.</p>
                 <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;" />
                 <p style="font-size: 10px; color: #64748b; text-align: center;">AZPHUR Distributed Network System</p>
               </div>
             `
           });
-        })().catch((fundingPartnerEmailError) => console.error('Failed to notify funding partner about final pricing:', fundingPartnerEmailError));
+        } catch (proposalEmailError) {
+          console.error('Failed to send proposal-ready email:', proposalEmailError);
+        }
       }
     }
 
@@ -882,6 +818,41 @@ export async function PATCH(request: Request) {
           });
         } catch (projectTeamEmailError) {
           console.error('Failed to send project-team confirmation email:', projectTeamEmailError);
+        }
+      }
+    }
+
+    if (updatedLead && invoiceUnlockNotifications.length > 0) {
+      const customerEmail = updatedLead.customer_email || updatedLead.quote_details?.email;
+      const customerName = updatedLead.customer_name || 'Valued Customer';
+
+      if (customerEmail) {
+        for (const invoice of invoiceUnlockNotifications) {
+          const entityName = invoice.partnerType === 'provider'
+            ? updatedLead.assigned_provider || 'Your provider'
+            : updatedLead.assigned_installer || 'Your installer';
+
+          try {
+            await resend.emails.send({
+              from: 'AZPHUR Operations <notifications@azphur.com>',
+              to: [customerEmail],
+              bcc: ADMIN_NOTIFY_LIST,
+              subject: `AZPHUR Payment Available: ${entityName} released the ${invoice.milestone}`,
+              html: `
+                <div style="font-family: Arial, sans-serif; color: #1d1d1f; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+                  <h2 style="color: #0891b2; margin-top: 0;">A Project Payment Is Now Available</h2>
+                  <p>Hi <strong>${customerName}</strong>,</p>
+                  <p><strong>${entityName}</strong>, your project ${invoice.partnerType}, has released the <strong>${invoice.milestone}</strong>.</p>
+                  <p><strong>Amount:</strong> PHP ${invoice.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                  <p>Open your AZPHUR project area to review the payment details and continue.</p>
+                  <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0;" />
+                  <p style="font-size: 10px; color: #64748b; text-align: center;">AZPHUR Distributed Network System</p>
+                </div>
+              `
+            });
+          } catch (invoiceEmailError) {
+            console.error('Failed to send payment-unlocked email:', invoiceEmailError);
+          }
         }
       }
     }
