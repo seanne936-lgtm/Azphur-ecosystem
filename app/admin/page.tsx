@@ -1068,9 +1068,15 @@ export default function AdminDashboard() {
         .footer-note {
           color: #6c7582 !important;
         }
-        @media (max-width: 640px) {
+        .compact-table-label {
+          display: none;
+        }
+        @media (max-width: 640px), (max-aspect-ratio: 1/1) {
           .cto-shell {
             padding-bottom: 25px;
+          }
+          .cto-wrap {
+            width: calc(100% - 24px);
           }
           .cto-nav {
             height: 64px;
@@ -1110,6 +1116,69 @@ export default function AdminDashboard() {
           .module-grid {
             grid-template-columns: 1fr;
           }
+          .grid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+          }
+          .card {
+            padding: 18px 14px;
+          }
+          .card-head {
+            margin-bottom: 14px;
+          }
+          .card-head h2 {
+            font-size: 15px;
+          }
+          .card-head p {
+            font-size: 10px;
+          }
+          .line-chart {
+            height: 150px;
+            padding-top: 5px;
+            overflow: hidden;
+          }
+          .line-labels {
+            gap: 0;
+            margin-top: 7px;
+          }
+          .line-labels strong {
+            font-size: 8px;
+          }
+          .line-labels span {
+            font-size: 7px;
+          }
+          .line-labels em {
+            font-size: 8px;
+            margin-top: 4px;
+          }
+          .growth-table {
+            min-width: 0;
+            width: 100%;
+            table-layout: fixed;
+            margin-top: 14px;
+          }
+          .growth-table th,
+          .growth-table td {
+            white-space: normal;
+            overflow-wrap: anywhere;
+            padding: 8px 4px;
+            font-size: 8px;
+            line-height: 1.3;
+          }
+          .growth-table th {
+            font-size: 7px;
+            letter-spacing: 0.25px;
+          }
+          .growth-table th:nth-child(1) { width: 18%; }
+          .growth-table th:nth-child(2),
+          .growth-table th:nth-child(3) { width: 28%; }
+          .growth-table th:nth-child(4) { width: 26%; }
+          .desktop-table-label {
+            display: none;
+          }
+          .compact-table-label {
+            display: inline;
+          }
           .ledger th,
           .ledger td {
             padding: 8px 4px;
@@ -1126,7 +1195,7 @@ export default function AdminDashboard() {
             font-size: 7px;
           }
           .line-chart {
-            height: 180px;
+            height: 150px;
           }
           .line-labels {
             gap: 1px;
@@ -1327,9 +1396,9 @@ export default function AdminDashboard() {
                 <thead>
                   <tr>
                     <th>MONTH</th>
-                    <th>CTO ACCRUED (PHP)</th>
-                    <th>CTO ACCRUED (EUR)</th>
-                    <th>MONTHLY TREND</th>
+                    <th><span className="desktop-table-label">CTO ACCRUED (PHP)</span><span className="compact-table-label">PHP</span></th>
+                    <th><span className="desktop-table-label">CTO ACCRUED (EUR)</span><span className="compact-table-label">EUR</span></th>
+                    <th><span className="desktop-table-label">MONTHLY TREND</span><span className="compact-table-label">TREND</span></th>
                   </tr>
                 </thead>
                 <tbody>
