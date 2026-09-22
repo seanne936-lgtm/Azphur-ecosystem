@@ -796,9 +796,16 @@ export default function AdminDashboard() {
            All finance calculations, live reads, exports and tables above remain unchanged. */
         body {
           background: #eef1f7;
+          width: 100%;
+          min-width: 100%;
+          overflow-x: hidden;
         }
         .cto-shell {
+          width: 100vw;
+          max-width: 100vw;
+          min-width: 100vw;
           padding-bottom: 38px;
+          overflow-x: hidden;
           background:
             radial-gradient(circle at 5% 4%, rgba(66, 135, 245, 0.22), transparent 23rem),
             #eef1f7;
