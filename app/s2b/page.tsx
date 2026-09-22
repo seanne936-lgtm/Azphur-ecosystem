@@ -9,7 +9,7 @@ export default function S2BCombinedPortal() {
   const [activeTab, setActiveTab] = useState<'Inventory' | 'Shipments' | 'Providers'>('Shipments');
   const [shipments, setShipments] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [userRole, setUserRole] = useState<'ADMIN' | 'CUSTOMER'>('CUSTOMER');
+  const [userRole, setUserRole] = useState<'ADMIN' | 'PROVIDER' | 'CUSTOMER'>('CUSTOMER');
   const [userEmail, setUserEmail] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
@@ -39,15 +39,24 @@ export default function S2BCombinedPortal() {
       const emailClean = session.user.email?.toLowerCase().trim() || '';
       const isAdmin = adminEmails.includes(emailClean);
 
+      let isProvider = false;
+
       if (!isAdmin) {
         try {
-          const { data, error } = await supabase
+          const { data: provider } = await supabase
+            .from('partner_whitelist')
+            .select('email')
+            .eq('email', emailClean)
+            .maybeSingle();
+          isProvider = Boolean(provider);
+
+          const { data: customer, error } = await supabase
             .from('module_01_customers')
             .select('email')
             .eq('email', emailClean)
             .maybeSingle();
 
-          if (error || !data) {
+          if (error || (!customer && !isProvider)) {
             if (isMounted) {
               setGlobalLoading(false);
               router.push('/login');
@@ -63,7 +72,7 @@ export default function S2BCombinedPortal() {
         }
       }
       
-      const role = isAdmin ? 'ADMIN' : 'CUSTOMER';
+      const role = isAdmin ? 'ADMIN' : isProvider ? 'PROVIDER' : 'CUSTOMER';
       if (isMounted) {
         setUserRole(role);
         setUserEmail(emailClean);
@@ -100,8 +109,11 @@ export default function S2BCombinedPortal() {
     try {
       let query = supabase.from('inventory').select('*');
       
-      if (role !== 'ADMIN' && email) {
+      if (role === 'CUSTOMER' && email) {
         query = query.eq('customer_email', email.toLowerCase().trim());
+      }
+      if (role === 'PROVIDER' && email) {
+        query = query.eq('provider', email.toLowerCase().trim());
       }
       
       const { data, error } = await query.order('created_at', { ascending: false });
@@ -147,7 +159,7 @@ export default function S2BCombinedPortal() {
     const cleanSearch = searchTerm.toLowerCase().replace('az-', '').trim();
     const matchesBase = item.id.toLowerCase().includes(cleanSearch) || item.type.toLowerCase().includes(searchTerm.toLowerCase());
     
-    if (userRole === 'ADMIN') {
+    if (userRole === 'ADMIN' || userRole === 'PROVIDER') {
       return matchesBase || item.tracking_id.toLowerCase().includes(cleanSearch) || item.provider.toLowerCase().includes(searchTerm.toLowerCase());
     }
     
@@ -161,7 +173,7 @@ export default function S2BCombinedPortal() {
       price: parseFloat(newOrder.price) || 0,
       quantity: 1,
       status: 'PROCESSING',
-      provider: newOrder.provider,
+      provider: userRole === 'PROVIDER' ? userEmail : newOrder.provider,
       origin: newOrder.origin,
       destination: newOrder.destination,
       customer_email: newOrder.customer_email.toLowerCase().trim(),
@@ -187,6 +199,7 @@ export default function S2BCombinedPortal() {
     );
   }
 
+  const canManageCargo = userRole === 'ADMIN' || userRole === 'PROVIDER';
   const allowedTabs = userRole === 'ADMIN' ? ['Shipments', 'Inventory', 'Providers'] : ['Shipments'];
 
   return (
@@ -218,13 +231,13 @@ export default function S2BCombinedPortal() {
           <div className="actions-section">
             <div className="search-container">
               <input 
-                placeholder={userRole === 'ADMIN' ? "Search AZ-Ref o Tracking..." : "Search AZ-Ref..."} 
+                placeholder={canManageCargo ? "Search AZ-Ref or tracking..." : "Search AZ-Ref..."} 
                 className="smooth-search"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {userRole === 'ADMIN' && (
+            {canManageCargo && (
               <button onClick={() => setIsModalOpen(true)} className="modern-add-btn">
                 + REGISTER_NEW_CARGO
               </button>
@@ -250,18 +263,18 @@ export default function S2BCombinedPortal() {
                         <div className="ref-id">AZ-{ship.id}</div>
                         <div className="asset-sub-info">
                           <span className="sub-type">
-                            {userRole === 'ADMIN' ? ship.provider : 'International Provider'}
+                            {canManageCargo ? ship.provider : 'International Provider'}
                           </span>
                           <span className="sub-price">₱{Number(ship.price).toLocaleString()}</span>
                           <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px' }}>
-                            TRACKING: {userRole === 'ADMIN' ? ship.tracking_id : 'SECURED_NODE'}
+                            TRACKING: {canManageCargo ? ship.tracking_id : 'SECURED_NODE'}
                           </span>
                         </div>
                       </td>
                       <td>
                         <div className="route-text">{ship.origin} → {ship.destination}</div>
                         <div className="provider-text">
-                          {userRole === 'ADMIN' ? ship.provider : 'International Provider'}
+                          {canManageCargo ? ship.provider : 'International Provider'}
                         </div>
                       </td>
                       <td>
@@ -289,7 +302,7 @@ export default function S2BCombinedPortal() {
         )}
       </main>
 
-      {isModalOpen && userRole === 'ADMIN' && (
+      {isModalOpen && canManageCargo && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
@@ -305,10 +318,17 @@ export default function S2BCombinedPortal() {
                 <label>CUSTOMER_EMAIL</label>
                 <input required type="email" placeholder="client@access.com" value={newOrder.customer_email} onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
               </div>
-              <div className="form-group">
-                <label>PROVIDER</label>
-                <input required type="text" placeholder="Supplier Node ID" value={newOrder.provider} onChange={e => setNewOrder({...newOrder, provider: e.target.value})} />
-              </div>
+              {userRole === 'ADMIN' ? (
+                <div className="form-group">
+                  <label>PROVIDER</label>
+                  <input required type="text" placeholder="Supplier Node ID" value={newOrder.provider} onChange={e => setNewOrder({...newOrder, provider: e.target.value})} />
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label>PROVIDER ACCOUNT</label>
+                  <input type="text" value={userEmail} readOnly aria-label="Provider account" />
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-group">
                   <label>ORIGIN</label>

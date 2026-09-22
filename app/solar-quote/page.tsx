@@ -371,7 +371,7 @@ const handleSubmitLead = async (e: React.FormEvent<HTMLFormElement>) => {
       }).from(element).save();
     } catch (err) {
       console.error('Project receipt generation error:', err);
-      alert('PROJECT_RECEIPT_GENERATION_FAILED');
+      alert('PROJECT RECEIPT GENERATION FAILED');
     }
   };
 
@@ -553,7 +553,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
         // CORRETTO CAST DI 'err'
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error("PDF generation error:", err);
-        alert("PDF_GENERATION_FAILED: " + errorMsg);
+        alert("PDF GENERATION FAILED: " + errorMsg);
         return;
       }
     }
@@ -660,7 +660,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       await (html2pdf() as any).set(opt).from(element).save();
     } catch (err: unknown) {
       console.error("Receipt generation error:", err);
-      alert("PDF_GENERATION_FAILED");
+      alert("PDF GENERATION FAILED");
     }
   };
   
@@ -1689,6 +1689,16 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       .success-panel { text-align: center; padding: 10px 0; font-weight: 600; }
       .success-tag { color: #0891b2 !important; font-weight: 900; }
       .fade-in { animation: fadeIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); }
+      /* Product UX pass: presentation only. Quote, selection, payment and funding logic stays unchanged. */
+      .quote-screen .dashboard-box, .quote-screen .form-inflow-box { box-shadow: 0 18px 45px rgba(8,145,178,.10); }
+      .quote-screen .dashboard-box > .phase-label, .quote-screen .form-inflow-box > .phase-label { margin-bottom: 8px; }
+      .quote-screen .quotes-table-wrapper { border: 1px solid #dbe8eb; border-radius: 14px; background: #fff; }
+      .quote-screen .quotes-table-wrapper table { min-width: 760px; }
+      .quote-screen .input-group { padding: 12px; border: 1px solid #e2eef0; border-radius: 14px; background: rgba(255,255,255,.72); }
+      .quote-screen .input-group + .input-group { margin-top: 10px !important; }
+      .quote-screen .login-btn-premium { min-height: 44px; box-shadow: 0 9px 18px rgba(8,145,178,.16); }
+      .quote-screen .status-tag { letter-spacing: .45px; }
+      @media (max-width: 640px) { .quote-screen .login-box-premium { padding: 20px 14px; border-width: 1px; } .quote-screen .input-group { padding: 10px; } }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     `}</style>
   </div>

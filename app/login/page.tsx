@@ -55,6 +55,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false); 
+  const [isProvider, setIsProvider] = useState(false);
   
   // Stato per gestire la scelta multipla del cliente (Solar + S2B)
   const [isDualCustomer, setIsDualCustomer] = useState(false);
@@ -87,7 +88,15 @@ export default function LoginPage() {
           const currentEmail = data.session.user.email.toLowerCase().trim();
           if (adminEmails.includes(currentEmail)) {
             setIsAdmin(true);
+            return;
           }
+
+          const { data: provider } = await supabase
+            .from('partner_whitelist')
+            .select('email')
+            .eq('email', currentEmail)
+            .maybeSingle();
+          setIsProvider(Boolean(provider));
         }
       } catch (e) {
         console.error("Session verification bypass", e);
@@ -200,7 +209,8 @@ export default function LoginPage() {
           .maybeSingle(); 
 
         if (isPartner) {
-          router.push('/partner'); 
+          setIsProvider(true);
+          setLoading(false);
           return;
         }
 
@@ -355,20 +365,26 @@ export default function LoginPage() {
                 GO TO PARTNER & INSTALLERS PORTAL (MOD_04) 🌐
               </button>
 
-              <button onClick={() => navigateToModule('/solar-quote')} className="login-btn-premium btn-admin-dark">
-                GO TO B2B ENTERPRISE ⚡
-              </button>
-
               <button onClick={() => navigateToModule('/EV')} className="login-btn-premium btn-admin-blue">
                 GO TO EV MOBILITY (MOD_05) 🔋
               </button>
 
-              <button onClick={() => navigateToModule('/EV/driver')} className="login-btn-premium btn-admin-green">
-                GO TO DRIVER HQ 🚗
-              </button>
-
               <button onClick={() => navigateToModule('/s2b')} className="login-btn-premium btn-admin-cyan">
                 GO TO S2B LOGISTICS →
+              </button>
+
+              <button onClick={() => navigateToModule('/admin/operations')} className="login-btn-premium btn-admin-operations">
+                OPEN ADMIN OPERATIONS →
+              </button>
+            </div>
+          ) : isProvider ? (
+            <div className="admin-routing-panel fade-in">
+              <span className="phase-label admin-alert-tag">✓ PROVIDER_ACCESS_GRANTED // SELECT_WORKSPACE</span>
+              <button onClick={() => navigateToModule('/s2b')} className="login-btn-premium btn-admin-cyan">
+                GO TO SUPPLY HUB →
+              </button>
+              <button onClick={() => navigateToModule('/partner')} className="login-btn-premium btn-admin-partner">
+                GO TO PARTNERS PORTAL →
               </button>
             </div>
           ) : isDualCustomer ? (
@@ -552,6 +568,7 @@ export default function LoginPage() {
         .btn-admin-blue { background: #3e6ae1 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }
         .btn-admin-green { background: #10b981 !important; color: #fff !important; border: 2px solid #1d1d1f !important; }
         .btn-admin-cyan { background: #22d3ee !important; color: #1d1d1f !important; border: 2px solid #1d1d1f !important; }
+        .btn-admin-operations { background: #0e7490 !important; color: #fff !important; border: 2px solid #083344 !important; }
 
         .system-ops-label { font-size: 9px; font-weight: 900; color: #0891b2; letter-spacing: 2px; text-align: center; margin-top: 35px; }
 

@@ -101,7 +101,26 @@ export default function PartnerDashboard() {
     return { base: safeAmount, vat, total: safeAmount + vat };
   };
 
-/// Funzione per nascondere in modo sicuro e indipendente il record completato dalla propria vista
+  const hiddenLeadStorageKey = (userId, role) => `azphur:hidden-leads:${userId}:${role}`;
+
+  const readLocalHiddenLeadIds = (userId, role) => {
+    if (typeof window === 'undefined' || !userId || !role) return new Set();
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(hiddenLeadStorageKey(userId, role)) || '[]');
+      return new Set(Array.isArray(saved) ? saved : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  const rememberLocallyHiddenLead = (userId, role, leadId) => {
+    if (typeof window === 'undefined' || !userId || !role) return;
+    const hiddenIds = readLocalHiddenLeadIds(userId, role);
+    hiddenIds.add(leadId);
+    window.localStorage.setItem(hiddenLeadStorageKey(userId, role), JSON.stringify([...hiddenIds]));
+  };
+
+  // Hide only from the current account's dashboard. The original lead is never deleted.
   const handleDeleteLead = async (leadId) => {
     if (!window.confirm("Are you sure you want to clear this completed record from your dashboard? This action will not affect other parties.")) {
       return;
@@ -112,22 +131,28 @@ export default function PartnerDashboard() {
       const currentUser = authData.session?.user;
       if (!currentUser || !entityType) throw new Error('Authenticated partner profile required.');
 
+      // Keep the view clean immediately, even if the optional cloud hide record
+      // has not yet been configured with its Supabase table/RLS policy.
+      rememberLocallyHiddenLead(currentUser.id, entityType, leadId);
+      setIncomingLeads(prev => prev.filter(q => q.id !== leadId));
+
       const { error } = await supabase
         .from('partner_hidden_leads')
-        .upsert({
+        .insert({
           lead_id: leadId,
           user_id: currentUser.id,
           partner_email: currentUser.email?.toLowerCase().trim() || null,
           entity_type: entityType
-        }, { onConflict: 'lead_id,user_id,entity_type' });
+        });
 
-      if (error) throw error;
-
-      setIncomingLeads(prev => prev.filter(q => q.id !== leadId));
+      // A duplicate means this account already hid the record before; it is safe.
+      if (error && error.code !== '23505') {
+        console.warn('Cloud hide record was not saved; local view preference is active.', error.message || error);
+      }
       alert("RECORD_HIDDEN: This project was removed only from your dashboard. The database record and other partner views were not affected.");
     } catch (err) {
-      console.error("Hide request error:", err);
-      alert("HIDE_ERROR: Could not remove this project from your view.");
+      console.warn("Hide request fallback:", err?.message || err);
+      alert("HIDE_ERROR: Please sign in again before removing a project from your view.");
     }
   };
 
@@ -686,7 +711,7 @@ export default function PartnerDashboard() {
 
       const { data: authData } = await supabase.auth.getSession();
       const currentUserId = authData.session?.user?.id;
-      const { data: hiddenRows } = currentUserId && activeEntityType && activeEntityType !== 'admin' && !activeIsAdmin
+      const { data: hiddenRows, error: hiddenRowsError } = currentUserId && activeEntityType
         ? await supabase
             .from('partner_hidden_leads')
             .select('lead_id')
@@ -694,8 +719,15 @@ export default function PartnerDashboard() {
             .eq('entity_type', activeEntityType)
         : { data: [], error: null };
 
-     
-      const personalHiddenIds = new Set((hiddenRows || []).map(row => row.lead_id));
+      if (hiddenRowsError) {
+        console.warn('Cloud hidden-record sync unavailable; using this account\'s local view preference.');
+      }
+
+      const localHiddenIds = readLocalHiddenLeadIds(currentUserId, activeEntityType);
+      const personalHiddenIds = new Set([
+        ...(hiddenRows || []).map(row => row.lead_id),
+        ...localHiddenIds
+      ]);
 
       const { data: leadsData, error: leadsError } = await supabase
         .from('leads')
@@ -718,8 +750,8 @@ export default function PartnerDashboard() {
 
       const filteredLeads = leadsData
         .filter(lead => {
-          if (activeIsAdmin) return true;
           if (personalHiddenIds.has(lead.id)) return false;
+          if (activeIsAdmin) return true;
           
           const assignedProv = (lead.assigned_provider || '').toLowerCase().replace(/[\s_-]/g, '').trim();
           const assignedInst = (lead.assigned_installer || '').toLowerCase().replace(/[\s_-]/g, '').trim();
@@ -989,6 +1021,13 @@ return (
         @keyframes lead-alert-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.25); box-shadow: 0 0 8px currentColor; } }
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 10px; box-sizing: border-box; }
         
+        /* Product UX pass: presentation only. Partner queries, proposal logic and payment triggers stay unchanged. */
+        .partner-canvas .dashboard-content { max-width: 1200px; margin: 0 auto; }
+        .partner-canvas .lead-card { box-shadow: 0 12px 28px rgba(14,116,144,.08); }
+        .partner-canvas .lead-card:hover { transform: translateY(-1px); transition: transform .18s ease; }
+        .partner-canvas .notification-banner { border: 1px solid rgba(255,255,255,.28); }
+        .partner-canvas button { min-height: 34px; }
+        .partner-canvas .inventory-item-row { box-shadow: 0 7px 18px rgba(14,116,144,.05); }
         @media (max-width: 768px) {
           .nav-partner { padding: 12px 15px; }
           .main-logo { height: 24px; }

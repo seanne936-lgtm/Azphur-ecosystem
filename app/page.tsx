@@ -229,6 +229,10 @@ export default function Home() {
   const router = useRouter();
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [staffCode, setStaffCode] = useState<string>("");
+  const [adminAccessEmail, setAdminAccessEmail] = useState<string>("");
+  const [adminAccessPassword, setAdminAccessPassword] = useState<string>("");
+  const [adminAccessError, setAdminAccessError] = useState<string>("");
+  const [adminAccessLoading, setAdminAccessLoading] = useState<boolean>(false);
   const [liveMs, setLiveMs] = useState<number>(421);
   const [scrollPercent, setScrollPercent] = useState<number>(0);
   const [currentUserEmail, setCurrentUserEmail] = useState<string>('loading...');
@@ -239,6 +243,7 @@ export default function Home() {
   const [debugM1, setDebugM1] = useState<string>("Waiting...");
   const [debugM5, setDebugM5] = useState<string>("Waiting...");
   const [activeTransactionsCount, setActiveTransactionsCount] = useState<number | null>(null);
+  const [completedTransactionsCount, setCompletedTransactionsCount] = useState<number | null>(null);
 
   // --- STATO SOLO-UX: ricerca moduli + filtro chip stile Grab (nessuna chiamata backend) ---
   const [moduleSearch, setModuleSearch] = useState<string>("");
@@ -320,13 +325,22 @@ export default function Home() {
 useEffect(() => {
   async function fetchLiveTransactions() {
     try {
-      // Conta i record presenti nella tabella 'leads' o 'transactions'
-      const { count, error } = await supabase
-        .from('leads') // Oppure la tabella dei pagamenti/transazioni
-        .select('*', { count: 'exact', head: true });
+      const { data, error } = await supabase
+        .from('leads')
+        .select('status');
 
-      if (!error && count !== null) {
-        setActiveTransactionsCount(count);
+      if (!error && data) {
+        const isCompleted = (status: unknown) => {
+          const normalized = String(status || '').toUpperCase();
+          return normalized.includes('COMPLETED') || normalized.includes('CLOSED') || normalized.includes('SETTLED');
+        };
+        const isInactive = (status: unknown) => {
+          const normalized = String(status || '').toUpperCase();
+          return normalized.includes('CANCELLED') || normalized.includes('REFUNDED') || normalized.includes('REJECTED');
+        };
+
+        setCompletedTransactionsCount(data.filter((lead) => isCompleted(lead.status)).length);
+        setActiveTransactionsCount(data.filter((lead) => !isCompleted(lead.status) && !isInactive(lead.status)).length);
       }
     } catch (err) {
       console.error("Error fetching live transactions:", err);
@@ -334,6 +348,15 @@ useEffect(() => {
   }
 
   fetchLiveTransactions();
+
+  const transactionsChannel = supabase
+    .channel('azphur-main-transaction-counters')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, fetchLiveTransactions)
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(transactionsChannel);
+  };
 }, []);
 
   const verifyCustomerAccessM5 = async (userEmail: string): Promise<boolean> => {
@@ -478,6 +501,44 @@ async function handleLogout() {
     } catch (err) {
       console.error("Logout error:", err);
       window.location.replace('/');
+  }
+}
+
+  async function handleAdminOperationsAccess(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (hasLoggedInAdmin) {
+      router.push("/admin/operations");
+      return;
+    }
+    const email = adminAccessEmail.trim().toLowerCase();
+    setAdminAccessError("");
+
+    if (!email || !adminAccessPassword) {
+      setAdminAccessError("Enter your AZPHUR admin email and password.");
+      return;
+    }
+
+    setAdminAccessLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: adminAccessPassword,
+      });
+      if (error) throw error;
+
+      const authenticatedEmail = data.user?.email?.trim().toLowerCase();
+      if (!authenticatedEmail || !adminEmails.includes(authenticatedEmail)) {
+        await supabase.auth.signOut();
+        setAdminAccessError("This account is not authorized for AZPHUR Operations.");
+        return;
+      }
+
+      router.push("/admin/operations");
+    } catch (error) {
+      console.error("Admin operations access error:", error);
+      setAdminAccessError("Email or password not recognized. Please try again.");
+    } finally {
+      setAdminAccessLoading(false);
     }
   }
 
@@ -566,6 +627,8 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
 
 
   const isAuthorized: boolean = staffCode.trim().toUpperCase() === 'AZ-001';
+  const hasLoggedInAdmin: boolean = adminEmails.includes(currentUserEmail.trim().toLowerCase());
+  const canOpenPrivateControls: boolean = isAuthorized || hasLoggedInAdmin;
 
   // --- Solo-UX: nome/saluto derivati dai dati di sessione gia' esistenti, nessuna nuova chiamata ---
   const displayName = useMemo(() => {
@@ -741,11 +804,6 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           box-shadow: 0 20px 45px rgba(6, 182, 212, 0.1);
         }
         .grab-greeting-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-        .grab-pay-chip {
-          display: flex; flex-direction: column; align-items: center; gap: 4px;
-          border: 1.5px dashed #0f172a; border-radius: 14px; padding: 8px 12px;
-          font-size: 10px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px; cursor: pointer; background: rgba(255,255,255,0.5);
-        }
         .grab-greeting-text { font-size: clamp(20px, 4vw, 28px); color: #0f172a; font-weight: 500; text-align: right; }
         .grab-greeting-text strong { font-weight: 900; }
         .grab-stats-row {
@@ -916,7 +974,55 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           }
         }
 
-        @media (max-width: 900px) {
+        /* Product UX pass: visual hierarchy only. All navigation and data logic stays unchanged. */
+        .grab-header-wrap { max-width: 1080px; margin: 32px auto 0; padding-inline: clamp(16px,4vw,30px); }
+        .grab-greeting-card { padding: 34px 34px 82px; border: 1px solid rgba(34,211,238,.22); background: linear-gradient(132deg,#d7f5f2 0%,#edf9f6 58%,#fbffff 100%); }
+        .grab-greeting-text { text-align: left; font-size: clamp(26px,3.2vw,36px); letter-spacing: -.85px; }
+        .az-home-kicker { display: flex; align-items: center; gap: 8px; color: #0e7490; }
+        .az-home-kicker::before { content: ""; width: 24px; height: 2px; border-radius: 999px; background: #06b6d4; box-shadow: 8px 0 0 rgba(6,182,212,.24); }
+        .az-home-kicker::after { content: "LIVE"; padding: 3px 6px; border: 1px solid rgba(8,145,178,.25); border-radius: 999px; color: #0e7490; background: rgba(255,255,255,.52); font-size: 7px; letter-spacing: .6px; }
+        .az-home-subtitle { max-width: 570px; font-size: 13px; }
+        .grab-search-wrap, .grab-chip-row { max-width: 1080px; padding-inline: clamp(16px,4vw,30px); }
+        .grab-search-bar { border-radius: 16px; padding: 15px 20px; box-shadow: 0 16px 35px rgba(8,145,178,.11); }
+        .grab-chip-row { margin-top: 18px; }
+        .grab-chip { padding: 8px 16px; font-size: 11px; }
+        .az-home-kicker { margin: 0 0 10px; color: #0891b2; font: 800 10px "JetBrains Mono", monospace; letter-spacing: 1.4px; }
+        .az-home-subtitle { max-width: 610px; margin: 10px 0 0; color: #52657a; font-size: 14px; line-height: 1.55; }
+        .az-home-actions { display: grid; grid-template-columns: minmax(235px,1.25fr) minmax(180px,1fr) minmax(180px,1fr) minmax(170px,.85fr); gap: 10px; margin-top: 25px; }
+        .az-home-action { min-height: 82px; display: flex; align-items: center; gap: 12px; border: 1px solid #dbe8eb; border-radius: 15px; padding: 14px 16px; text-align: left; cursor: pointer; font: inherit; transition: transform .18s ease, box-shadow .18s ease; }
+        .az-home-action:hover { transform: translateY(-2px); box-shadow: 0 12px 25px rgba(8,145,178,.13); }
+        .az-home-action--counter { cursor: default; }
+        .az-home-action--counter:hover { transform: none; box-shadow: 0 12px 25px rgba(8,145,178,.13); }
+        .az-home-action--primary { border-color: #0891b2; background: linear-gradient(135deg,#0891b2,#06b6d4); color: #fff; }
+        .az-home-action--light { background: rgba(255,255,255,.9); color: #0f172a; }
+        .az-home-action--completed { background: linear-gradient(135deg, rgba(236,253,245,.94), rgba(255,255,255,.94)); border-color: #bbf7d0; }
+        .az-home-action--completed .az-home-action__icon { background: #dcfce7; color: #15803d; border-color: #bbf7d0; font-size: 22px; font-weight: 900; }
+        .az-home-action--completed .az-home-action__icon > span { margin: 0; opacity: 1; font-size: inherit; }
+        .az-home-action--muted { background: rgba(255,255,255,.55); color: #334155; }
+        .az-home-action__icon { display: grid; flex: 0 0 44px; width: 44px; height: 44px; place-items: center; overflow: hidden; border-radius: 50%; background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.76); }
+        .az-home-action__icon img { display: block; width: 100%; height: 100%; object-fit: cover; }
+        .az-home-action--light .az-home-action__icon, .az-home-action--muted .az-home-action__icon { background: #e6f8fa; border-color: #fff; box-shadow: 0 4px 10px rgba(8,145,178,.11); }
+        .az-home-action b, .az-home-action span { display: block; }
+        .az-home-action b { font-size: 13px; }
+        .az-home-action span { margin-top: 4px; opacity: .78; font-size: 10px; line-height: 1.35; }
+        .az-home-modules-heading { max-width: 1020px; margin: 34px auto 0; padding: 0 4px; display: flex; align-items: end; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e1ebec; padding-bottom: 15px; }
+        .az-home-modules-heading h2 { margin: 0; color: #0f172a; font-size: 20px; letter-spacing: -.7px; }
+        .az-home-modules-heading p { margin: 5px 0 0; color: #64748b; font-size: 12px; }
+        .az-home-modules-heading span { color: #0891b2; font: 800 9px "JetBrains Mono", monospace; letter-spacing: 1px; }
+        .grab-greeting-card { border-radius: 28px; box-shadow: 0 18px 45px rgba(8,145,178,.12); }
+        .grab-greeting-text h1 { max-width: 680px; }
+        .grab-stat-pill { transition: transform .18s ease, box-shadow .18s ease; }
+        .grab-stat-pill:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(8,145,178,.12); }
+        .grab-search-wrap { max-width: 1040px; margin-left: auto; margin-right: auto; }
+        .grab-module-grid { max-width: 1020px; margin: 18px auto 10px; grid-template-columns: repeat(4,1fr); gap: 16px 18px; }
+        .grab-module-item { position: relative; min-height: 112px; border-radius: 16px; padding: 13px 8px 10px; transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
+        .grab-module-item:hover { transform: translateY(-3px); background: rgba(255,255,255,.76); box-shadow: 0 12px 22px rgba(8,145,178,.08); }
+        .grab-module-icon-wrap { width: 70px; height: 70px; }
+        .grab-module-new-dot { background: #0891b2; }
+        .grab-module-item .grab-module-new-dot[style] { position: static !important; order: -1; margin: 0 0 -3px !important; background: #0f172a !important; border-radius: 999px; padding: 3px 7px; box-shadow: none; font-size: 7px; letter-spacing: .35px; }
+        .grab-module-label { line-height: 1.25; text-align: center; }
+        .santrix-hero-container { margin-top: clamp(34px,6vw,72px); }
+        @media (max-width: 900px) { .az-home-actions { grid-template-columns: 1fr; } .az-home-action { min-height: 72px; } .az-home-modules-heading { margin-top: 26px; align-items: flex-start; } .az-home-modules-heading span { padding-top: 5px; } .grab-module-grid { grid-template-columns: repeat(3,1fr); gap: 12px 6px; } .grab-module-item { min-height: 104px; } .grab-module-icon-wrap { width: 60px; height: 60px; } .grab-greeting-card { padding: 25px 18px 76px; border-radius: 24px; } .grab-greeting-text { font-size: 28px; }
           .nav-minimal-lux { padding: 25px 20px; flex-direction: column; gap: 20px; text-align: center; }
           .nav-items { width: 100%; justify-content: center; flex-wrap: wrap; gap: 15px; }
           .santrix-grid-dashboard { grid-template-columns: 1fr; gap: 30px; }
@@ -966,42 +1072,30 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
       </nav> 
 
       <main>
-        {/* ============ GRAB-STYLE GREETING HEADER ============ */}
+        {/* Presentation-only home entry. Existing routes and module actions are preserved. */}
         <section className="grab-header-wrap">
           <div className="grab-greeting-card">
             <div className="grab-greeting-top">
-              <div className="grab-pay-chip" onClick={() => handleModuleNavigation('/EV', verifyCustomerAccessM5)}>
-                <span style={{ fontSize: '16px' }}>⧉</span>
-                <span>Pay</span>
-              </div>
               <div className="grab-greeting-text">
+                <p className="az-home-kicker">AZPHUR PROJECT PLATFORM</p>
                 {timeGreeting}, <strong>{displayName}</strong>!
+                <p className="az-home-subtitle">Start a project, compare verified options, arrange funding and track every step in one place.</p>
               </div>
             </div>
 
-            <div className="grab-stats-row">
-             <div className="grab-stat-pill" onClick={() => router.push('/partner')}>
-  <div className="grab-stat-left">
-    <div className="grab-stat-icon" style={{ background: 'rgba(6,182,212,0.12)' }}>⚡</div>
-    <div>
-      <span className="grab-stat-label">Active Transactions</span>
-      <span className="grab-stat-value">
-        {activeTransactionsCount !== null ? activeTransactionsCount.toLocaleString() : '0'}
-      </span>
-    </div>
-  </div>
-  <span className="grab-stat-chevron">›</span>
-</div>
-              <div className="grab-stat-pill" onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)}>
-                <div className="grab-stat-left">
-                  <div className="grab-stat-icon" style={{ background: 'rgba(139,92,246,0.12)' }}>👑</div>
-                  <div>
-                    <span className="grab-stat-label">Supplier Nodes</span>
-                    <span className="grab-stat-value">{inventoryCount ?? '0'}</span>
-                  </div>
-                </div>
-                <span className="grab-stat-chevron">›</span>
+            <div className="az-home-actions">
+              <button type="button" className="az-home-action az-home-action--primary" onClick={() => handleModuleNavigation('/solar-quote', verifyModule01Access)}>
+                <span className="az-home-action__icon"><img src="https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=160&q=80" alt="" /></span><span><b>Start a project</b><span>Get verified proposals through AZPHUR</span></span>
+              </button>
+              <div className="az-home-action az-home-action--light az-home-action--counter" aria-label="Active transactions counter">
+                <span className="az-home-action__icon"><img src="/logo-azphur.avif" alt="" /></span><span><b>Active transactions</b><span>{activeTransactionsCount !== null ? activeTransactionsCount.toLocaleString() : '0'} project{activeTransactionsCount === 1 ? '' : 's'} currently active</span></span>
               </div>
+              <div className="az-home-action az-home-action--light az-home-action--completed az-home-action--counter" aria-label="Completed transactions counter">
+                <span className="az-home-action__icon"><span aria-hidden="true">✓</span></span><span><b>Completed transactions</b><span>{completedTransactionsCount !== null ? completedTransactionsCount.toLocaleString() : '0'} project{completedTransactionsCount === 1 ? '' : 's'} completed</span></span>
+              </div>
+              <button type="button" className="az-home-action az-home-action--muted" onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)}>
+                <span className="az-home-action__icon"><img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=160&q=80" alt="" /></span><span><b>Supply network</b><span>{inventoryCount ?? '0'} supplier node{inventoryCount === 1 ? '' : 's'} available</span></span>
+              </button>
             </div>
           </div>
         </section>
@@ -1059,6 +1153,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           ))}
         </div>
 
+        <div className="az-home-modules-heading"><div><h2>Explore AZPHUR</h2><p>Choose the space that matches what you need today.</p></div><span>ALL MODULES</span></div>
         {/* Griglia dei 7 moduli, stile icona Grab */}
         <section className="grab-module-grid">
           {visibleModules.length > 0 ? (
@@ -1068,6 +1163,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                   <img src={m.imageUrl} alt={m.title} />
                   {m.isNew && <span className="grab-module-new-dot">NEW</span>}
                 </div>
+                {m.id === 'm02' && <span className="grab-module-new-dot" style={{ position: 'static', marginTop: 6 }}>START HERE</span>}
                 <span className="grab-module-label">{m.label}</span>
               </div>
             ))
@@ -1372,15 +1468,22 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
 
           </div>
 
-          {/* EXECUTIVE OVERRIDE */}
+          <div style={{
+            width: 'min(820px, calc(100% - 32px))',
+            margin: '0 auto 30px auto',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '16px',
+            alignItems: 'start'
+          }}>
+          {/* PRIVATE CTO LEDGER ACCESS */}
           <div style={{ 
-            maxWidth: '380px', 
-            margin: '0 auto 30px auto', 
+            width: '100%', 
             padding: '16px 24px', 
-            background: isAuthorized ? '#06b6d4' : '#fbfbf9', 
+            background: canOpenPrivateControls ? '#06b6d4' : '#fbfbf9', 
             borderRadius: '60px', 
-            border: isAuthorized ? '2px solid #0891b2' : '1px solid #e7e7e3', 
-            boxShadow: isAuthorized ? '0 8px 25px rgba(6, 182, 212, 0.35)' : '0 6px 20px rgba(0, 0, 0, 0.05)', 
+            border: canOpenPrivateControls ? '2px solid #0891b2' : '1px solid #e7e7e3', 
+            boxShadow: canOpenPrivateControls ? '0 8px 25px rgba(6, 182, 212, 0.35)' : '0 6px 20px rgba(0, 0, 0, 0.05)', 
             boxSizing: 'border-box',
             transition: 'all 0.3s ease'
           }}>
@@ -1388,13 +1491,13 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
               <span style={{ 
                 fontSize: '9px', 
                 fontWeight: 900, 
-                color: isAuthorized ? '#000' : '#888882', 
+                color: canOpenPrivateControls ? '#000' : '#888882', 
                 letterSpacing: '2px', 
                 fontFamily: 'monospace', 
                 textTransform: 'uppercase',
                 transition: 'color 0.3s ease'
               }}>
-                {isAuthorized ? "⚡ AUTHORIZED ACCESS" : "🔒 EXECUTIVE OVERRIDE"}
+                {hasLoggedInAdmin ? "⚡ ADMIN SESSION ACTIVE" : isAuthorized ? "⚡ AUTHORIZED ACCESS" : "🔒 EXECUTIVE OVERRIDE"}
               </span>
             </div>
             
@@ -1405,7 +1508,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 value={staffCode}
                 onChange={(e) => setStaffCode(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && isAuthorized) {
+                  if (e.key === 'Enter' && canOpenPrivateControls) {
                     router.push('/admin');
                   }
                 }}
@@ -1414,8 +1517,8 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                   boxSizing: 'border-box', 
                   padding: '10px 14px', 
                   fontSize: '12px', 
-                  background: isAuthorized ? 'rgba(255, 255, 255, 0.9)' : '#fff', 
-                  border: isAuthorized ? '1px solid rgba(0,0,0,0.1)' : '1px solid #dcdce0', 
+                  background: canOpenPrivateControls ? 'rgba(255, 255, 255, 0.9)' : '#fff', 
+                  border: canOpenPrivateControls ? '1px solid rgba(0,0,0,0.1)' : '1px solid #dcdce0', 
                   borderRadius: '30px', 
                   color: '#050505', 
                   outline: 'none',
@@ -1425,24 +1528,83 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 }}
               />
               <button 
-                onClick={() => isAuthorized && router.push('/admin')} 
+                onClick={() => canOpenPrivateControls && router.push('/admin')} 
                 style={{ 
                   padding: '10px 18px', 
                   fontSize: '11px', 
                   fontWeight: 900,
                   letterSpacing: '1px',
                   borderRadius: '30px', 
-                  cursor: isAuthorized ? 'pointer' : 'not-allowed',
+                  cursor: canOpenPrivateControls ? 'pointer' : 'not-allowed',
                   border: 'none',
-                  background: isAuthorized ? '#000' : '#e4e4dc',
-                  color: isAuthorized ? '#06b6d4' : '#888884',
+                  background: canOpenPrivateControls ? '#000' : '#e4e4dc',
+                  color: canOpenPrivateControls ? '#06b6d4' : '#888884',
                   whiteSpace: 'nowrap',
                   transition: 'all 0.2s ease'
                 }}
               >
-                {isAuthorized ? "GO ➔" : "LOCKED"}
+                {canOpenPrivateControls ? "ENTER ➔" : "LOCKED"}
               </button>
             </div>
+          </div>
+
+          {/* ADMIN OPERATIONS ACCESS — separate from the private CTO ledger */}
+          <form
+            onSubmit={handleAdminOperationsAccess}
+            style={{
+              width: '100%',
+              padding: '16px 24px',
+              background: hasLoggedInAdmin ? '#e0f7ec' : '#fbfbf9',
+              borderRadius: '60px',
+              border: hasLoggedInAdmin ? '2px solid #10b981' : '1px solid #9ee8f3',
+              boxShadow: hasLoggedInAdmin ? '0 8px 25px rgba(16, 185, 129, 0.18)' : '0 6px 20px rgba(6, 182, 212, 0.10)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div style={{ marginBottom: '14px', textAlign: 'center' }}>
+              <div style={{ color: hasLoggedInAdmin ? '#047857' : '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.8px', fontFamily: 'monospace' }}>
+                {hasLoggedInAdmin ? '⚡ ADMIN SESSION ACTIVE' : 'AZPHUR OPERATIONS'}
+              </div>
+              <div style={{ color: '#334155', fontSize: '12px', marginTop: '6px', lineHeight: 1.45 }}>
+                {hasLoggedInAdmin ? 'Open active client projects and operations.' : 'Admin access for active client projects and operations.'}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: '9px' }}>
+              {!hasLoggedInAdmin && <>
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="ADMIN EMAIL"
+                  value={adminAccessEmail}
+                  onChange={(event) => setAdminAccessEmail(event.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', border: '1px solid #cfe8ed', borderRadius: '30px', color: '#0f172a', background: '#fff', fontSize: '12px', outline: 'none', fontFamily: 'monospace' }}
+                />
+                <input
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  placeholder="PASSWORD"
+                  value={adminAccessPassword}
+                  onChange={(event) => setAdminAccessPassword(event.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 13px', border: '1px solid #cfe8ed', borderRadius: '30px', color: '#0f172a', background: '#fff', fontSize: '12px', outline: 'none', fontFamily: 'monospace' }}
+                />
+              </>}
+              {adminAccessError && (
+                <div role="alert" style={{ color: '#b91c1c', fontSize: '11px', lineHeight: 1.4, textAlign: 'center' }}>
+                  {adminAccessError}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={adminAccessLoading}
+                style={{ width: '100%', padding: '11px 16px', border: 'none', borderRadius: '30px', background: adminAccessLoading ? '#94a3b8' : hasLoggedInAdmin ? '#047857' : '#0891b2', color: '#ffffff', fontSize: '10px', fontWeight: 900, letterSpacing: '1px', cursor: adminAccessLoading ? 'wait' : 'pointer' }}
+              >
+                {adminAccessLoading ? 'VERIFYING...' : hasLoggedInAdmin ? 'ENTER OPERATIONS →' : 'OPEN ADMIN OPERATIONS →'}
+              </button>
+            </div>
+          </form>
           </div>
 
           {/* Link Legali */}
