@@ -17,6 +17,7 @@ export default function PartnerDashboard() {
   const [authError, setAuthError] = useState('');
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [unlockedLeads, setUnlockedLeads] = useState({});
+  const [leadActions, setLeadActions] = useState({});
   const [taxProfile, setTaxProfile] = useState({
     vatRegistered: false,
     vatRate: 0,
@@ -84,6 +85,14 @@ export default function PartnerDashboard() {
       }
     }
     return raw ? [raw] : [];
+  };
+
+  const addCurrentEntityToLeadList = (lead, column, entityName) => {
+    const entries = parseEntityList(lead?.[column]);
+    if (!entries.some(entry => normalizeEntityName(entry) === normalizeEntityName(entityName))) {
+      entries.push(entityName);
+    }
+    return entries;
   };
 
   const calculateTaxBreakdown = (amount, profile = taxProfile) => {
@@ -682,8 +691,19 @@ export default function PartnerDashboard() {
   async function handleAcceptLead(leadId) {
     if (!window.confirm(`CONFIRM AVAILABILITY:\nExpress interest in handling this request as ${selectedEntityName}?`)) return;
 
+    const cleanName = selectedEntityName.trim();
+    const acceptedColumn = entityType === 'provider' ? 'partner_accepted_by' : 'installer_accepted_by';
+    const previousLeads = incomingLeads;
+
+    // Show the proposal form instantly; the same server confirmation continues in the background.
+    setLeadActions(prev => ({ ...prev, [leadId]: 'accepting' }));
+    setIncomingLeads(prev => prev.map(lead =>
+      lead.id === leadId
+        ? { ...lead, [acceptedColumn]: addCurrentEntityToLeadList(lead, acceptedColumn, cleanName) }
+        : lead
+    ));
+
     try {
-      const cleanName = selectedEntityName.trim();
       const response = await fetch('/api/v1/solar-leads', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -695,9 +715,20 @@ export default function PartnerDashboard() {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.error || 'Unable to accept this lead.');
-      await fetchIncomingLeads();
+      setLeadActions(prev => {
+        const next = { ...prev };
+        delete next[leadId];
+        return next;
+      });
+      void fetchIncomingLeads();
 
     } catch (err) {
+      setIncomingLeads(previousLeads);
+      setLeadActions(prev => {
+        const next = { ...prev };
+        delete next[leadId];
+        return next;
+      });
       console.error("Error in lead acceptance:", err);
       alert("System error during acceptance: " + err.message);
     }
@@ -794,6 +825,10 @@ export default function PartnerDashboard() {
   async function handleRejectLead(leadId) {
     if (!window.confirm("Are you sure you want to decline this request?")) return;
 
+    const previousLeads = incomingLeads;
+    setLeadActions(prev => ({ ...prev, [leadId]: 'declining' }));
+    setIncomingLeads(prev => prev.filter(lead => lead.id !== leadId));
+
     try {
       const leadObj = incomingLeads.find(l => l.id === leadId);
       const cleanName = (selectedEntityName || '').trim();
@@ -827,10 +862,20 @@ export default function PartnerDashboard() {
         if (error) throw error;
       }
 
-      await fetchIncomingLeads();
-      alert("Request declined successfully for this profile.");
+      setLeadActions(prev => {
+        const next = { ...prev };
+        delete next[leadId];
+        return next;
+      });
+      void fetchIncomingLeads();
 
     } catch (err) {
+      setIncomingLeads(previousLeads);
+      setLeadActions(prev => {
+        const next = { ...prev };
+        delete next[leadId];
+        return next;
+      });
       console.error("Error rejecting lead:", err);
       alert("Error during decline: " + err.message);
     }
@@ -1028,6 +1073,11 @@ return (
         .partner-canvas .notification-banner { border: 1px solid rgba(255,255,255,.28); }
         .partner-canvas button { min-height: 34px; }
         .partner-canvas .inventory-item-row { box-shadow: 0 7px 18px rgba(14,116,144,.05); }
+        .partner-canvas .lead-action { transition: transform .16s ease, box-shadow .16s ease, filter .16s ease; }
+        .partner-canvas .lead-action:hover { transform: translateY(-1px); filter: brightness(.98); box-shadow: 0 8px 16px rgba(15,23,42,.15); }
+        .partner-canvas .lead-action--accept { box-shadow: 0 5px 12px rgba(16,185,129,.22); }
+        .partner-canvas .lead-action--reject { box-shadow: 0 5px 12px rgba(239,68,68,.16); }
+        .lead-sync-note { margin:0 0 10px; padding:8px 10px; border-radius:7px; background:#ecfdf5; border:1px solid #a7f3d0; color:#166534; font-size:9px; font-weight:900; letter-spacing:.3px; }
         @media (max-width: 768px) {
           .nav-partner { padding: 12px 15px; }
           .main-logo { height: 24px; }
@@ -1744,12 +1794,14 @@ const renderThumbnails = (arr, label) => {
                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button 
                       onClick={() => handleAcceptLead(lead.id)}
+                      className="lead-action lead-action--accept"
                       style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 900, fontSize: '10px', cursor: 'pointer', flex: 1, minWidth: '110px' }}
                     >
                       ✓ ACCEPT & CLAIM
                     </button>
                     <button 
                       onClick={() => handleRejectLead(lead.id)}
+                      className="lead-action lead-action--reject"
                       style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 900, fontSize: '10px', cursor: 'pointer', minWidth: '110px' }}
                     >
                       ✕ REJECT / NO THANKS
@@ -1758,6 +1810,9 @@ const renderThumbnails = (arr, label) => {
                 </div>
               ) : !isProposalSaved ? (
                 <div style={{ background: '#e0f2fe', border: '1px solid #0284c7', padding: '12px', borderRadius: '8px', boxSizing: 'border-box' }}>
+                  {leadActions[lead.id] === 'accepting' && (
+                    <div className="lead-sync-note">✓ Availability recorded - preparing your proposal form</div>
+                  )}
                   <span style={{ fontSize: '11px', fontWeight: 900, color: '#0369a1', display: 'block', marginBottom: '10px', wordBreak: 'break-word' }}>
                     📜 COMPLIANCE & PRICING FORM (Required before submission)
                   </span>

@@ -1218,16 +1218,25 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                         </div>
                       
                {assignedProv && assignedInst && (
-                        <div style={{ background: '#f8fafc', padding: 'clamp(12px, 3vw, 20px)', borderRadius: '14px', border: '2px solid #0891b2', marginTop: '20px', boxSizing: 'border-box', width: '100%' }}>
+                        <div className="deal-room-panel" style={{ background: '#f8fafc', padding: 'clamp(12px, 3vw, 20px)', borderRadius: '14px', border: '2px solid #0891b2', marginTop: '20px', boxSizing: 'border-box', width: '100%' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
                             <div style={{ flex: 1, minWidth: '200px' }}>
-                              <span style={{ fontSize: '10px', fontWeight: 900, color: '#0891b2', letterSpacing: '1px' }}>SECURE ESCROW INFRASTRUCTURE & VIRTUAL CHAT</span>
-                              <h3 style={{ margin: '2px 0 0', fontSize: '14px', color: '#1d1d1f' }}>Active Project Milestone Dashboard</h3>
+                              <span style={{ fontSize: '10px', fontWeight: 900, color: '#0891b2', letterSpacing: '1px' }}>AZPHUR DEAL ROOM // PROJECT WORKSPACE</span>
+                              <h3 style={{ margin: '2px 0 0', fontSize: '14px', color: '#1d1d1f' }}>Your project is active</h3>
+                              <p className="deal-room-intro">Your provider and installer are confirmed. Track updates, funding and payment milestones in one place.</p>
                             </div>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                               <button onClick={() => loadChatHistory(q.id, 'provider')} className="btn-cyan-outline" style={{ padding: '6px 12px', fontSize: '9px', borderColor: '#0891b2', color: '#0891b2', background: '#fff' }}>💬 Chat with Provider</button>
                               <button onClick={() => loadChatHistory(q.id, 'installer')} className="btn-cyan-outline" style={{ padding: '6px 12px', fontSize: '9px', borderColor: '#166534', color: '#166534', background: '#fff' }}>💬 Chat with Installer</button>
                             </div>
+                          </div>
+
+                          <div className="deal-room-timeline" aria-label="Project progress">
+                            <div className="deal-room-step is-complete"><b>1</b><span>Request</span></div>
+                            <div className="deal-room-step is-complete"><b>2</b><span>Compare</span></div>
+                            <div className="deal-room-step is-complete"><b>3</b><span>Team confirmed</span></div>
+                            <div className={`deal-room-step ${projectFinalPaid ? 'is-complete' : projectDownpaymentPaid ? 'is-active' : ''}`}><b>4</b><span>Payment</span></div>
+                            <div className={`deal-room-step ${projectFinalPaid ? 'is-active' : ''}`}><b>5</b><span>Completion</span></div>
                           </div>
 
                           {activeChatQuoteId === q.id && (
@@ -1338,9 +1347,15 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
 
       <div className="login-box-premium form-inflow-box" style={{ width: '100%', maxWidth: '960px', margin: '0 auto', boxSizing: 'border-box' }}>
         <div className="login-header">
-          <span className="phase-label">BROADCAST INTERFACE // NEUTRAL PLATFORM</span>
-          <h2 className="text-cyan">Request Real Partner Proposals</h2>
-          <p className="login-desc">Submit your project details. AZPHUR automatically broadcasts your requirement to all online provider and installer networks instantly.</p>
+          <span className="phase-label">FREE QUOTE REQUEST // VERIFIED SOLAR NETWORK</span>
+          <h2 className="text-cyan">Get free solar quotes</h2>
+          <p className="login-desc">Tell us about your project. AZPHUR shares your request with verified providers and installers so you can compare suitable proposals.</p>
+        </div>
+
+        <div className="quote-request-steps" aria-label="How the quote process works">
+          <div><b>1</b><span>Tell us about your project</span></div>
+          <div><b>2</b><span>Receive verified proposals</span></div>
+          <div><b>3</b><span>Compare and choose your team</span></div>
         </div>
 
        {successForm ? (
@@ -1363,7 +1378,8 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
     </button>
   </div>
         ) : (
-          <form onSubmit={handleFormSubmit} className="login-form">
+          <form onSubmit={handleFormSubmit} className="login-form quote-request-form">
+            <div className="quote-form-section-title"><span>01</span><div><strong>Your details</strong><small>So we can keep you updated on your request.</small></div></div>
             <div className="input-group">
               <label>FULL NAME / COMPANY</label>
               <input type="text" placeholder="Full Name or Enterprise Entity" required value={fullName} onChange={e => setFullName(e.target.value)} />
@@ -1377,6 +1393,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
               <input type="tel" placeholder="+63 9XX XXX XXXX" required value={phone} onChange={e => setPhone(e.target.value)} />
             </div>
             
+            <div className="quote-form-section-title"><span>02</span><div><strong>Your project</strong><small>Share the essentials for an accurate first review.</small></div></div>
             <div className="input-group" style={{ marginTop: '15px' }}>
               <label>INSTALLATION ADDRESS</label>
               <input type="text" placeholder="Street, City, Province" required value={address} onChange={e => setAddress(e.target.value)} />
@@ -1407,8 +1424,9 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
             </div>
 
 {/* SITE_SURVEY // SITE PHOTOS (MAX 4 EACH) */}
-<div style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
-  <span className="phase-label" style={{ color: '#0891b2' }}>SITE SURVEY // SITE PHOTOS (MAX 4 EACH)</span>
+<div className="quote-photo-section" style={{ marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px' }}>
+  <div className="quote-form-section-title"><span>03</span><div><strong>Project photos</strong><small>Required photos help verified partners prepare a more accurate proposal.</small></div></div>
+  <span className="phase-label" style={{ color: '#0891b2' }}>UPLOAD UP TO 4 PHOTOS PER SECTION</span>
   
   {/* MDP */}
   <div className="input-group" style={{ marginTop: '12px' }}>
@@ -1638,16 +1656,16 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
             {!isSubmitUnlocked ? (
               <div style={{ marginTop: '25px', marginBottom: '15px' }}>
                 <button type="button" onClick={() => setIsSubmitUnlocked(true)} style={{ background: '#e2e8f0', color: '#475569', border: '1px dashed #0891b2', padding: '12px', borderRadius: '12px', fontSize: '10px', fontWeight: 900, cursor: 'pointer', width: '100%', letterSpacing: '1px', boxSizing: 'border-box' }}>
-                  🔒 LOCKED: CLICK HERE TO UNLOCK & SUBMIT REQUEST
+                  READY TO SUBMIT? REVIEW YOUR DETAILS
                 </button>
               </div>
             ) : (
               <div style={{ fontSize: '9px', color: '#10b981', fontWeight: 900, marginTop: '20px', marginBottom: '10px', textAlign: 'center' }}>
-                ✓ BROADCAST GATEWAY UNLOCKED
+                ✓ REQUEST READY TO SEND
               </div>
             )}
             <button type="submit" disabled={loadingForm || !isSubmitUnlocked} className="login-btn-premium" style={{ opacity: !isSubmitUnlocked ? 0.6 : 1, cursor: !isSubmitUnlocked ? 'not-allowed' : 'pointer' }}>
-              {loadingForm ? 'BROADCASTING...' : 'BROADCAST REQUEST TO ALL ONLINE PARTNERS'}
+              {loadingForm ? 'SENDING REQUEST...' : 'SEND MY FREE QUOTE REQUEST'}
             </button>
           </form>
         )}
@@ -1698,7 +1716,26 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       .quote-screen .input-group + .input-group { margin-top: 10px !important; }
       .quote-screen .login-btn-premium { min-height: 44px; box-shadow: 0 9px 18px rgba(8,145,178,.16); }
       .quote-screen .status-tag { letter-spacing: .45px; }
+      .quote-screen .form-inflow-box { max-width: 900px !important; border: 1px solid #d6e8ea; background: #fff; box-shadow: 0 18px 45px rgba(8,145,178,.09); }
+      .quote-request-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; padding:14px 0 20px; margin-bottom:18px; border-bottom:1px solid #e4edef; }
+      .quote-request-steps div { display:flex; align-items:flex-start; gap:8px; color:#486174; font-size:10px; font-weight:700; line-height:1.35; }
+      .quote-request-steps b, .quote-form-section-title > span { display:grid; flex:0 0 auto; place-items:center; width:22px; height:22px; border-radius:50%; background:#e0f7f8; color:#0e7490; font:800 10px "JetBrains Mono", monospace; }
+      .quote-request-form { display:flex; flex-direction:column; gap:10px; }
+      .quote-form-section-title { display:flex; align-items:center; gap:10px; padding:10px 0 2px; margin-top:7px; }
+      .quote-form-section-title strong { display:block; color:#173147; font-size:12px; }
+      .quote-form-section-title small { display:block; margin-top:2px; color:#718096; font-size:10px; line-height:1.35; }
+      .quote-photo-section { margin-top:26px !important; padding-top:20px !important; }
+      .quote-screen .quote-request-form .input-group { margin-top:0 !important; }
+      .deal-room-panel { background:linear-gradient(180deg,#f7feff 0%,#ffffff 34%) !important; border-color:#11a8bf !important; box-shadow:0 14px 30px rgba(8,145,178,.09); }
+      .deal-room-intro { margin:5px 0 0; max-width:560px; color:#60758a; font-size:10px; line-height:1.45; }
+      .deal-room-timeline { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; padding:13px; margin:0 0 18px; border:1px solid #d9e9eb; border-radius:12px; background:#fff; }
+      .deal-room-step { position:relative; min-width:0; color:#8b9baa; font-size:9px; font-weight:800; text-align:center; line-height:1.3; }
+      .deal-room-step b { display:grid; place-items:center; width:22px; height:22px; margin:0 auto 5px; border-radius:50%; background:#edf2f3; color:#78909c; font-size:9px; }
+      .deal-room-step.is-complete, .deal-room-step.is-active { color:#11657a; }
+      .deal-room-step.is-complete b { background:#0e9fb7; color:#fff; }
+      .deal-room-step.is-active b { background:#d9f5f8; color:#0b7990; box-shadow:0 0 0 4px rgba(14,159,183,.12); }
       @media (max-width: 640px) { .quote-screen .login-box-premium { padding: 20px 14px; border-width: 1px; } .quote-screen .input-group { padding: 10px; } }
+      @media (max-width:640px) { .quote-request-steps { grid-template-columns:1fr; gap:8px; } .deal-room-timeline { grid-template-columns:repeat(3,1fr); } }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     `}</style>
   </div>

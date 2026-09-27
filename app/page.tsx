@@ -244,6 +244,9 @@ export default function Home() {
   const [debugM5, setDebugM5] = useState<string>("Waiting...");
   const [activeTransactionsCount, setActiveTransactionsCount] = useState<number | null>(null);
   const [completedTransactionsCount, setCompletedTransactionsCount] = useState<number | null>(null);
+  const [completedTransactionsOverride, setCompletedTransactionsOverride] = useState<number | null>(null);
+  const [completedTransactionsSaving, setCompletedTransactionsSaving] = useState(false);
+  const [isEditingCompletedTransactions, setIsEditingCompletedTransactions] = useState(false);
 
   // --- STATO SOLO-UX: ricerca moduli + filtro chip stile Grab (nessuna chiamata backend) ---
   const [moduleSearch, setModuleSearch] = useState<string>("");
@@ -356,6 +359,43 @@ useEffect(() => {
 
   return () => {
     supabase.removeChannel(transactionsChannel);
+  };
+}, []);
+
+useEffect(() => {
+  let isMounted = true;
+
+  const loadCompletedTransactionsOverride = async () => {
+    const { data, error } = await supabase
+      .from('azphur_platform_settings')
+      .select('completed_transactions_override')
+      .eq('id', 'global')
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error loading completed transactions override:', error.message);
+      return;
+    }
+
+    if (isMounted) {
+      setCompletedTransactionsOverride(
+        typeof data?.completed_transactions_override === 'number'
+          ? data.completed_transactions_override
+          : null,
+      );
+    }
+  };
+
+  loadCompletedTransactionsOverride();
+
+  const settingsChannel = supabase
+    .channel('azphur-main-platform-settings')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'azphur_platform_settings' }, loadCompletedTransactionsOverride)
+    .subscribe();
+
+  return () => {
+    isMounted = false;
+    supabase.removeChannel(settingsChannel);
   };
 }, []);
 
@@ -629,6 +669,33 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
   const isAuthorized: boolean = staffCode.trim().toUpperCase() === 'AZ-001';
   const hasLoggedInAdmin: boolean = adminEmails.includes(currentUserEmail.trim().toLowerCase());
   const canOpenPrivateControls: boolean = isAuthorized || hasLoggedInAdmin;
+  const displayedCompletedTransactions = Math.max(0, completedTransactionsOverride ?? completedTransactionsCount ?? 0);
+
+  const updateCompletedTransactionsOverride = async (updater: (current: number) => number) => {
+    if (!hasLoggedInAdmin || completedTransactionsSaving) return;
+
+    const previousOverride = completedTransactionsOverride;
+    const nextValue = Math.max(0, Math.trunc(updater(displayedCompletedTransactions)));
+    setCompletedTransactionsOverride(nextValue);
+    setCompletedTransactionsSaving(true);
+
+    const { data, error } = await supabase
+      .from('azphur_platform_settings')
+      .update({ completed_transactions_override: nextValue, updated_at: new Date().toISOString() })
+      .eq('id', 'global')
+      .select('completed_transactions_override')
+      .single();
+
+    if (error) {
+      console.error('Error saving completed transactions override:', error.message);
+      setCompletedTransactionsOverride(previousOverride);
+      alert('Could not save the global completed-transactions counter. Please try again.');
+    } else {
+      setCompletedTransactionsOverride(data.completed_transactions_override);
+    }
+
+    setCompletedTransactionsSaving(false);
+  };
 
   // --- Solo-UX: nome/saluto derivati dai dati di sessione gia' esistenti, nessuna nuova chiamata ---
   const displayName = useMemo(() => {
@@ -644,6 +711,15 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
     if (hour < 18) return 'Good Afternoon';
     return 'Good Evening';
   }, []);
+
+  const moduleHints: Record<string, string> = {
+    m01: 'Browse verified energy supply.',
+    m02: 'Request and compare free quotes.',
+    m03: 'Explore project funding options.',
+    m04: 'Access the partner workspace.',
+    m05: 'Find EV charging solutions.',
+    m06: 'Manage driver operations.'
+  };
 
   // --- Solo-UX: 7 moduli organizzati in formato "icona + etichetta" stile Grab e ricercabili. ---
   // Vengono solo riorganizzati in formato "icona + etichetta" stile Grab e resi cercabili.
@@ -710,16 +786,6 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
       imageUrl: 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?auto=format&fit=crop&w=400&q=80',
       accent: '#34d399',
       action: () => handleModuleNavigation('/EV/driver')
-    },
-    {
-      id: 'm07',
-      label: 'Shop',
-      tag: 'MODULE 07 // STORE',
-      title: 'Merchant Layer',
-      description: 'Unified product commercialization and automated fulfillment layer, mapping global inventory SKUs through integrated checkout pipelines.',
-      imageUrl: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=400&q=80',
-      accent: '#38bdf8',
-      action: () => router.push('/b2c')
     }
   ];
 
@@ -1035,6 +1101,105 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           .santrix-pill { padding: 6px 14px; font-size: 10px; }
           .santrix-right-visual { padding: 15px !important; }
         }
+
+        /* Home refinement: calm, practical and customer-first. No route, data or flow changes. */
+        html, body { background: #f6f8f8 !important; }
+        .az-santrix-canvas { background: #f6f8f8; }
+        .nav-minimal-lux {
+          max-width: none; padding: 18px clamp(20px, 5vw, 76px); border-radius: 0;
+          background: rgba(255,255,255,.96); border-bottom: 1px solid #dce8e9;
+          box-shadow: none;
+        }
+        .logo-group { gap: 10px; }
+        .phase-label { color: #0e7490 !important; font-size: 14px; font-weight: 650; letter-spacing: -.15px; }
+        .op-status-tag { background: #ecfdf5; border-color: #bbf7d0; color: #15803d; border-radius: 999px; }
+        .network-signal { color: #64748b; }
+        .btn-cyan-outline { background: #0f172a; border-radius: 9px; padding: 10px 17px; }
+        .btn-red-outline { border-radius: 9px; }
+
+        .grab-header-wrap { max-width: 1120px; margin-top: 42px; }
+        .grab-greeting-card {
+          min-height: 0; padding: 34px; overflow: visible; border-radius: 22px;
+          background: linear-gradient(115deg, #ecfeff 0%, #f8fffe 60%, #ffffff 100%);
+          border: 1px solid #cbeaec; box-shadow: 0 14px 35px rgba(15, 23, 42, .055);
+        }
+        .grab-greeting-card::after { content: none; }
+        .grab-greeting-text { color: #102032; font-size: clamp(27px, 3.4vw, 38px); font-weight: 500; }
+        .az-home-kicker { margin-bottom: 8px; color: #0e7490; }
+        .az-home-kicker::after { content: none; display: none; }
+        .az-home-subtitle { max-width: 590px; color: #52657a; font-size: 14px; }
+        .az-home-actions { grid-template-columns: 1.25fr 1fr; gap: 12px; margin-top: 28px; }
+        .az-home-action {
+          min-height: 76px; padding: 14px 16px; border-radius: 13px;
+          box-shadow: none;
+        }
+        .az-home-action:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(15,23,42,.07); }
+        .az-home-action--primary { background: #0891b2; border-color: #0891b2; }
+        .az-home-action--primary:hover { background: #0e7490; }
+        .az-home-action--light { background: #fff; }
+        .az-home-action--muted { background: #f8fbfb; }
+        .az-home-action--completed { background: #f4fcf6; border-color: #ccefd7; }
+        .az-home-action__icon { width: 40px; height: 40px; flex-basis: 40px; }
+        .az-home-action b { font-size: 12px; }
+        .az-home-action span { font-size: 10px; }
+        .az-completed-editor { display: flex !important; align-items: center; gap: 5px; margin: 0 0 0 auto !important; opacity: 1 !important; }
+        .az-completed-editor button { border-radius: 7px; padding: 6px 8px; font: 900 8px "JetBrains Mono", monospace; letter-spacing: .45px; cursor: pointer; transition: background .16s ease, border-color .16s ease; }
+        .az-completed-editor__edit, .az-completed-editor__done { border: 1px solid #0e7490; background: #fff; color: #0e7490; }
+        .az-completed-editor__edit:hover, .az-completed-editor__done:hover { background: #ecfeff; }
+        .az-completed-editor__step { min-width: 24px; border: 1px solid #a7f3d0; background: #ecfdf5; color: #15803d; font-size: 13px !important; line-height: 1; }
+        .az-completed-editor__step:hover { border-color: #34d399; background: #d1fae5; }
+
+        .grab-search-wrap { max-width: 1120px; margin-top: 14px; }
+        .grab-search-bar {
+          padding: 13px 16px; border: 1px solid #d9e7e8; border-radius: 13px;
+          box-shadow: 0 5px 15px rgba(15,23,42,.035);
+        }
+        .grab-search-bar:focus-within { border-color: #22b8cf; box-shadow: 0 0 0 3px rgba(6,182,212,.11); }
+        .grab-chip-row { max-width: 1120px; margin-top: 20px; }
+        .grab-chip { padding: 7px 14px; background: transparent; border-color: #d8e3e5; }
+        .grab-chip.active { background: #e7f9fb; }
+
+        .az-home-modules-heading { max-width: 1060px; margin-top: 32px; padding: 0 0 13px; }
+        .az-home-modules-heading h2 { font-size: 21px; }
+        .grab-module-grid { max-width: 1060px; margin-top: 14px; gap: 12px 18px; }
+        .grab-module-item { min-height: 108px; padding: 10px 6px; border: 1px solid transparent; }
+        .grab-module-item:hover { background: #fff; border-color: #d8e7e8; box-shadow: 0 8px 18px rgba(15,23,42,.045); }
+        .grab-module-icon-wrap { width: 66px; height: 66px; border-color: #fff; box-shadow: 0 5px 13px rgba(15,23,42,.12); }
+        .grab-module-item:hover .grab-module-icon-wrap { transform: none; box-shadow: 0 7px 16px rgba(8,145,178,.20); }
+        .grab-module-label { font-size: 12px; color: #243447; }
+        .grab-module-hint { max-width: 150px; max-height: 0; overflow: hidden; margin: -4px 0 0; color: #587082; font-size: 9px; font-weight: 600; line-height: 1.35; opacity: 0; transform: translateY(-3px); transition: max-height .2s ease, opacity .2s ease, transform .2s ease; }
+        .grab-module-item:hover .grab-module-hint, .grab-module-item:focus-within .grab-module-hint { max-height: 30px; opacity: 1; transform: translateY(0); }
+
+        .santrix-hero-container { max-width: 1120px; margin-top: 54px; margin-bottom: 54px; }
+        .santrix-monitor-frame { padding: 36px; border-radius: 22px; background: #fff; border: 1px solid #dce8e9; box-shadow: 0 12px 30px rgba(15,23,42,.045); }
+        .santrix-left-col h1 { font-size: clamp(30px,4vw,48px); }
+        .santrix-right-visual { border-radius: 18px; box-shadow: none; border-width: 2px; }
+        .santrix-metric-card { border-radius: 14px; box-shadow: none; border-color: #e2eaeb; }
+        .az-free-quote-note { display:flex; align-items:flex-start; gap:10px; margin-top:-6px; padding:12px 14px; border:1px solid #bfecef; border-radius:13px; background:#effcfd; color:#155e75; font-size:11px; line-height:1.5; }
+        .az-free-quote-note strong { display:block; margin-bottom:2px; color:#0e7490; font-size:11px; }
+        .az-free-quote-note__mark { flex:0 0 auto; display:grid; place-items:center; width:20px; height:20px; border-radius:50%; background:#0ea5c5; color:#fff; font-size:12px; font-weight:900; }
+        .az-journey-chart { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; width: 100%; }
+        .az-journey-step { position: relative; min-height: 142px; border: 1px solid #dbe8eb; border-radius: 14px; padding: 14px 10px; background: #fbfefe; }
+        .az-journey-step:not(:last-child)::after { content: ""; position: absolute; height: 2px; width: 11px; right: -12px; top: 50%; background: #22b8cf; }
+        .az-journey-step b { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 50%; background: #e2f7f9; color: #0e7490; font: 800 11px "JetBrains Mono", monospace; }
+        .az-journey-step span { display: block; margin-top: 14px; color: #163047; font-size: 11px; font-weight: 800; line-height: 1.35; }
+        .az-journey-step small { display: block; margin-top: 5px; color: #64748b; font-size: 9px; line-height: 1.4; }
+        .live-stream-ticker { height: 68px; margin-bottom: 58px; background: #fff; }
+        .about-section, .section-header-lux, .blueprints-container, .faq-container { max-width: 1120px; }
+        .about-title { font-size: 30px; }
+        .about-visual, .about-image { border-radius: 20px; }
+        .blueprint-card, .faq-item-wrapper { border-radius: 16px; box-shadow: none; }
+
+        @media (max-width: 900px) {
+          .nav-minimal-lux { padding: 16px 20px; }
+          .grab-header-wrap { margin-top: 26px; }
+          .grab-greeting-card { padding: 24px 18px; }
+          .az-home-actions { grid-template-columns: 1fr; margin-top: 22px; }
+          .grab-search-wrap { margin-top: 12px; }
+          .santrix-monitor-frame { padding: 24px 18px; }
+          .az-journey-chart { grid-template-columns: repeat(2,1fr); }
+          .az-journey-step:not(:last-child)::after { display: none; }
+        }
       `}</style>
 
       {/* NAVBAR */}
@@ -1091,7 +1256,21 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 <span className="az-home-action__icon"><img src="/logo-azphur.avif" alt="" /></span><span><b>Active transactions</b><span>{activeTransactionsCount !== null ? activeTransactionsCount.toLocaleString() : '0'} project{activeTransactionsCount === 1 ? '' : 's'} currently active</span></span>
               </div>
               <div className="az-home-action az-home-action--light az-home-action--completed az-home-action--counter" aria-label="Completed transactions counter">
-                <span className="az-home-action__icon"><span aria-hidden="true">✓</span></span><span><b>Completed transactions</b><span>{completedTransactionsCount !== null ? completedTransactionsCount.toLocaleString() : '0'} project{completedTransactionsCount === 1 ? '' : 's'} completed</span></span>
+                <span className="az-home-action__icon"><span aria-hidden="true">✓</span></span>
+                <span><b>Completed transactions</b><span>{displayedCompletedTransactions.toLocaleString()} project{displayedCompletedTransactions === 1 ? '' : 's'} completed</span></span>
+                {hasLoggedInAdmin && (
+                  <span className="az-completed-editor">
+                    {isEditingCompletedTransactions ? (
+                      <>
+                        <button type="button" className="az-completed-editor__step" disabled={completedTransactionsSaving} onClick={() => updateCompletedTransactionsOverride(value => value - 1)} aria-label="Decrease completed transactions">−</button>
+                        <button type="button" className="az-completed-editor__step" disabled={completedTransactionsSaving} onClick={() => updateCompletedTransactionsOverride(value => value + 1)} aria-label="Increase completed transactions">+</button>
+                        <button type="button" className="az-completed-editor__done" disabled={completedTransactionsSaving} onClick={() => setIsEditingCompletedTransactions(false)}>{completedTransactionsSaving ? 'SAVING' : 'DONE'}</button>
+                      </>
+                    ) : (
+                      <button type="button" className="az-completed-editor__edit" onClick={() => setIsEditingCompletedTransactions(true)}>EDIT</button>
+                    )}
+                  </span>
+                )}
               </div>
               <button type="button" className="az-home-action az-home-action--muted" onClick={() => handleModuleNavigation('/s2b', verifyModule01Access)}>
                 <span className="az-home-action__icon"><img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=160&q=80" alt="" /></span><span><b>Supply network</b><span>{inventoryCount ?? '0'} supplier node{inventoryCount === 1 ? '' : 's'} available</span></span>
@@ -1107,7 +1286,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             <input
               type="text"
               className="grab-search-input"
-              placeholder="Search a module: quote, funding, EV charge, driver, shop..."
+              placeholder="Search a module: quote, funding, EV charge, driver..."
               value={moduleSearch}
               onChange={(e) => setModuleSearch(e.target.value)}
               onFocus={() => setSearchFocused(true)}
@@ -1165,6 +1344,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 </div>
                 {m.id === 'm02' && <span className="grab-module-new-dot" style={{ position: 'static', marginTop: 6 }}>START HERE</span>}
                 <span className="grab-module-label">{m.label}</span>
+                <span className="grab-module-hint">{moduleHints[m.id]}</span>
               </div>
             ))
           ) : (
@@ -1187,19 +1367,19 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                   className={`santrix-pill ${activeTab === 'overview' ? 'active' : ''}`} 
                   onClick={() => setActiveTab('overview')}
                 >
-                  Overview
+                  Start a project
                 </button>
                 <button 
                   className={`santrix-pill ${activeTab === 'analytics' ? 'active' : ''}`} 
                   onClick={() => setActiveTab('analytics')}
                 >
-                  Analytics
+                  Compare options
                 </button>
                 <button 
                   className={`santrix-pill ${activeTab === 'outage' ? 'active' : ''}`} 
                   onClick={() => setActiveTab('outage')}
                 >
-                  Outage Reports
+                  Track your project
                 </button>
               </div>
             </div>
@@ -1208,31 +1388,34 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             {activeTab === 'overview' && (
               <div key={activeTab} className="santrix-grid-dashboard" style={{ animation: 'fadeInOut 0.5s ease-in-out' }}>
                 <div className="santrix-left-col">
-                  <span className="phase-label" style={{ color: '#06b6d4' }}>SHAPING SUSTAINABLE POSSIBILITIES</span>
-                  <h1>THE ENERGY <br /><span style={{ color: '#06b6d4' }}>EXCHANGE</span></h1>
+                  <span className="phase-label" style={{ color: '#06b6d4' }}>01 / START</span>
+                  <h1>START YOUR <br /><span style={{ color: '#06b6d4' }}>PROJECT</span></h1>
                   <p>
-                    The transactional nervous system for Energy, EV, and Infrastructure operations. 
-                    We enforce complete control over leads, transactions, and critical infrastructure data.
+                    Start with a free quote request. Tell us what you need and AZPHUR connects you with verified providers, installers and funding options in one clear workflow.
                   </p>
 
                   <div className="santrix-metrics-grid">
                     <div className="santrix-metric-card">
-                      <span className="santrix-metric-label">Active Transactions</span>
+                    <span className="santrix-metric-label">Projects in progress</span>
                       <span className="santrix-metric-value">
                         {activeTransactionsCount !== null ? activeTransactionsCount.toLocaleString() : '0'}
                       </span>
                     </div>
                     <div className="santrix-metric-card">
-                      <span className="santrix-metric-label">Supplier Nodes</span>
+                    <span className="santrix-metric-label">Available supply nodes</span>
                       <span className="santrix-metric-value">{inventoryCount || '0'}</span>
                     </div>
+                  </div>
+                  <div className="az-free-quote-note">
+                    <span className="az-free-quote-note__mark">✓</span>
+                    <div><strong>Quote requests are free.</strong>Create a free AZPHUR account to send your request, compare responses and follow every project step.</div>
                   </div>
                 </div>
 
                 <div className="santrix-right-visual">
                   <img 
-                    src="https://images.unsplash.com/photo-1611365892117-00ac5ef43c90?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" 
-                    alt="AZPHUR Energy Grid Infrastructure" 
+                    src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&q=85&w=1170" 
+                    alt="Customer reviewing an energy project quote" 
                   />
                 </div>
               </div>
@@ -1242,43 +1425,29 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             {activeTab === 'analytics' && (
               <div className="santrix-grid-dashboard">
                 <div className="santrix-left-col">
-                  <span className="phase-label" style={{ color: '#06b6d4' }}>PERFORMANCE METRICS & TELEMETRY</span>
-                  <h1>GLOBAL GRID <br /><span style={{ color: '#06b6d4' }}>ANALYTICS</span></h1>
+                  <span className="phase-label" style={{ color: '#06b6d4' }}>02 / COMPARE</span>
+                  <h1>COMPARE VERIFIED <br /><span style={{ color: '#06b6d4' }}>OPTIONS</span></h1>
                   <p>
-                    Real-time computational analysis of distributed energy resources, load balancing performance, 
-                    and cryptographic transaction throughput across active continental nodes.
+                    Review proposals from the teams that respond to your request, then select the provider and installer that fit your project.
                   </p>
 
                   <div className="santrix-metrics-grid">
                     <div className="santrix-metric-card">
-                      <span className="santrix-metric-label">Peak Efficiency</span>
-                      <span className="santrix-metric-value">99.4%</span>
+                      <span className="santrix-metric-label">One clear comparison</span>
+                      <span className="santrix-metric-value">✓</span>
                     </div>
                     <div className="santrix-metric-card">
-                      <span className="santrix-metric-label">Avg Latency</span>
-                      <span className="santrix-metric-value">{liveMs} ms</span>
+                      <span className="santrix-metric-label">Funding available</span>
+                      <span className="santrix-metric-value">↗</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '900', fontFamily: 'monospace', color: '#111827', marginBottom: '15px' }}>
-                    [SYSTEM LOAD DISTRIBUTION CHART]
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '180px', paddingBottom: '10px', borderBottom: '2px solid #e5e7eb' }}>
-                    <div style={{ flex: 1, background: '#06b6d4', height: '65%', borderRadius: '6px 6px 0 0' }}></div>
-                    <div style={{ flex: 1, background: '#0891b2', height: '85%', borderRadius: '6px 6px 0 0' }}></div>
-                    <div style={{ flex: 1, background: '#22d3ee', height: '45%', borderRadius: '6px 6px 0 0' }}></div>
-                    <div style={{ flex: 1, background: '#0f172a', height: '95%', borderRadius: '6px 6px 0 0' }}></div>
-                    <div style={{ flex: 1, background: '#06b6d4', height: '75%', borderRadius: '6px 6px 0 0' }}></div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontFamily: 'monospace', color: '#9ca3af', marginTop: '10px' }}>
-                    <span>NODE 01</span>
-                    <span>NODE 02</span>
-                    <span>NODE 03</span>
-                    <span>NODE 04</span>
-                    <span>NODE 05</span>
-                  </div>
+                <div className="santrix-right-visual">
+                  <img 
+                    src="https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&q=85&w=1170" 
+                    alt="Professionals reviewing project options" 
+                  />
                 </div>
               </div>
             )}
@@ -1288,39 +1457,33 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             {activeTab === 'outage' && (
               <div className="santrix-grid-dashboard">
                 <div className="santrix-left-col">
-                  <span className="phase-label" style={{ color: '#ef4444' }}>FAILSAFE & INCIDENT LOGS</span>
-                  <h1>SYSTEM OUTAGE <br /><span style={{ color: '#ef4444' }}>REPORTS</span></h1>
+                  <span className="phase-label" style={{ color: '#06b6d4' }}>03 / TRACK</span>
+                  <h1>TRACK EVERY <br /><span style={{ color: '#06b6d4' }}>STEP</span></h1>
                   <p>
-                    Automated circuit breaker diagnostics, node exception logs, and uninterrupted failover records 
-                    tracking grid stability and emergency recovery protocols.
+                    From your request to project completion, each party sees the current stage and the next action in one shared transaction view.
                   </p>
 
                   <div className="santrix-metrics-grid">
                     <div className="santrix-metric-card">
-                      <span className="santrix-metric-label">Active Incidents</span>
-                      <span className="santrix-metric-value" style={{ color: '#10b981' }}>00 (Stable)</span>
+                      <span className="santrix-metric-label">Live transaction view</span>
+                      <span className="santrix-metric-value" style={{ color: '#10b981' }}>ON</span>
                     </div>
                     <div className="santrix-metric-card">
-                      <span className="santrix-metric-label">Failover Readiness</span>
-                      <span className="santrix-metric-value">100%</span>
+                      <span className="santrix-metric-label">Project milestones</span>
+                      <span className="santrix-metric-value">4</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px', fontFamily: 'monospace' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '900', color: '#111827', marginBottom: '15px' }}>
-                    [RECENT LOG ENTRIES]
+                <div className="santrix-right-visual" style={{ background: '#ffffff', padding: '26px', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '380px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '900', fontFamily: 'monospace', letterSpacing: '.8px', color: '#0e7490', marginBottom: '18px' }}>
+                    PROJECT JOURNEY
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '11px', color: '#4b5563' }}>
-                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #10b981' }}>
-                      <strong style={{ color: '#111827' }}>[2026-07-30 14:00]</strong> All regional grid substations operating within normal parameters.
-                    </div>
-                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #06b6d4' }}>
-                      <strong style={{ color: '#111827' }}>[2026-07-30 11:15]</strong> Scheduled micro-inverter sync completed successfully.
-                    </div>
-                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '10px', borderLeft: '4px solid #10b981' }}>
-                      <strong style={{ color: '#111827' }}>[2026-07-30 08:30]</strong> Redundant webhook fallback verified across European nodes.
-                    </div>
+                  <div className="az-journey-chart">
+                    <div className="az-journey-step"><b>1</b><span>Request</span><small>Tell AZPHUR what you need.</small></div>
+                    <div className="az-journey-step"><b>2</b><span>Compare</span><small>Review verified project options.</small></div>
+                    <div className="az-journey-step"><b>3</b><span>Confirm</span><small>Lock the selected project team.</small></div>
+                    <div className="az-journey-step"><b>4</b><span>Complete</span><small>Track delivery, payment and closure.</small></div>
                   </div>
                 </div>
               </div>
