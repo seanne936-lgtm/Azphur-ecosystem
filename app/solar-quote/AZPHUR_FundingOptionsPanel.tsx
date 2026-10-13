@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-const money = (value: unknown) => `₱${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value: unknown) => `â‚±${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Props = {
   lead: any;
@@ -87,7 +87,17 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
     lead.provider_balance_paid ||
     lead.installer_balance_paid
   );
-  const directSelected = lead.payment_method === 'direct' || directPaymentStarted;
+  // Funding always has priority in the customer-facing status. A project that
+  // has entered the funding path must never be labelled as Direct merely
+  // because an older lead snapshot still contains a direct-payment value.
+  const fundingSelected = financingActive || financingPending;
+  const directSelected = !fundingSelected && (
+    lead.payment_method === 'direct' || directPaymentStarted
+  );
+  const selectedPaymentMethod = fundingSelected ? 'FUNDING' : directSelected ? 'DIRECT' : null;
+  const selectedPaymentDescription = fundingSelected
+    ? 'Your project is following the AZPHUR Funding path.'
+    : 'The consolidated project-payment controls below are enabled.';
 
   return (
     <section style={styles.panel}>
@@ -97,10 +107,10 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
           <h3 style={styles.title}>Choose how to fund this project</h3>
           <p style={styles.muted}>One AZPHUR project flow; provider and installer allocations remain separate internally.</p>
         </div>
-        <span style={styles.mock}>MOCK — NO REAL MONEY</span>
+        <span style={styles.mock}>MOCK â€” NO REAL MONEY</span>
       </div>
 
-      {!financingPending && !directSelected && (
+      {!fundingSelected && !directSelected && (
         <div style={styles.choiceGrid}>
           <button style={styles.directChoice} disabled={busy !== null} onClick={() => run('direct', { action: 'choose_direct', lead_id: lead.id })}>
             <strong>PAY DIRECT</strong>
@@ -129,8 +139,11 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
         </div>
       )}
 
-      {directSelected && (
-        <div style={styles.confirmed}><strong>PAYMENT METHOD: DIRECT</strong><span>The consolidated project-payment controls below are enabled.</span></div>
+      {selectedPaymentMethod && (
+        <div style={styles.confirmed}>
+          <strong>PAYMENT METHOD: {selectedPaymentMethod}</strong>
+          <span>{selectedPaymentDescription}</span>
+        </div>
       )}
 
       {financingPending && (
@@ -152,7 +165,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
               <div style={styles.eyebrow}>VERIFIED PARTNER OFFERS</div>
               {offers.map((offer: any) => (
                 <article key={offer.id} style={styles.offer}>
-                  <div><strong>{offer.funding_partner_whitelist?.display_name || 'Verified funding partner'}</strong><div style={styles.muted}>{offer.funding_partner_whitelist?.partner_type} · {offer.funding_partner_whitelist?.verified ? 'Verified' : 'Verification pending'}</div></div>
+                  <div><strong>{offer.funding_partner_whitelist?.display_name || 'Verified funding partner'}</strong><div style={styles.muted}>{offer.funding_partner_whitelist?.partner_type} Â· {offer.funding_partner_whitelist?.verified ? 'Verified' : 'Verification pending'}</div></div>
                   <div style={styles.summaryGrid}>
                     <Info label="Principal" value={money(offer.principal_amount)} />
                     <Info label="Annual rate" value={`${offer.annual_interest_rate}%`} />
@@ -182,7 +195,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
               {contract.contract_status === 'pending_customer_acceptance' && (
                 <>
                   <div style={styles.disclaimer}>By accepting, the customer enters a financing agreement with the selected funding partner. AZPHUR remains the transaction platform and is not the lender.</div>
-                  <button style={styles.primaryButton} disabled={busy !== null} onClick={() => run(`accept-${contract.id}`, { action: 'accept_contract', contract_id: contract.id })}>ACCEPT FUNDING CONTRACT — TEST</button>
+                  <button style={styles.primaryButton} disabled={busy !== null} onClick={() => run(`accept-${contract.id}`, { action: 'accept_contract', contract_id: contract.id })}>ACCEPT FUNDING CONTRACT â€” TEST</button>
                 </>
               )}
               {contract.contract_status === 'active' && <div style={styles.confirmed}><strong>FUNDING ACTIVE</strong><span>The funding partner can now fund the project milestones. Direct customer project payment is disabled.</span></div>}
@@ -210,7 +223,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
 }
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div style={styles.info}><span>{label}</span><strong>{value || '—'}</strong></div>;
+  return <div style={styles.info}><span>{label}</span><strong>{value || 'â€”'}</strong></div>;
 }
 
 const styles: Record<string, React.CSSProperties> = {

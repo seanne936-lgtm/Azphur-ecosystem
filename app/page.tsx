@@ -224,6 +224,168 @@ function MainAiAssistant() {
   );
 }
 
+type PublicAzphurLandingProps = {
+  onLogin: () => void;
+  onRegister: () => void;
+};
+
+// Public-facing entry only. The operational dashboard remains below this
+// authenticated boundary and is intentionally not rendered for guests.
+function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) {
+  const [showSplash, setShowSplash] = useState(true);
+  const [isSplashLeaving, setIsSplashLeaving] = useState(false);
+
+  useEffect(() => {
+    const leaveTimer = window.setTimeout(() => setIsSplashLeaving(true), 1250);
+    const splashTimer = window.setTimeout(() => setShowSplash(false), 1650);
+    return () => {
+      window.clearTimeout(leaveTimer);
+      window.clearTimeout(splashTimer);
+    };
+  }, []);
+
+  if (showSplash) {
+    return (
+      <main className={`az-splash-screen ${isSplashLeaving ? 'az-splash-screen--leaving' : ''}`} aria-label="Loading AZPHUR">
+        <style jsx global>{`
+          html, body { margin: 0; background: #f5f9fa; }
+          .az-splash-screen { min-height: 100vh; display: grid; place-items: center; overflow: hidden; color: #102a3f; background: radial-gradient(circle at 50% 28%, rgba(34,211,238,.22), transparent 30%), linear-gradient(145deg, #ffffff 0%, #eff9fa 100%); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; opacity: 1; transform: scale(1); transition: opacity .4s ease, transform .4s ease; }
+          .az-splash-screen--leaving { opacity: 0; transform: scale(1.018); }
+          .az-splash-screen::before { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .32; background-image: linear-gradient(rgba(14,116,144,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,144,.045) 1px, transparent 1px); background-size: 46px 46px; }
+          .az-splash-content { position: relative; display: flex; flex-direction: column; align-items: center; padding: 32px; text-align: center; animation: azSplashIn .65s ease-out both; }
+          .az-splash-mark { display: flex; align-items: center; justify-content: center; width: 100px; height: 100px; border-radius: 31px; background: rgba(255,255,255,.8); border: 1px solid rgba(8,145,178,.16); box-shadow: 0 24px 55px rgba(15,23,42,.10); }
+          .az-splash-mark img { width: 61px; height: auto; }
+          .az-splash-name { margin: 24px 0 0; color: #112b3f; font-size: 27px; font-weight: 900; letter-spacing: 3.5px; }
+          .az-splash-tagline { margin: 10px 0 0; color: #0891b2; font-size: 12px; font-weight: 850; letter-spacing: 1.3px; }
+          .az-splash-loader { width: 34px; height: 34px; margin-top: 39px; border: 3px solid rgba(8,145,178,.16); border-top-color: #06b6d4; border-right-color: #0891b2; border-radius: 50%; animation: azSpin .78s linear infinite; }
+          .az-splash-status { margin-top: 14px; color: #6c8290; font: 800 10px "JetBrains Mono", monospace; letter-spacing: 1.8px; }
+          @keyframes azSpin { to { transform: rotate(360deg); } }
+          @keyframes azSplashIn { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
+          @media (max-width: 480px) { .az-splash-content { padding: 24px; } .az-splash-mark { width: 82px; height: 82px; border-radius: 25px; } .az-splash-mark img { width: 50px; } .az-splash-name { font-size: 21px; letter-spacing: 2.7px; } .az-splash-tagline { font-size: 10px; letter-spacing: .85px; } }
+        `}</style>
+        <div className="az-splash-content">
+          <div className="az-splash-mark"><img src="/logo-azphur.avif" alt="AZPHUR" /></div>
+          <div className="az-splash-name">AZPHUR</div>
+          <p className="az-splash-tagline">SHAPING SUSTAINABLE POSSIBILITIES</p>
+          <div className="az-splash-loader" aria-hidden="true" />
+          <span className="az-splash-status">PREPARING YOUR EXPERIENCE</span>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <div className="az-public-landing">
+      <style jsx global>{`
+        html, body { margin: 0; background: #f4f7f8; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; }
+        .az-public-landing { position: relative; min-height: 100vh; color: #102334; background: radial-gradient(circle at 8% 7%, rgba(34,211,238,.20), transparent 25%), radial-gradient(circle at 92% 92%, rgba(8,145,178,.08), transparent 30%), linear-gradient(180deg, #ffffff 0%, #f5f8f9 72%, #edf7f8 100%); overflow: hidden; }
+        .az-public-landing::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .42; background-image: linear-gradient(rgba(14,116,144,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,144,.045) 1px, transparent 1px); background-size: 52px 52px; mask-image: linear-gradient(to bottom, #000, transparent 72%); }
+        .az-public-nav { position: relative; z-index: 1; width: min(1160px, calc(100% - 40px)); margin: 0 auto; min-height: 94px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid rgba(8,145,178,.10); }
+        .az-public-brand { display: flex; align-items: center; gap: 12px; }
+        .az-public-brand img { width: auto; height: 39px; }
+        .az-public-brand strong { color: #112b3f; font-size: 16px; font-weight: 900; letter-spacing: 1.7px; }
+        .az-public-brand span { padding-left: 14px; border-left: 1px solid #cfe7ea; color: #0891b2; font-size: 11px; font-weight: 900; letter-spacing: .85px; }
+        .az-public-actions { display: flex; align-items: center; gap: 10px; }
+        .az-public-button { appearance: none; border: 0; border-radius: 999px; cursor: pointer; padding: 12px 18px; font-size: 12px; font-weight: 850; letter-spacing: .3px; transition: transform .2s ease, box-shadow .2s ease, background .2s ease; }
+        .az-public-button:hover { transform: translateY(-2px); }
+        .az-public-button--quiet { background: transparent; color: #0e7490; }
+        .az-public-button--quiet:hover { background: rgba(8,145,178,.08); }
+        .az-public-button--primary { background: #0f172a; color: #fff; box-shadow: 0 12px 24px rgba(15,23,42,.16); }
+        .az-public-button--primary:hover { background: #0e7490; box-shadow: 0 16px 28px rgba(8,145,178,.24); }
+        .az-public-hero { position: relative; z-index: 1; width: min(1060px, calc(100% - 40px)); margin: 0 auto; padding: clamp(72px, 11vh, 132px) 0 102px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(315px, .78fr); gap: clamp(42px, 7vw, 86px); align-items: center; }
+        .az-public-kicker { display: flex; align-items: center; gap: 10px; margin: 0 0 19px; color: #0e7490; font: 800 10px "JetBrains Mono", monospace; letter-spacing: 1.8px; }
+        .az-public-kicker::before { content: ""; display: block; width: 28px; height: 2px; background: #06b6d4; }
+        .az-public-welcome { margin: 0 0 12px; color: #112b3f; font-size: clamp(20px, 2.2vw, 28px); font-weight: 750; letter-spacing: -.7px; }
+        .az-public-copy h1 { max-width: 650px; margin: 0; color: #102a3f; font-size: clamp(47px, 6.2vw, 76px); font-weight: 800; line-height: .98; letter-spacing: -3.2px; }
+        .az-public-copy h1 span { color: #0891b2; }
+        .az-public-copy > p { max-width: 585px; margin: 26px 0 0; color: #577082; font-size: 17px; line-height: 1.68; }
+        .az-public-cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+        .az-public-cta-row .az-public-button { padding: 15px 22px; }
+        .az-public-button--accent { background: #06b6d4; color: #fff; box-shadow: 0 14px 28px rgba(6,182,212,.25); }
+        .az-public-button--accent:hover { background: #0891b2; box-shadow: 0 18px 34px rgba(8,145,178,.27); }
+        .az-public-assurance { display: flex; flex-wrap: wrap; gap: 12px 22px; margin: 26px 0 0; color: #5f7280; font-size: 12px; font-weight: 650; }
+        .az-public-assurance span::before { content: "✓"; margin-right: 7px; color: #0891b2; font-weight: 900; }
+        .az-public-panel { position: relative; overflow: hidden; border: 1px solid rgba(8,145,178,.17); border-radius: 28px; padding: 33px; background: rgba(255,255,255,.86); box-shadow: 0 26px 70px rgba(15,23,42,.11); backdrop-filter: blur(14px); }
+        .az-public-panel::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: linear-gradient(90deg, #06b6d4 0%, #0f172a 58%, #0f172a 100%); }
+        .az-public-panel__eyebrow { color: #0e7490; font: 800 10px "JetBrains Mono", monospace; letter-spacing: 1.5px; }
+        .az-public-panel h2 { max-width: 340px; margin: 17px 0 12px; color: #163047; font-size: 28px; line-height: 1.1; letter-spacing: -1.15px; }
+        .az-public-panel p { margin: 0; color: #66798a; font-size: 14px; line-height: 1.55; }
+        .az-public-steps { display: grid; gap: 12px; margin-top: 28px; }
+        .az-public-step { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; padding: 13px 0; border-top: 1px solid #e3eff1; }
+        .az-public-step:first-child { border-top: 0; }
+        .az-public-step b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #e3f8fa; color: #0e7490; font: 800 10px "JetBrains Mono", monospace; }
+        .az-public-step span { color: #294457; font-size: 13px; font-weight: 750; line-height: 1.35; }
+        .az-public-footer { position: relative; z-index: 1; width: min(1160px, calc(100% - 40px)); margin: 0 auto; padding: 0 0 30px; color: #70818e; font-size: 10px; font-weight: 700; letter-spacing: .8px; }
+        @media (max-width: 760px) {
+          .az-public-nav { width: min(100% - 28px, 1160px); min-height: 78px; gap: 8px; }
+          .az-public-brand { gap: 8px; min-width: 0; }
+          .az-public-brand img { height: 32px; }
+          .az-public-brand strong { font-size: 12px; letter-spacing: 1px; }
+          .az-public-brand span { display: none; }
+          .az-public-actions { gap: 3px; }
+          .az-public-button { padding: 10px 11px; font-size: 10px; white-space: nowrap; }
+          .az-public-hero { width: min(100% - 36px, 1030px); padding: 56px 0 56px; grid-template-columns: 1fr; gap: 34px; }
+          .az-public-kicker { margin-bottom: 15px; font-size: 9px; letter-spacing: 1.45px; }
+          .az-public-welcome { margin-bottom: 10px; font-size: 19px; }
+          .az-public-copy h1 { font-size: clamp(45px, 15vw, 62px); letter-spacing: -2.2px; }
+          .az-public-copy > p { margin-top: 22px; font-size: 15px; line-height: 1.62; }
+          .az-public-cta-row { display: grid; grid-template-columns: 1fr; margin-top: 27px; }
+          .az-public-cta-row .az-public-button { width: 100%; min-height: 50px; }
+          .az-public-assurance { display: grid; grid-template-columns: 1fr; gap: 9px; margin-top: 22px; }
+          .az-public-panel { padding: 25px 22px; border-radius: 23px; }
+          .az-public-panel h2 { font-size: 24px; }
+          .az-public-panel p { font-size: 13px; }
+          .az-public-step { padding: 12px 0; }
+          .az-public-footer { width: min(100% - 36px, 1160px); }
+        }
+      `}</style>
+
+      <nav className="az-public-nav" aria-label="AZPHUR public navigation">
+        <div className="az-public-brand">
+          <img src="/logo-azphur.avif" alt="AZPHUR" />
+          <strong>AZPHUR</strong>
+          <span>Shaping Sustainable Possibilities</span>
+        </div>
+        <div className="az-public-actions">
+          <button type="button" className="az-public-button az-public-button--quiet" onClick={onLogin}>Log in</button>
+          <button type="button" className="az-public-button az-public-button--primary" onClick={onRegister}>Create account</button>
+        </div>
+      </nav>
+
+      <main className="az-public-hero">
+        <section className="az-public-copy">
+          <p className="az-public-kicker">AZPHUR PROJECT PLATFORM</p>
+          <p className="az-public-welcome">Welcome to the AZPHUR Project Platform.</p>
+          <h1>What do you <span>need</span>?</h1>
+          <p>Whether you are planning an energy project, comparing providers or looking for funding, AZPHUR brings the essential steps into one clear, trusted journey. Create your account to begin and keep every decision, update and next action in one place.</p>
+          <div className="az-public-cta-row">
+            <button type="button" className="az-public-button az-public-button--accent" onClick={onRegister}>Start a project</button>
+            <button type="button" className="az-public-button az-public-button--quiet" onClick={onLogin}>I already have an account</button>
+          </div>
+          <div className="az-public-assurance">
+            <span>Verified options</span>
+            <span>Clear comparison</span>
+            <span>One project journey</span>
+          </div>
+        </section>
+
+        <aside className="az-public-panel" aria-label="How AZPHUR works">
+          <div className="az-public-panel__eyebrow">HOW IT WORKS</div>
+          <h2>A clearer way to move a project forward.</h2>
+          <p>Create your account to access the workspace that fits your project and your role.</p>
+          <div className="az-public-steps">
+            <div className="az-public-step"><b>01</b><span>Create your secure AZPHUR account.</span></div>
+            <div className="az-public-step"><b>02</b><span>Tell us what your project needs.</span></div>
+            <div className="az-public-step"><b>03</b><span>Manage every next step in one place.</span></div>
+          </div>
+        </aside>
+      </main>
+
+      <footer className="az-public-footer">© 2026 AZPHUR INC. ALL RIGHTS RESERVED.</footer>
+    </div>
+  );
+}
+
 export default function Home() {
   
   const router = useRouter();
@@ -815,6 +977,19 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const hasAuthenticatedSession = currentUserEmail !== 'loading...' && currentUserEmail !== 'guest@azphur.com';
+
+  // Keep all existing authenticated functionality exactly as it is. Guests only
+  // receive the public entry; operational modules are not rendered publicly.
+  if (!hasAuthenticatedSession) {
+    return (
+      <PublicAzphurLanding
+        onLogin={() => router.push('/login')}
+        onRegister={() => router.push('/register')}
+      />
+    );
+  }
 
   return (
     <div className="az-santrix-canvas">
