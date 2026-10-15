@@ -24,10 +24,20 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState('modulo_05');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
+  useEffect(() => {
+    if (!isRedirecting) return;
+
+    const redirectTimer = window.setTimeout(() => {
+      window.location.assign('/');
+    }, 2000);
+
+    return () => window.clearTimeout(redirectTimer);
+  }, [isRedirecting]);
 
   // Inserimento dello script di Cloudflare Turnstile con chiave di test per localhost
   useEffect(() => {
@@ -73,9 +83,10 @@ export default function RegisterPage() {
         email,
         password,
         options: {
-          data: { 
-            role: role,
-            full_name: fullName 
+          // Public registration creates only one universal AZPHUR account.
+          // Access to internal modules is assigned and verified separately.
+          data: {
+            full_name: fullName
           },
           emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined,
         },
@@ -85,13 +96,14 @@ export default function RegisterPage() {
 
       setMessage({
         type: 'success',
-        text: 'Registration completed successfully! Your account is active. Click Log In to access your dashboard.'
+        text: 'Your AZPHUR account has been created successfully.'
       });
       
       setFullName('');
       setEmail('');
       setPassword('');
       setCaptchaToken(null);
+      setIsRedirecting(true);
     } catch (err: unknown) {
       let errorText = 'An error occurred during registration.';
 
@@ -115,7 +127,7 @@ export default function RegisterPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#f8fafc',
+      background: 'radial-gradient(circle at 18% 15%, rgba(34, 211, 238, 0.16), transparent 34%), radial-gradient(circle at 84% 82%, rgba(14, 116, 144, 0.12), transparent 32%), #f8fafc',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -132,6 +144,35 @@ export default function RegisterPage() {
         maxWidth: '450px',
         boxSizing: 'border-box'
       }}>
+        <Link
+          href="/"
+          aria-label="Back to the AZPHUR welcome page"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', color: '#475569', fontSize: '12px', fontWeight: 800, textDecoration: 'none', marginBottom: '20px' }}
+        >
+          ← BACK
+        </Link>
+
+        {isRedirecting ? (
+          <div style={{ minHeight: '340px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '22px 8px 30px', position: 'relative', overflow: 'hidden' }}>
+            <div aria-hidden="true" style={{ position: 'absolute', width: '250px', height: '250px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,211,238,.17), rgba(34,211,238,0) 68%)', top: '23px', left: '50%', transform: 'translateX(-50%)' }} />
+            <div style={{ width: '82px', height: '82px', borderRadius: '50%', background: '#0f172a', display: 'grid', placeItems: 'center', position: 'relative', boxShadow: '0 15px 34px rgba(8,145,178,.28)' }}>
+              <div style={{ position: 'absolute', inset: '-7px', borderRadius: '50%', border: '3px solid rgba(34, 211, 238, .22)', borderTopColor: '#22d3ee', animation: 'azphur-registration-spin .9s linear infinite' }} />
+              <span style={{ color: '#67e8f9', fontSize: '31px', fontWeight: 800, lineHeight: 1 }}>✓</span>
+            </div>
+            <p style={{ position: 'relative', margin: '24px 0 8px', color: '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.8px' }}>AZPHUR ACCOUNT READY</p>
+            <h2 style={{ position: 'relative', color: '#102a3f', fontSize: '28px', fontWeight: 800, letterSpacing: '-.8px', margin: '0 0 10px' }}>Welcome to AZPHUR.</h2>
+            <p style={{ position: 'relative', color: '#64748b', fontSize: '14px', lineHeight: 1.65, margin: 0, maxWidth: '290px' }}>Your unified account has been created. Preparing your main page now.</p>
+            <div style={{ position: 'relative', width: 'min(100%, 250px)', height: '5px', overflow: 'hidden', borderRadius: '999px', marginTop: '28px', background: '#e2e8f0' }}>
+              <div style={{ width: '100%', height: '100%', borderRadius: 'inherit', background: 'linear-gradient(90deg, #0891b2, #22d3ee)', transformOrigin: 'left', animation: 'azphur-registration-progress 2s ease-in-out forwards' }} />
+            </div>
+            <p style={{ position: 'relative', margin: '12px 0 0', color: '#94a3b8', fontSize: '11px', fontWeight: 800, letterSpacing: '.5px' }}>REDIRECTING TO MAIN PAGE</p>
+            <style>{`
+              @keyframes azphur-registration-spin { to { transform: rotate(360deg); } }
+              @keyframes azphur-registration-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+            `}</style>
+          </div>
+        ) : (
+        <>
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <h2 style={{ color: '#1e293b', fontSize: '26px', fontWeight: 'bold', margin: '0 0 8px 0' }}>
             AZPHUR <span style={{ color: '#0891b2' }}>Ecosystem</span>
@@ -239,28 +280,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Select Access Portal</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              style={{
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: '1px solid #cbd5e1',
-                fontSize: '14px',
-                outline: 'none',
-                backgroundColor: '#f8fafc',
-                cursor: 'pointer',
-                width: '100%',
-                boxSizing: 'border-box'
-              }}
-            >
-              <option value="modulo_05">⚡ EV Charging Points & EV Mobility 🚗 (Module 5)</option>
-              <option value="solar_logistic">📦 S2B Logistics & Solar B2B ☀️ (Module 1 & Module 2)</option>
-            </select>
-          </div>
-
           {/* Cloudflare Turnstile Widget Container */}
           <div style={{ display: 'flex', justifyContent: 'center', margin: '2px 0' }}>
             <div id="turnstile-container"></div>
@@ -293,6 +312,8 @@ export default function RegisterPage() {
             Log In
           </Link>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

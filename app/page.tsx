@@ -35,6 +35,8 @@ interface GrabModule {
   action: () => void;
 }
 
+type CustomerWorkspace = 'module_01' | 'module_05';
+
 const TopTicker: React.FC = () => {
   const [stats, setStats] = useState<TickerStats>({ co2: 15420, mw: 912.45 });
   const [mounted, setMounted] = useState<boolean>(false);
@@ -357,14 +359,14 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
           <p className="az-public-kicker">AZPHUR PROJECT PLATFORM</p>
           <p className="az-public-welcome">Welcome to the AZPHUR Project Platform.</p>
           <h1>What do you <span>need</span>?</h1>
-          <p>Whether you are planning an energy project, comparing providers or looking for funding, AZPHUR brings the essential steps into one clear, trusted journey. Create your account to begin and keep every decision, update and next action in one place.</p>
+          <p>Whether you are planning a project, comparing options or coordinating next steps, AZPHUR brings the essential work into one clear, trusted journey. Create your account to begin and keep every decision, update and next action in one place.</p>
           <div className="az-public-cta-row">
             <button type="button" className="az-public-button az-public-button--accent" onClick={onRegister}>Start a project</button>
             <button type="button" className="az-public-button az-public-button--quiet" onClick={onLogin}>I already have an account</button>
           </div>
           <div className="az-public-assurance">
-            <span>Verified options</span>
-            <span>Clear comparison</span>
+            <span>Secure access</span>
+            <span>Clear coordination</span>
             <span>One project journey</span>
           </div>
         </section>
@@ -372,7 +374,7 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
         <aside className="az-public-panel" aria-label="How AZPHUR works">
           <div className="az-public-panel__eyebrow">HOW IT WORKS</div>
           <h2>A clearer way to move a project forward.</h2>
-          <p>Create your account to access the workspace that fits your project and your role.</p>
+          <p>Create your account to access the workspace assigned to you.</p>
           <div className="az-public-steps">
             <div className="az-public-step"><b>01</b><span>Create your secure AZPHUR account.</span></div>
             <div className="az-public-step"><b>02</b><span>Tell us what your project needs.</span></div>
@@ -409,6 +411,12 @@ export default function Home() {
   const [completedTransactionsOverride, setCompletedTransactionsOverride] = useState<number | null>(null);
   const [completedTransactionsSaving, setCompletedTransactionsSaving] = useState(false);
   const [isEditingCompletedTransactions, setIsEditingCompletedTransactions] = useState(false);
+  const [selectedCustomerWorkspace, setSelectedCustomerWorkspace] = useState<CustomerWorkspace | null>(null);
+  const [workspaceCheckComplete, setWorkspaceCheckComplete] = useState(false);
+  const [isManagedPartnerAccount, setIsManagedPartnerAccount] = useState(false);
+  const [isWorkspacePickerOpen, setIsWorkspacePickerOpen] = useState(false);
+  const [workspaceSaving, setWorkspaceSaving] = useState<CustomerWorkspace | null>(null);
+  const [workspacePickerError, setWorkspacePickerError] = useState('');
 
   // --- STATO SOLO-UX: ricerca moduli + filtro chip stile Grab (nessuna chiamata backend) ---
   const [moduleSearch, setModuleSearch] = useState<string>("");
@@ -569,7 +577,7 @@ useEffect(() => {
     }
     try {
       const { data, error } = await supabase
-        .from('module 05 customers')
+        .from('module_05_customers')
         .select('email')
         .eq('email', emailClean)
         .maybeSingle();
@@ -600,7 +608,7 @@ const verifyModule01Access = async (userEmail: string): Promise<boolean> => {
 
     try {
       const { data, error } = await supabase
-        .from('module 01 customers')
+        .from('module_01_customers')
         .select('email')
         .eq('email', emailClean)
         .maybeSingle();
@@ -622,6 +630,64 @@ const verifyModule01Access = async (userEmail: string): Promise<boolean> => {
     }
   };
 
+  const verifyManagedPartnerAccount = async (userEmail: string): Promise<boolean> => {
+    const emailClean = userEmail.toLowerCase().trim();
+    try {
+      const checks = await Promise.all([
+        supabase.from('partner_whitelist').select('email').eq('email', emailClean).maybeSingle(),
+        supabase.from('installers_whitelist').select('email').eq('email', emailClean).maybeSingle(),
+        supabase.from('funding_partner_whitelist').select('email').eq('email', emailClean).maybeSingle(),
+      ]);
+
+      return checks.some(({ data }) => Boolean(data));
+    } catch {
+      return false;
+    }
+  };
+
+  const chooseCustomerWorkspace = async (workspace: CustomerWorkspace) => {
+    const { data: authData } = await supabase.auth.getUser();
+    const authenticatedUser = authData.user;
+
+    if (!authenticatedUser || !authenticatedUser.email) {
+      router.push('/login');
+      return;
+    }
+
+    const email = authenticatedUser.email.toLowerCase().trim();
+    setWorkspaceSaving(workspace);
+    setWorkspacePickerError('');
+
+    const fullName = typeof authenticatedUser.user_metadata?.full_name === 'string'
+      ? authenticatedUser.user_metadata.full_name
+      : null;
+
+    let error: { code?: string } | null = null;
+
+    if (workspace === 'module_01') {
+      const result = await supabase
+        .from('module_01_customers')
+        .insert({ email, full_name: fullName } as never);
+      error = result.error;
+    } else {
+      const result = await supabase
+        .from('module_05_customers')
+        .insert({ id: crypto.randomUUID(), email, full_name: fullName });
+      error = result.error;
+    }
+
+    if (error && error.code !== '23505') {
+      setWorkspacePickerError('We could not activate this workspace yet. Please try again.');
+      setWorkspaceSaving(null);
+      return;
+    }
+
+    setSelectedCustomerWorkspace(workspace);
+    setIsWorkspacePickerOpen(false);
+    setWorkspaceSaving(null);
+    router.push(workspace === 'module_01' ? '/s2b' : '/EV');
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -629,14 +695,28 @@ const verifyModule01Access = async (userEmail: string): Promise<boolean> => {
       const sess = session as { user?: { email?: string } } | null;
       if (sess?.user?.email) {
         const emailClean = sess.user.email.toLowerCase().trim();
-        if (isMounted) setCurrentUserEmail(emailClean);
-        await verifyCustomerAccessM5(emailClean);
-        await verifyModule01Access(emailClean);
+        if (isMounted) {
+          setCurrentUserEmail(emailClean);
+          setWorkspaceCheckComplete(false);
+        }
+        const [hasModule05, hasModule01, isManagedPartner] = await Promise.all([
+          verifyCustomerAccessM5(emailClean),
+          verifyModule01Access(emailClean),
+          verifyManagedPartnerAccount(emailClean),
+        ]);
+        if (isMounted) {
+          setSelectedCustomerWorkspace(hasModule01 ? 'module_01' : hasModule05 ? 'module_05' : null);
+          setIsManagedPartnerAccount(isManagedPartner);
+          setWorkspaceCheckComplete(true);
+        }
       } else {
         if (isMounted) {
           setCurrentUserEmail('guest@azphur.com');
           setDebugM1("No logged user");
           setDebugM5("No logged user");
+          setSelectedCustomerWorkspace(null);
+          setIsManagedPartnerAccount(false);
+          setWorkspaceCheckComplete(true);
         }
       }
     };
@@ -830,6 +910,12 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
 
   const isAuthorized: boolean = staffCode.trim().toUpperCase() === 'AZ-001';
   const hasLoggedInAdmin: boolean = adminEmails.includes(currentUserEmail.trim().toLowerCase());
+  const shouldChooseWorkspace = workspaceCheckComplete &&
+    currentUserEmail !== 'loading...' &&
+    currentUserEmail !== 'guest@azphur.com' &&
+    !hasLoggedInAdmin &&
+    !isManagedPartnerAccount &&
+    !selectedCustomerWorkspace;
   const canOpenPrivateControls: boolean = isAuthorized || hasLoggedInAdmin;
   const displayedCompletedTransactions = Math.max(0, completedTransactionsOverride ?? completedTransactionsCount ?? 0);
 
@@ -1397,6 +1483,15 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           </div>
           {currentUserEmail && currentUserEmail !== 'loading...' && currentUserEmail !== 'guest@azphur.com' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              {shouldChooseWorkspace && (
+                <button
+                  type="button"
+                  className="btn-cyan-outline"
+                  onClick={() => setIsWorkspacePickerOpen(true)}
+                >
+                  CHOOSE SERVICE
+                </button>
+              )}
               <span style={{ fontSize: '10px', fontWeight: '800', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.1)', padding: '6px 14px', borderRadius: '100px' }}>
                 {currentUserEmail}
               </span>
@@ -1410,6 +1505,55 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
           )}
         </div>
       </nav> 
+
+      {isWorkspacePickerOpen && shouldChooseWorkspace && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose your AZPHUR service"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 5000, padding: '24px',
+            display: 'grid', placeItems: 'center', background: 'rgba(7, 19, 32, 0.62)',
+            backdropFilter: 'blur(7px)'
+          }}
+        >
+          <section style={{ width: 'min(100%, 760px)', borderRadius: '24px', padding: 'clamp(24px, 5vw, 42px)', background: '#fff', boxShadow: '0 28px 80px rgba(0,0,0,.26)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', alignItems: 'start' }}>
+              <div>
+                <p style={{ margin: 0, color: '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.4px' }}>AZPHUR ACCOUNT SETUP</p>
+                <h2 style={{ margin: '10px 0 8px', color: '#102a3f', fontSize: 'clamp(25px, 4vw, 35px)', letterSpacing: '-1.2px' }}>Choose how you would like to begin.</h2>
+                <p style={{ margin: 0, maxWidth: '590px', color: '#5f7280', fontSize: '14px', lineHeight: 1.6 }}>Your secure AZPHUR account is ready. Select one service to activate your first workspace. You can continue with your project immediately after selection.</p>
+              </div>
+              <button type="button" onClick={() => setIsWorkspacePickerOpen(false)} aria-label="Close" style={{ border: 0, background: 'transparent', color: '#64748b', fontSize: '26px', lineHeight: 1, cursor: 'pointer' }}>×</button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '28px' }}>
+              <button
+                type="button"
+                disabled={workspaceSaving !== null}
+                onClick={() => chooseCustomerWorkspace('module_05')}
+                style={{ textAlign: 'left', padding: '22px', borderRadius: '18px', border: '1px solid #bcebf0', background: '#f2fcfd', color: '#102a3f', cursor: workspaceSaving ? 'wait' : 'pointer' }}
+              >
+                <span style={{ display: 'block', color: '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.2px' }}>MODULE 05</span>
+                <strong style={{ display: 'block', marginTop: '8px', fontSize: '18px' }}>EV Charging & Mobility</strong>
+                <span style={{ display: 'block', marginTop: '8px', color: '#5f7280', fontSize: '12px', lineHeight: 1.5 }}>{workspaceSaving === 'module_05' ? 'ACTIVATING…' : 'Access EV charging points and mobility services.'}</span>
+              </button>
+              <button
+                type="button"
+                disabled={workspaceSaving !== null}
+                onClick={() => chooseCustomerWorkspace('module_01')}
+                style={{ textAlign: 'left', padding: '22px', borderRadius: '18px', border: '1px solid #cfdbe9', background: '#f8fbff', color: '#102a3f', cursor: workspaceSaving ? 'wait' : 'pointer' }}
+              >
+                <span style={{ display: 'block', color: '#0f172a', fontSize: '10px', fontWeight: 900, letterSpacing: '1.2px' }}>MODULE 01 & 02</span>
+                <strong style={{ display: 'block', marginTop: '8px', fontSize: '18px' }}>S2B Logistics & Solar</strong>
+                <span style={{ display: 'block', marginTop: '8px', color: '#5f7280', fontSize: '12px', lineHeight: 1.5 }}>{workspaceSaving === 'module_01' ? 'ACTIVATING…' : 'Start a project and manage verified project steps.'}</span>
+              </button>
+            </div>
+
+            {workspacePickerError && <p role="alert" style={{ margin: '18px 0 0', color: '#b91c1c', fontSize: '13px', fontWeight: 700 }}>{workspacePickerError}</p>}
+          </section>
+        </div>
+      )}
 
       <main>
         {/* Presentation-only home entry. Existing routes and module actions are preserved. */}

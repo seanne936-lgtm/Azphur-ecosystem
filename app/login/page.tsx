@@ -252,9 +252,10 @@ export default function LoginPage() {
           return;
         }
 
-        alert("ACCESS_DENIED: Profile not configured for AZPHUR ecosystem modules.");
-        await supabase.auth.signOut();
-        setLoading(false);
+        // A newly registered universal account has no workspace yet.
+        // Keep its authenticated session and let the main page show CHOOSE SERVICE.
+        router.push('/');
+        return;
       }
     } catch (err) {
       alert("SYSTEM_ERROR_LOGIN");
