@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-const money = (value: unknown) => `â‚±${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value: unknown) => `₱${(Number(value) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 type Props = {
   lead: any;
@@ -18,6 +18,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
   const [customerConsent, setCustomerConsent] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const isBusy = (key: string) => busy === key;
 
   const request = useMemo(
     () => data.requests?.find((item: any) => item.lead_id === lead.id && !['cancelled', 'declined'].includes(item.status)) || null,
@@ -107,13 +108,13 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
           <h3 style={styles.title}>Choose how to fund this project</h3>
           <p style={styles.muted}>One AZPHUR project flow; provider and installer allocations remain separate internally.</p>
         </div>
-        <span style={styles.mock}>MOCK â€” NO REAL MONEY</span>
+        <span style={styles.mock}>MOCK — NO REAL MONEY</span>
       </div>
 
       {!fundingSelected && !directSelected && (
         <div style={styles.choiceGrid}>
-          <button style={styles.directChoice} disabled={busy !== null} onClick={() => run('direct', { action: 'choose_direct', lead_id: lead.id })}>
-            <strong>PAY DIRECT</strong>
+          <button style={{ ...styles.directChoice, ...(busy !== null ? styles.disabledButton : {}) }} disabled={busy !== null} aria-busy={isBusy('direct')} onClick={() => run('direct', { action: 'choose_direct', lead_id: lead.id })}>
+            <strong>{isBusy('direct') ? 'SELECTING DIRECT…' : 'PAY DIRECT'}</strong>
             <span>Use the consolidated Project Down Payment and Project Final Payment.</span>
           </button>
           <div style={styles.financeChoice}>
@@ -134,7 +135,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
               <span>I consent to share this project and financial application data with verified funding partners for this request.</span>
             </label>
             {!canRequestFinancing && <div style={styles.lockedNotice}>PROJECT PRICES ARE STILL BEING FINALIZED. FINANCING CAN BE SENT AFTER BOTH PROJECT ALLOCATIONS ARE READY.</div>}
-            <button style={styles.primaryButton} disabled={busy !== null || !canRequestFinancing || !customerConsent} onClick={() => run('request', { action: 'create_request', lead_id: lead.id, requested_term_months: Number(termMonths), customer_notes: notes, customer_consent: customerConsent })}>REQUEST FINANCING</button>
+            <button style={{ ...styles.primaryButton, ...(busy !== null || !canRequestFinancing || !customerConsent ? styles.disabledButton : {}) }} disabled={busy !== null || !canRequestFinancing || !customerConsent} aria-busy={isBusy('request')} onClick={() => run('request', { action: 'create_request', lead_id: lead.id, requested_term_months: Number(termMonths), customer_notes: notes, customer_consent: customerConsent })}>{isBusy('request') ? 'SENDING REQUEST…' : 'REQUEST FINANCING'}</button>
           </div>
         </div>
       )}
@@ -157,7 +158,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
           </div>
 
           {request && !contract && ['open', 'under_review', 'offers_available'].includes(request.status) && (
-            <button style={styles.cancelButton} disabled={busy !== null} onClick={() => run(`cancel-${request.id}`, { action: 'cancel_request', request_id: request.id })}>CANCEL FINANCING REQUEST AND PAY DIRECT</button>
+            <button style={{ ...styles.cancelButton, ...(busy !== null ? styles.disabledButton : {}) }} disabled={busy !== null} aria-busy={isBusy(`cancel-${request.id}`)} onClick={() => run(`cancel-${request.id}`, { action: 'cancel_request', request_id: request.id })}>{isBusy(`cancel-${request.id}`) ? 'UPDATING PAYMENT METHOD…' : 'CANCEL FINANCING REQUEST AND PAY DIRECT'}</button>
           )}
 
           {offers.length > 0 && !contract && (
@@ -165,7 +166,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
               <div style={styles.eyebrow}>VERIFIED PARTNER OFFERS</div>
               {offers.map((offer: any) => (
                 <article key={offer.id} style={styles.offer}>
-                  <div><strong>{offer.funding_partner_whitelist?.display_name || 'Verified funding partner'}</strong><div style={styles.muted}>{offer.funding_partner_whitelist?.partner_type} Â· {offer.funding_partner_whitelist?.verified ? 'Verified' : 'Verification pending'}</div></div>
+                  <div><strong>{offer.funding_partner_whitelist?.display_name || 'Verified funding partner'}</strong><div style={styles.muted}>{offer.funding_partner_whitelist?.partner_type} · {offer.funding_partner_whitelist?.verified ? 'Verified' : 'Verification pending'}</div></div>
                   <div style={styles.summaryGrid}>
                     <Info label="Principal" value={money(offer.principal_amount)} />
                     <Info label="Annual rate" value={`${offer.annual_interest_rate}%`} />
@@ -176,7 +177,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
                   </div>
                   <p style={styles.terms}>{offer.terms_summary}</p>
                   {Array.isArray(offer.requirements) && offer.requirements.length > 0 && <ul style={styles.requirements}>{offer.requirements.map((item: string, index: number) => <li key={index}>{item}</li>)}</ul>}
-                  <button style={styles.primaryButton} disabled={busy !== null || offer.status !== 'submitted'} onClick={() => run(`select-${offer.id}`, { action: 'select_offer', request_id: request.id, offer_id: offer.id })}>SELECT THIS OFFER</button>
+                  <button style={{ ...styles.primaryButton, ...(busy !== null || offer.status !== 'submitted' ? styles.disabledButton : {}) }} disabled={busy !== null || offer.status !== 'submitted'} aria-busy={isBusy(`select-${offer.id}`)} onClick={() => run(`select-${offer.id}`, { action: 'select_offer', request_id: request.id, offer_id: offer.id })}>{isBusy(`select-${offer.id}`) ? 'SELECTING OFFER…' : 'SELECT THIS OFFER'}</button>
                 </article>
               ))}
             </div>
@@ -195,7 +196,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
               {contract.contract_status === 'pending_customer_acceptance' && (
                 <>
                   <div style={styles.disclaimer}>By accepting, the customer enters a financing agreement with the selected funding partner. AZPHUR remains the transaction platform and is not the lender.</div>
-                  <button style={styles.primaryButton} disabled={busy !== null} onClick={() => run(`accept-${contract.id}`, { action: 'accept_contract', contract_id: contract.id })}>ACCEPT FUNDING CONTRACT â€” TEST</button>
+                  <button style={{ ...styles.primaryButton, ...(busy !== null ? styles.disabledButton : {}) }} disabled={busy !== null} aria-busy={isBusy(`accept-${contract.id}`)} onClick={() => run(`accept-${contract.id}`, { action: 'accept_contract', contract_id: contract.id })}>{isBusy(`accept-${contract.id}`) ? 'ACCEPTING CONTRACT…' : 'ACCEPT FUNDING CONTRACT — TEST'}</button>
                 </>
               )}
               {contract.contract_status === 'active' && <div style={styles.confirmed}><strong>FUNDING ACTIVE</strong><span>The funding partner can now fund the project milestones. Direct customer project payment is disabled.</span></div>}
@@ -209,7 +210,7 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
                 <div key={installment.id} style={styles.installment}>
                   <div><strong>#{installment.installment_number}</strong><div style={styles.muted}>Due {installment.due_date}</div></div>
                   <div><strong>{money(installment.amount_due)}</strong><div style={styles.muted}>{installment.status}</div></div>
-                  {['scheduled', 'due', 'late'].includes(installment.status) && <button style={styles.smallButton} disabled={busy !== null} onClick={() => run(`repay-${installment.id}`, { action: 'pay_installment', installment_id: installment.id })}>MOCK REPAY PARTNER</button>}
+                  {['scheduled', 'due', 'late'].includes(installment.status) && <button style={{ ...styles.smallButton, ...(busy !== null ? styles.disabledButton : {}) }} disabled={busy !== null} aria-busy={isBusy(`repay-${installment.id}`)} onClick={() => run(`repay-${installment.id}`, { action: 'pay_installment', installment_id: installment.id })}>{isBusy(`repay-${installment.id}`) ? 'PROCESSING…' : 'MOCK REPAY PARTNER'}</button>}
                 </div>
               ))}
             </div>
@@ -217,33 +218,34 @@ export default function AZPHURFundingOptionsPanel({ lead, session, canRequestFin
         </div>
       )}
 
-      {message && <div style={styles.message}>{message}</div>}
+      {message && <div style={styles.message} role="status" aria-live="polite">{message}</div>}
     </section>
   );
 }
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div style={styles.info}><span>{label}</span><strong>{value || 'â€”'}</strong></div>;
+  return <div style={styles.info}><span>{label}</span><strong>{value || '—'}</strong></div>;
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  panel: { background: '#ffffff', color: '#1d1d1f', border: '2px solid #0891b2', borderRadius: 14, padding: 18, marginBottom: 18, boxSizing: 'border-box' },
+  panel: { width: '100%', background: '#ffffff', color: '#1d1d1f', border: '2px solid #0891b2', borderRadius: 14, padding: 18, marginBottom: 18, boxSizing: 'border-box', boxShadow: '0 14px 30px rgba(8,145,178,.09)' },
   header: { display: 'flex', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap', borderBottom: '1px solid #bae6fd', paddingBottom: 12 },
   eyebrow: { color: '#0891b2', fontSize: 9, fontWeight: 950, letterSpacing: 1.2 },
   title: { margin: '5px 0', fontSize: 16, color: '#1d1d1f' },
   muted: { color: '#64748b', fontSize: 9, lineHeight: 1.5 },
   mock: { alignSelf: 'flex-start', color: '#854d0e', background: '#fef9c3', border: '1px solid #facc15', borderRadius: 6, padding: '6px 8px', fontSize: 8, fontWeight: 950 },
   choiceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 12, marginTop: 14 },
-  directChoice: { display: 'grid', gap: 8, alignContent: 'center', minHeight: 150, textAlign: 'left', background: '#f8fafc', color: '#1d1d1f', border: '1px solid #0891b2', borderRadius: 10, padding: 18, cursor: 'pointer' },
+  directChoice: { display: 'grid', gap: 8, alignContent: 'center', minHeight: 150, textAlign: 'left', background: '#f8fafc', color: '#1d1d1f', border: '1px solid #0891b2', borderRadius: 10, padding: 18, cursor: 'pointer', transition: 'transform .16s ease, box-shadow .16s ease, opacity .16s ease', touchAction: 'manipulation' },
   financeChoice: { display: 'grid', gap: 9, background: '#f0fdf4', color: '#1d1d1f', border: '1px solid #166534', borderRadius: 10, padding: 18 },
   formRow: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 },
   label: { display: 'grid', gap: 4, color: '#166534', fontSize: 8, fontWeight: 900 },
   consent: { display: 'flex', alignItems: 'flex-start', gap: 7, color: '#475569', fontSize: 9, lineHeight: 1.45, cursor: 'pointer' },
   lockedNotice: { padding: 8, borderRadius: 6, background: '#fef9c3', color: '#854d0e', fontSize: 8, fontWeight: 900, lineHeight: 1.4 },
-  input: { width: '100%', boxSizing: 'border-box', border: '1px solid #86efac', borderRadius: 6, background: '#ffffff', color: '#1d1d1f', padding: 8, fontSize: 10 },
-  primaryButton: { border: 0, borderRadius: 7, background: '#0891b2', color: '#fff', padding: '10px 13px', fontSize: 8, fontWeight: 950, cursor: 'pointer' },
-  smallButton: { border: '1px solid #0891b2', borderRadius: 6, background: '#ffffff', color: '#0891b2', padding: '7px 9px', fontSize: 7, fontWeight: 950, cursor: 'pointer' },
-  cancelButton: { border: '1px solid #f59e0b', borderRadius: 7, background: '#fef9c3', color: '#854d0e', padding: '9px 11px', fontSize: 8, fontWeight: 950, cursor: 'pointer' },
+  input: { width: '100%', minHeight: 38, boxSizing: 'border-box', border: '1px solid #86efac', borderRadius: 6, background: '#ffffff', color: '#1d1d1f', padding: 8, fontSize: 10 },
+  primaryButton: { minHeight: 40, border: 0, borderRadius: 7, background: '#0891b2', color: '#fff', padding: '10px 13px', fontSize: 8, fontWeight: 950, cursor: 'pointer', transition: 'transform .16s ease, box-shadow .16s ease, opacity .16s ease', touchAction: 'manipulation', boxShadow: '0 7px 15px rgba(8,145,178,.16)' },
+  smallButton: { minHeight: 34, border: '1px solid #0891b2', borderRadius: 6, background: '#ffffff', color: '#0891b2', padding: '7px 9px', fontSize: 7, fontWeight: 950, cursor: 'pointer', transition: 'transform .16s ease, opacity .16s ease', touchAction: 'manipulation' },
+  cancelButton: { minHeight: 40, border: '1px solid #f59e0b', borderRadius: 7, background: '#fef9c3', color: '#854d0e', padding: '9px 11px', fontSize: 8, fontWeight: 950, cursor: 'pointer', transition: 'transform .16s ease, opacity .16s ease', touchAction: 'manipulation' },
+  disabledButton: { cursor: 'wait', opacity: 0.68 },
   workflow: { marginTop: 14, display: 'grid', gap: 12 },
   statusRow: { display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' },
   status: { color: '#0891b2', border: '1px solid #0891b2', borderRadius: 999, padding: '4px 8px', fontSize: 8, fontWeight: 900, textTransform: 'uppercase' },
@@ -257,5 +259,5 @@ const styles: Record<string, React.CSSProperties> = {
   disclaimer: { margin: '12px 0', color: '#854d0e', background: '#fef9c3', padding: 10, borderRadius: 7, fontSize: 9, lineHeight: 1.5 },
   confirmed: { display: 'grid', gap: 4, marginTop: 14, padding: 12, borderRadius: 8, background: '#dcfce7', color: '#166534', fontSize: 9 },
   installment: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: 10, border: '1px solid #bae6fd', borderRadius: 8, background: '#f8fafc', fontSize: 10 },
-  message: { marginTop: 12, padding: 10, borderRadius: 7, color: '#0e7490', background: '#ecfeff', fontSize: 9 }
+  message: { marginTop: 12, padding: 10, borderRadius: 7, border: '1px solid #a5f3fc', color: '#0e7490', background: '#ecfeff', fontSize: 9, fontWeight: 800 }
 };

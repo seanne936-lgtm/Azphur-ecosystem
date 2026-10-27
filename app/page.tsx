@@ -236,6 +236,13 @@ type PublicAzphurLandingProps = {
 function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) {
   const [showSplash, setShowSplash] = useState(true);
   const [isSplashLeaving, setIsSplashLeaving] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const beginNavigation = (destination: () => void) => {
+    if (isNavigating) return;
+    setIsNavigating(true);
+    window.setTimeout(destination, 360);
+  };
 
   useEffect(() => {
     const leaveTimer = window.setTimeout(() => setIsSplashLeaving(true), 1250);
@@ -277,10 +284,15 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
   }
 
   return (
-    <div className="az-public-landing">
+    <div className={`az-public-landing ${isNavigating ? 'az-public-landing--leaving' : ''}`}>
       <style jsx global>{`
         html, body { margin: 0; background: #f4f7f8; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; }
-        .az-public-landing { position: relative; min-height: 100vh; color: #102334; background: radial-gradient(circle at 8% 7%, rgba(34,211,238,.20), transparent 25%), radial-gradient(circle at 92% 92%, rgba(8,145,178,.08), transparent 30%), linear-gradient(180deg, #ffffff 0%, #f5f8f9 72%, #edf7f8 100%); overflow: hidden; }
+        .az-public-landing { position: relative; min-height: 100vh; color: #102334; background: radial-gradient(circle at 8% 7%, rgba(34,211,238,.20), transparent 25%), radial-gradient(circle at 92% 92%, rgba(8,145,178,.08), transparent 30%), linear-gradient(180deg, #ffffff 0%, #f5f8f9 72%, #edf7f8 100%); overflow: hidden; opacity: 1; transform: translateY(0); transition: opacity .34s ease, transform .34s ease; }
+        .az-public-landing--leaving { opacity: 0; transform: translateY(-7px); pointer-events: none; }
+        .az-public-route-transition { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(244,247,248,.42); backdrop-filter: blur(2px); pointer-events: none; animation: azRouteFade .22s ease-out both; }
+        .az-public-route-transition__loader { width: 28px; height: 28px; border: 3px solid rgba(8,145,178,.18); border-top-color: #06b6d4; border-radius: 50%; animation: azRouteSpin .75s linear infinite; }
+        @keyframes azRouteFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes azRouteSpin { to { transform: rotate(360deg); } }
         .az-public-landing::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .42; background-image: linear-gradient(rgba(14,116,144,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(14,116,144,.045) 1px, transparent 1px); background-size: 52px 52px; mask-image: linear-gradient(to bottom, #000, transparent 72%); }
         .az-public-nav { position: relative; z-index: 1; width: min(1160px, calc(100% - 40px)); margin: 0 auto; min-height: 94px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid rgba(8,145,178,.10); }
         .az-public-brand { display: flex; align-items: center; gap: 12px; }
@@ -323,7 +335,7 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
           .az-public-brand { gap: 8px; min-width: 0; }
           .az-public-brand img { height: 32px; }
           .az-public-brand strong { font-size: 12px; letter-spacing: 1px; }
-          .az-public-brand span { display: none; }
+          .az-public-brand span { display: block; max-width: 145px; font-size: 8px; line-height: 1.2; letter-spacing: .25px; white-space: normal; }
           .az-public-actions { gap: 3px; }
           .az-public-button { padding: 10px 11px; font-size: 10px; white-space: nowrap; }
           .az-public-hero { width: min(100% - 36px, 1030px); padding: 56px 0 56px; grid-template-columns: 1fr; gap: 34px; }
@@ -349,8 +361,8 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
           <span>Shaping Sustainable Possibilities</span>
         </div>
         <div className="az-public-actions">
-          <button type="button" className="az-public-button az-public-button--quiet" onClick={onLogin}>Log in</button>
-          <button type="button" className="az-public-button az-public-button--primary" onClick={onRegister}>Create account</button>
+          <button type="button" className="az-public-button az-public-button--quiet" onClick={() => beginNavigation(onLogin)}>Log in</button>
+          <button type="button" className="az-public-button az-public-button--primary" onClick={() => beginNavigation(onRegister)}>Create account</button>
         </div>
       </nav>
 
@@ -361,8 +373,8 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
           <h1>What do you <span>need</span>?</h1>
           <p>Whether you are planning a project, comparing options or coordinating next steps, AZPHUR brings the essential work into one clear, trusted journey. Create your account to begin and keep every decision, update and next action in one place.</p>
           <div className="az-public-cta-row">
-            <button type="button" className="az-public-button az-public-button--accent" onClick={onRegister}>Start a project</button>
-            <button type="button" className="az-public-button az-public-button--quiet" onClick={onLogin}>I already have an account</button>
+            <button type="button" className="az-public-button az-public-button--accent" onClick={() => beginNavigation(onRegister)}>Start a project</button>
+            <button type="button" className="az-public-button az-public-button--quiet" onClick={() => beginNavigation(onLogin)}>I already have an account</button>
           </div>
           <div className="az-public-assurance">
             <span>Secure access</span>
@@ -384,6 +396,7 @@ function PublicAzphurLanding({ onLogin, onRegister }: PublicAzphurLandingProps) 
       </main>
 
       <footer className="az-public-footer">© 2026 AZPHUR INC. ALL RIGHTS RESERVED.</footer>
+      {isNavigating && <div className="az-public-route-transition" aria-live="polite" aria-label="Opening your AZPHUR workspace"><div className="az-public-route-transition__loader" /></div>}
     </div>
   );
 }
@@ -1115,6 +1128,10 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
         
         .btn-cyan-outline { background: #111827; border: none; color: #fff; padding: 10px 22px; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 11px; transition: 0.3s; }
         .btn-cyan-outline:hover { background: #06b6d4; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(6, 182, 212, 0.3); }
+        .az-workspace-trigger { display: inline-flex; align-items: center; gap: 9px; background: linear-gradient(135deg, #0891b2, #06b6d4); border: 1px solid rgba(255,255,255,.55); color: #fff; padding: 10px 16px 10px 12px; border-radius: 12px; cursor: pointer; font-weight: 900; font-size: 10px; letter-spacing: .8px; box-shadow: 0 10px 24px rgba(8,145,178,.24); transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+        .az-workspace-trigger::before { content: "+"; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 7px; background: rgba(255,255,255,.2); font-size: 16px; line-height: 1; }
+        .az-workspace-trigger:hover { transform: translateY(-2px); filter: brightness(1.04); box-shadow: 0 14px 28px rgba(8,145,178,.32); }
+        .az-workspace-trigger:focus-visible { outline: 3px solid rgba(34,211,238,.42); outline-offset: 3px; }
         .btn-red-outline { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 8px 18px; border-radius: 12px; cursor: pointer; font-weight: 800; font-size: 11px; transition: 0.3s; }
         .btn-red-outline:hover { background: #ef4444; color: #fff; }
         .btn-signin-link { background: none; border: none; color: #4b5563; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s; }
@@ -1486,10 +1503,10 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
               {shouldChooseWorkspace && (
                 <button
                   type="button"
-                  className="btn-cyan-outline"
+                  className="az-workspace-trigger"
                   onClick={() => setIsWorkspacePickerOpen(true)}
                 >
-                  CHOOSE SERVICE
+                  CHOOSE YOUR ECOSYSTEM
                 </button>
               )}
               <span style={{ fontSize: '10px', fontWeight: '800', color: '#06b6d4', background: 'rgba(6, 182, 212, 0.1)', padding: '6px 14px', borderRadius: '100px' }}>
@@ -1517,14 +1534,19 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
             backdropFilter: 'blur(7px)'
           }}
         >
-          <section style={{ width: 'min(100%, 760px)', borderRadius: '24px', padding: 'clamp(24px, 5vw, 42px)', background: '#fff', boxShadow: '0 28px 80px rgba(0,0,0,.26)' }}>
+          <section style={{ width: 'min(100%, 760px)', borderRadius: '24px', padding: 'clamp(24px, 5vw, 42px)', background: 'linear-gradient(145deg, #ffffff 0%, #f4fcfd 100%)', border: '1px solid rgba(34,211,238,.22)', boxShadow: '0 28px 80px rgba(0,0,0,.26)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', alignItems: 'start' }}>
               <div>
-                <p style={{ margin: 0, color: '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.4px' }}>AZPHUR ACCOUNT SETUP</p>
-                <h2 style={{ margin: '10px 0 8px', color: '#102a3f', fontSize: 'clamp(25px, 4vw, 35px)', letterSpacing: '-1.2px' }}>Choose how you would like to begin.</h2>
-                <p style={{ margin: 0, maxWidth: '590px', color: '#5f7280', fontSize: '14px', lineHeight: 1.6 }}>Your secure AZPHUR account is ready. Select one service to activate your first workspace. You can continue with your project immediately after selection.</p>
+                <p style={{ margin: 0, color: '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.4px' }}>WELCOME TO AZPHUR</p>
+                <h2 style={{ margin: '10px 0 8px', color: '#102a3f', fontSize: 'clamp(25px, 4vw, 35px)', letterSpacing: '-1.2px' }}>Your account is ready to begin.</h2>
+                <p style={{ margin: 0, maxWidth: '590px', color: '#5f7280', fontSize: '14px', lineHeight: 1.65 }}>Welcome to the AZPHUR system. When you are ready, choose the ecosystem that best fits your needs to start your experience.</p>
               </div>
               <button type="button" onClick={() => setIsWorkspacePickerOpen(false)} aria-label="Close" style={{ border: 0, background: 'transparent', color: '#64748b', fontSize: '26px', lineHeight: 1, cursor: 'pointer' }}>×</button>
+            </div>
+
+            <div style={{ marginTop: '20px', padding: '15px 17px', borderRadius: '15px', background: 'rgba(255,255,255,.84)', border: '1px solid rgba(8,145,178,.13)', color: '#526878', fontSize: '13px', lineHeight: 1.6 }}>
+              <strong style={{ display: 'block', marginBottom: '3px', color: '#102a3f', fontSize: '12px', letterSpacing: '.15px' }}>Explore first, decide when you are ready.</strong>
+              You can continue navigating this page to discover who we are and how AZPHUR connects customers with verified partners for secure, transparent transactions.
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginTop: '28px' }}>
@@ -1532,7 +1554,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 type="button"
                 disabled={workspaceSaving !== null}
                 onClick={() => chooseCustomerWorkspace('module_05')}
-                style={{ textAlign: 'left', padding: '22px', borderRadius: '18px', border: '1px solid #bcebf0', background: '#f2fcfd', color: '#102a3f', cursor: workspaceSaving ? 'wait' : 'pointer' }}
+                style={{ textAlign: 'left', padding: '22px', borderRadius: '18px', border: '1px solid #bcebf0', background: '#f2fcfd', color: '#102a3f', cursor: workspaceSaving ? 'wait' : 'pointer', transition: 'transform .2s ease, box-shadow .2s ease', boxShadow: '0 6px 20px rgba(8,145,178,.06)' }}
               >
                 <span style={{ display: 'block', color: '#0891b2', fontSize: '10px', fontWeight: 900, letterSpacing: '1.2px' }}>MODULE 05</span>
                 <strong style={{ display: 'block', marginTop: '8px', fontSize: '18px' }}>EV Charging & Mobility</strong>
@@ -1542,7 +1564,7 @@ const handleModuleNavigation = async (targetPath: string, validator?: (email: st
                 type="button"
                 disabled={workspaceSaving !== null}
                 onClick={() => chooseCustomerWorkspace('module_01')}
-                style={{ textAlign: 'left', padding: '22px', borderRadius: '18px', border: '1px solid #cfdbe9', background: '#f8fbff', color: '#102a3f', cursor: workspaceSaving ? 'wait' : 'pointer' }}
+                style={{ textAlign: 'left', padding: '22px', borderRadius: '18px', border: '1px solid #cfdbe9', background: '#f8fbff', color: '#102a3f', cursor: workspaceSaving ? 'wait' : 'pointer', transition: 'transform .2s ease, box-shadow .2s ease', boxShadow: '0 6px 20px rgba(15,23,42,.05)' }}
               >
                 <span style={{ display: 'block', color: '#0f172a', fontSize: '10px', fontWeight: 900, letterSpacing: '1.2px' }}>MODULE 01 & 02</span>
                 <strong style={{ display: 'block', marginTop: '8px', fontSize: '18px' }}>S2B Logistics & Solar</strong>

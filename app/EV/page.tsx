@@ -13,7 +13,7 @@ const MapComponent = dynamic(() => import('../components/Map'), {
   ssr: false,
   loading: () => (
     <div style={{ color: '#22d3ee', fontFamily: 'monospace', padding: '20px', textAlign: 'center', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#edf2f7', width: '100%' }}>
-      📡 INITIALIZING_SATELLITE_TILES...
+      📡 INITIALIZING SATELLITE TILES...
     </div>
   )
 });
@@ -102,10 +102,10 @@ const TopTicker: React.FC = () => {
   return (
     <div className={`top-ticker-lux ${mounted ? 'visible' : ''}`}>
       <div className="ticker-inner">
-        <span className="live-pill">SYSTEM_OK</span>
-        <span className="stat">CO2_SAVED: <strong>{new Intl.NumberFormat('en-US').format(stats.co2)}</strong></span>
+        <span className="live-pill">SYSTEM OK</span>
+        <span className="stat">CO2 SAVED: <strong>{new Intl.NumberFormat('en-US').format(stats.co2)}</strong></span>
         <div className="sep"></div>
-        <span className="stat">NET_POWER: <strong>{stats.mw.toFixed(2)}</strong> MW</span>
+        <span className="stat">NET POWER: <strong>{stats.mw.toFixed(2)}</strong> MW</span>
       </div>
       <style jsx>{`
         .top-ticker-lux { 
@@ -332,7 +332,7 @@ export default function EVMobilityPage() {
           fetchOnlineDrivers();
         },
         () => {
-          setGeoStatus("GPS_REJECTED_USING_METRO_FALLBACK");
+          setGeoStatus("GPS REJECTED USING METRO FALLBACK");
           
           if (updateMap && typeof setMapCenter === 'function') {
             setMapCenter([FALLBACK_LAT, FALLBACK_LNG]);
@@ -485,12 +485,12 @@ export default function EVMobilityPage() {
               router.push('/s2b');
               return;
             } else {
-              setAuthError("INVALID_CREDENTIALS: Incorrect security code.");
+              setAuthError("INVALID CREDENTIALS: Incorrect security code.");
               setAuthLoading(false);
               return;
             }
           } else {
-            setAuthError("ACCESS_DENIED: Profile not configured for the AZPHUR ecosystem modules.");
+            setAuthError("ACCESS DENIED: Profile not configured for the AZPHUR ecosystem modules.");
             setAuthLoading(false);
             return;
           }
@@ -503,7 +503,7 @@ export default function EVMobilityPage() {
       });
 
       if (authError) {
-        setAuthError("INVALID_CREDENTIALS: Incorrect security code.");
+        setAuthError("INVALID CREDENTIALS: Incorrect security code.");
       }
     } catch {
       setAuthError('An unexpected authentication anomaly occurred.');
@@ -677,12 +677,12 @@ export default function EVMobilityPage() {
           <div className="logo-group">
             <img src="/logo-azphur.avif" alt="AZPHUR Logo" className="main-logo" onClick={() => router.push('/')} />
             <div className="status-orb"></div>
-            <span className="op-status-tag">EVMOB_MODULE_05</span>
+            <span className="op-status-tag">EVMOB MODULE 05</span>
           </div>
           <div className="nav-items">
             <div className="network-signal">
               <span className="sig-dot"></span>
-              <span>SECURE_LINK // {liveMs}ms</span>
+              <span>SECURE LINK // {liveMs}ms</span>
             </div>
           </div>
         </nav>
@@ -695,7 +695,7 @@ export default function EVMobilityPage() {
           
           <form onSubmit={handleLogin}>
             <div className="input-group">
-              <label>ACCOUNT_EMAIL</label>
+              <label>ACCOUNT EMAIL</label>
               <input 
                 type="email" 
                 placeholder="client@azphur.com" 
@@ -705,7 +705,7 @@ export default function EVMobilityPage() {
               />
             </div>
             <div className="input-group">
-              <label>SECURITY_CODE</label>
+              <label>SECURITY CODE</label>
               <input 
                 type="password" 
                 placeholder="••••••••" 
@@ -718,7 +718,7 @@ export default function EVMobilityPage() {
               {authLoading ? "INITIALIZING UPLINK..." : "INITIALIZE_SESSION →"}
             </button>
           </form>
-          <span className="encryption-tag">ENCRYPTION: AES-256 // STATUS: LINK_ACTIVE</span>
+          <span className="encryption-tag">ENCRYPTION: AES-256 // STATUS: LINK ACTIVE</span>
         </div>
       </div>
     );
@@ -803,13 +803,13 @@ export default function EVMobilityPage() {
         <div className="logo-group">
           <img src="/logo-azphur.avif" alt="AZPHUR Logo" className="main-logo" onClick={() => router.push('/')} />
           <div className="status-orb"></div>
-          <span className="op-status-tag">EVMOB_MODULE_05</span>
+          <span className="op-status-tag">EVMOB MODULE 05</span>
           <span style={{ fontSize: '7px', color: '#0891b2', marginLeft: '10px', fontFamily: 'monospace' }}>[{geoStatus}]</span>
         </div>
         <div className="nav-items">
           <div className="network-signal">
             <span className="sig-dot"></span>
-            <span>SECURE_LINK // {liveMs}ms</span>
+            <span>SECURE LINK // {liveMs}ms</span>
           </div>
           <button className="btn-red-outline" onClick={handleLogout}>DISCONNECT 👋</button>
         </div>
@@ -820,7 +820,7 @@ export default function EVMobilityPage() {
           <div className="app-header">
             <div className="brand-link">
               <span className="brand-text">
-                AZPHUR <span className="blue-pill">MODULE_05_LIVE</span>
+                AZPHUR <span className="blue-pill">MODULE 05 LIVE</span>
               </span>
             </div>
             <div className="user-profile-badge">

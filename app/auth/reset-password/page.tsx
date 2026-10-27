@@ -24,9 +24,9 @@ const TopTicker: React.FC = () => {
     <div className={`top-ticker-lux ${mounted ? 'visible' : ''}`}>
       <div className="ticker-inner">
         <span className="live-pill">SYSTEM_OK</span>
-        <span className="stat">CO2_SAVED: <strong>{new Intl.NumberFormat('en-US').format(stats.co2)}</strong></span>
+        <span className="stat">CO2 SAVED: <strong>{new Intl.NumberFormat('en-US').format(stats.co2)}</strong></span>
         <div className="sep"></div>
-        <span className="stat">NET_POWER: <strong>{stats.mw.toFixed(2)}</strong> MW</span>
+        <span className="stat">NET POWER: <strong>{stats.mw.toFixed(2)}</strong> MW</span>
       </div>
     </div>
   );
@@ -236,7 +236,7 @@ export default function ResetPasswordPage() {
             onClick={() => router.push('/')} 
           />
           <div className="status-orb"></div>
-          <span className="op-status-tag">UNIVERSAL_GATEWAY_v3</span>
+          <span className="op-status-tag">UNIVERSAL GATEWAY v3</span>
         </div>
         
         <div className="nav-items">
@@ -249,7 +249,7 @@ export default function ResetPasswordPage() {
       <div className="center-content">
         <div className="login-box-premium">
           <div className="login-header">
-            <span className="phase-label">SECURE_CREDENTIAL_OVERRIDE</span>
+            <span className="phase-label">SECURE CREDENTIAL OVERRIDE</span>
             <h2 className="text-cyan">Update Security Code</h2>
             <p className="login-desc">Establish a new top-tier authentication key to restore your platform session.</p>
           </div>
@@ -325,7 +325,7 @@ export default function ResetPasswordPage() {
 
               <div className="input-group" style={{ marginTop: '20px' }}>
                 <label>
-                  <span>CONFIRM_PASSWORD</span>
+                  <span>CONFIRM SPASSWORD</span>
                   {confirmPassword && (
                     <span className="match-badge" style={{ color: isMatch ? '#10b981' : '#ef4444' }}>
                       {isMatch ? '✓ MATCHED' : '✕ NO_MATCH'}

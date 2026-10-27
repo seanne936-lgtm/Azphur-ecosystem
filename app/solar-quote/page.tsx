@@ -39,8 +39,9 @@ const totalPhotosCount = (mdpPhotos?.length || 0) + (housePhotos?.length || 0) +
   // Private Data States
   const [myQuotations, setMyQuotations] = useState<any[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState<Record<string, boolean>>({});
   const [isAuthorizedCustomer, setIsAuthorizedCustomer] = useState<boolean>(false);
-  const [debugStatus, setDebugStatus] = useState<string>("Waiting...");
+  const [, setDebugStatus] = useState<string>("Waiting...");
 
   // Active Chat State
   const [activeChatQuoteId, setActiveChatQuoteId] = useState<string | null>(null);
@@ -270,6 +271,9 @@ const handleSubmitLead = async (e: React.FormEvent<HTMLFormElement>) => {
   // When Xendit is connected, replace this function with a backend-created
   // checkout session. Never accept the amount or beneficiary from the browser.
   const handleSimulatedProjectPayment = async (leadId: string, stage: ProjectPaymentStage) => {
+    const paymentKey = `${leadId}:${stage}`;
+    setPaymentLoading(prev => ({ ...prev, [paymentKey]: true }));
+
     try {
       const paymentTarget = stage === 'downpayment' ? 'project_downpayment' : 'project_final';
 
@@ -304,6 +308,12 @@ const handleSubmitLead = async (e: React.FormEvent<HTMLFormElement>) => {
       }
     } catch (err) {
       alert("TEST_PAYMENT_ERROR");
+    } finally {
+      setPaymentLoading(prev => {
+        const next = { ...prev };
+        delete next[paymentKey];
+        return next;
+      });
     }
   };
 
@@ -882,7 +892,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
   return (
     <div className="az-premium-canvas quote-screen">
       <style jsx global>{`
-        html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; box-sizing: border-box; width: 100%; overflow-x: hidden; }
+        html, body { background-color: #f0f9fa !important; margin: 0; padding: 0; min-width: 320px; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; box-sizing: border-box; width: 100%; overflow-x: hidden; }
         .az-premium-canvas { background-color: #f0f9fa; min-height: 100vh; color: #1d1d1f; display: flex; flex-direction: column; width: 100%; box-sizing: border-box; overflow-x: hidden; }
         
         /* Mobile-first responsive navigation adjustments */
@@ -892,6 +902,8 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
           .nav-items { justify-content: flex-end; width: 100%; gap: 8px; }
           .center-content { padding: 15px 10px !important; width: 100% !important; box-sizing: border-box; }
           .login-box-premium { padding: 20px 15px !important; width: 100% !important; box-sizing: border-box; }
+          .system-status { display: none; }
+          .nav-items > .exit-btn-lux { min-height: 36px; }
         }
       `}</style>
 
@@ -902,7 +914,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
           <img src="/logo-azphur.avif" alt="AZPHUR Logo" style={{ height: '32px', cursor: 'pointer' }} onClick={() => router.push('/')} />
           <div className="status-orb"></div>
           <span className="op-status-tag" style={{ fontSize: '10px' }}>SHAPING SUSTAINABLE POSSIBILITIES</span>
-          <span style={{ fontSize: '7px', color: '#0891b2', marginLeft: '4px', fontFamily: 'monospace' }}>[SYS: {debugStatus}]</span>
+          <span className="system-status">SECURE ACCESS</span>
         </div>
         
         <div className="nav-items" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -916,7 +928,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
               {showLogin ? "CLOSE LOGIN" : "ACCESS PORTAL"}
             </button>
           )}
-          <Link href="/" className="exit-btn-lux">EXIT</Link>
+          <Link href="/" className="exit-btn-lux" aria-label="Back to AZPHUR main page">← BACK</Link>
         </div>
       </nav>
 
@@ -1304,7 +1316,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                               ) : q.payment_method !== 'direct' ? (
                                 <div style={{ marginTop: '10px', background: '#fef9c3', color: '#854d0e', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>🔒 CHOOSE PAY DIRECT OR REQUEST FINANCING ABOVE BEFORE PAYING</div>
                               ) : (
-                                <button onClick={() => handleSimulatedProjectPayment(q.id, 'downpayment')} className="login-btn-premium" style={{ margin: '10px 0 0', padding: '11px', fontSize: '9px', background: '#0891b2', width: '100%' }}>TEST PAY PROJECT DOWN PAYMENT</button>
+                                <button onClick={() => handleSimulatedProjectPayment(q.id, 'downpayment')} disabled={Boolean(paymentLoading[`${q.id}:downpayment`])} aria-busy={Boolean(paymentLoading[`${q.id}:downpayment`])} className="login-btn-premium" style={{ margin: '10px 0 0', padding: '11px', fontSize: '9px', background: '#0891b2', width: '100%', cursor: paymentLoading[`${q.id}:downpayment`] ? 'wait' : 'pointer' }}>{paymentLoading[`${q.id}:downpayment`] ? 'PROCESSING TEST PAYMENT…' : 'TEST PAY PROJECT DOWN PAYMENT'}</button>
                               )}
                             </div>
 
@@ -1327,7 +1339,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                               ) : q.payment_method !== 'direct' ? (
                                 <div style={{ marginTop: '10px', background: '#fef9c3', color: '#854d0e', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>🔒 CHOOSE PAY DIRECT OR REQUEST FINANCING ABOVE BEFORE PAYING</div>
                               ) : projectFinalUnlocked && projectDownpaymentPaid ? (
-                                <button onClick={() => handleSimulatedProjectPayment(q.id, 'final')} className="login-btn-premium" style={{ margin: '10px 0 0', padding: '11px', fontSize: '9px', background: '#166534', width: '100%' }}>TEST PAY PROJECT FINAL BALANCE</button>
+                                <button onClick={() => handleSimulatedProjectPayment(q.id, 'final')} disabled={Boolean(paymentLoading[`${q.id}:final`])} aria-busy={Boolean(paymentLoading[`${q.id}:final`])} className="login-btn-premium" style={{ margin: '10px 0 0', padding: '11px', fontSize: '9px', background: '#166534', width: '100%', cursor: paymentLoading[`${q.id}:final`] ? 'wait' : 'pointer' }}>{paymentLoading[`${q.id}:final`] ? 'PROCESSING TEST PAYMENT…' : 'TEST PAY PROJECT FINAL BALANCE'}</button>
                               ) : (
                                 <div style={{ marginTop: '10px', background: '#fef9c3', color: '#854d0e', padding: '8px', borderRadius: '6px', fontSize: '8px', fontWeight: 900, textAlign: 'center' }}>🔒 FINAL PAYMENT LOCKED UNTIL BOTH FINAL ALLOCATIONS ARE APPROVED</div>
                               )}
@@ -1664,7 +1676,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
                 ✓ REQUEST READY TO SEND
               </div>
             )}
-            <button type="submit" disabled={loadingForm || !isSubmitUnlocked} className="login-btn-premium" style={{ opacity: !isSubmitUnlocked ? 0.6 : 1, cursor: !isSubmitUnlocked ? 'not-allowed' : 'pointer' }}>
+            <button type="submit" disabled={loadingForm || !isSubmitUnlocked} aria-busy={loadingForm} className="login-btn-premium" style={{ opacity: loadingForm || !isSubmitUnlocked ? 0.6 : 1, cursor: loadingForm || !isSubmitUnlocked ? 'not-allowed' : 'pointer' }}>
               {loadingForm ? 'SENDING REQUEST...' : 'SEND MY FREE QUOTE REQUEST'}
             </button>
           </form>
@@ -1681,7 +1693,9 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       .nav-items { display: flex; align-items: center; gap: 10px; }
       .btn-cyan-outline { background: none; border: 1px solid #22d3ee; color: #0891b2; padding: 8px 16px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; letter-spacing: 1px; white-space: nowrap; }
       .btn-cyan-outline:hover { background: #22d3ee; color: #fff; box-shadow: 0 4px 12px rgba(34, 211, 238, 0.2); }
-      .exit-btn-lux { font-size: 10px; color: #1d1d1f; font-weight: 900; text-decoration: none; border: 3px solid #1d1d1f; padding: 6px 12px; border-radius: 8px; background: #fff; text-transform: uppercase; letter-spacing: 1px; }
+      .exit-btn-lux { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #0e7490; font-weight: 900; text-decoration: none; border: 1px solid #67e8f9; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,.9); text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 12px rgba(34,211,238,.12); transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+      .exit-btn-lux:hover { background:#ecfeff; transform:translateY(-1px); box-shadow:0 8px 18px rgba(8,145,178,.16); }
+      .system-status { font-size:8px; color:#0e7490; margin-left:4px; font-family:monospace; font-weight:800; letter-spacing:.7px; }
       .user-badge-zone { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.9); border: 1px solid rgba(34,211,238,0.3); padding: 4px 10px; border-radius: 50px; flex-wrap: wrap; justify-content: center; }
       .user-email-tag { font-size: 10px; font-weight: 700; color: #0891b2; font-family: monospace; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .btn-logout { border-color: #f87171; color: #ef4444; padding: 4px 8px; }
@@ -1695,8 +1709,12 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       .input-group label { font-size: 9px; color: #0891b2; font-weight: 900; letter-spacing: 1.5px; display: block; margin-bottom: 6px; }
       .input-group input, .select-lux { width: 100%; padding: 12px; background: rgba(255, 255, 255, 0.9); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 10px; color: #1d1d1f; font-size: 12px; font-weight: 600; box-sizing: border-box; }
       .select-lux { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%230891b2' d='M0 0l5 5 5-5z'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; }
-      .login-btn-premium { background: #1d1d1f; color: white; padding: 14px; border-radius: 10px; font-weight: 900; border: none; cursor: pointer; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; width: 100%; margin-top: 15px; box-sizing: border-box; }
+      .login-btn-premium { background: #1d1d1f; color: white; padding: 14px; border-radius: 10px; font-weight: 900; border: none; cursor: pointer; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; width: 100%; margin-top: 15px; box-sizing: border-box; transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, opacity .16s ease; }
       .login-btn-premium:hover { background: #22d3ee; color: #1d1d1f; transform: translateY(-1px); }
+      .quote-screen button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+      .quote-screen button:not(:disabled):active { transform: translateY(1px) scale(.99); }
+      .quote-screen button:disabled { cursor: wait !important; opacity: .72; }
+      .quote-screen button:focus-visible, .quote-screen a:focus-visible, .quote-screen input:focus-visible, .quote-screen select:focus-visible, .quote-screen textarea:focus-visible { outline: 3px solid rgba(34,211,238,.42); outline-offset: 2px; }
       .quotes-table-wrapper { width: 100%; overflow-x: auto; margin-top: 15px; }
       .mono { font-family: monospace; font-size: 11px; }
       .status-tag { font-size: 8px; padding: 4px 8px; border-radius: 4px; font-weight: 900; text-transform: uppercase; display: inline-block; }
@@ -1734,7 +1752,7 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       .deal-room-step.is-complete, .deal-room-step.is-active { color:#11657a; }
       .deal-room-step.is-complete b { background:#0e9fb7; color:#fff; }
       .deal-room-step.is-active b { background:#d9f5f8; color:#0b7990; box-shadow:0 0 0 4px rgba(14,159,183,.12); }
-      @media (max-width: 640px) { .quote-screen .login-box-premium { padding: 20px 14px; border-width: 1px; } .quote-screen .input-group { padding: 10px; } }
+      @media (max-width: 640px) { .quote-screen .login-box-premium { padding: 20px 14px; border-width: 1px; } .quote-screen .input-group { padding: 10px; } .quote-screen input, .quote-screen select, .quote-screen textarea { font-size:16px !important; } .quote-screen .login-btn-premium { min-height:46px; } }
       @media (max-width:640px) { .quote-request-steps { grid-template-columns:1fr; gap:8px; } .deal-room-timeline { grid-template-columns:repeat(3,1fr); } }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     `}</style>

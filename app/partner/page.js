@@ -18,6 +18,7 @@ export default function PartnerDashboard() {
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [unlockedLeads, setUnlockedLeads] = useState({});
   const [leadActions, setLeadActions] = useState({});
+  const [savingLeadIds, setSavingLeadIds] = useState({});
   const [taxProfile, setTaxProfile] = useState({
     vatRegistered: false,
     vatRate: 0,
@@ -313,6 +314,10 @@ export default function PartnerDashboard() {
       installer_prices_include_tax: taxProfile.pricesIncludeTax
     };
 
+    // UX-only state: prevent duplicate clicks and show immediate feedback while the
+    // existing quotation flow completes. No payloads, links or database logic change.
+    setSavingLeadIds(prev => ({ ...prev, [leadId]: true }));
+
     try {
       const notificationResponse = await fetch('/api/v1/solar-leads', {
         method: 'PATCH',
@@ -375,6 +380,12 @@ export default function PartnerDashboard() {
 
     } catch (err) {
       alert("Error while saving proposal: " + err.message);
+    } finally {
+      setSavingLeadIds(prev => {
+        const next = { ...prev };
+        delete next[leadId];
+        return next;
+      });
     }
   }
 
@@ -1052,11 +1063,12 @@ export default function PartnerDashboard() {
 return (
     <div className="partner-canvas">
       <style jsx global>{`
-        html, body { background: linear-gradient(135deg, #fdfbf7 0%, #f0fdfa 50%, #e0f2fe 100%) !important; background-attachment: fixed !important; margin: 0; padding: 0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
+        html, body { background: linear-gradient(135deg, #fdfbf7 0%, #f0fdfa 50%, #e0f2fe 100%) !important; background-attachment: fixed !important; margin: 0; padding: 0; min-width: 320px; font-family: 'Inter', sans-serif; overflow-x: hidden; }
         .partner-canvas { background: linear-gradient(135deg, #fdfbf7 0%, #f0fdfa 50%, #e0f2fe 100%) !important; min-height: 100vh; color: #1e293b; box-sizing: border-box; }
         .nav-partner { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; max-width: 1400px; margin: 0 auto; box-sizing: border-box; }
         .main-logo { height: 28px; cursor: pointer; filter: drop-shadow(0 2px 4px rgba(34,211,238,0.2)); max-width: 140px; }
-        .btn-back { font-size: 10px; font-weight: 900; color: #0891b2; text-decoration: none; letter-spacing: 1px; border: 2px solid #22d3ee; padding: 6px 12px; border-radius: 8px; background: #fff; box-shadow: 0 4px 12px rgba(34,211,238,0.1); white-space: nowrap; }
+        .btn-back { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; color: #0e7490; text-decoration: none; letter-spacing: 1px; border: 1px solid #67e8f9; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,.9); box-shadow: 0 4px 12px rgba(34,211,238,.12); white-space: nowrap; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+        .btn-back:hover { background: #ecfeff; transform: translateY(-1px); box-shadow: 0 8px 18px rgba(8,145,178,.16); }
         .container { max-width: 1200px; margin: 0 auto; padding: 0 15px 60px; box-sizing: border-box; width: 100%; }
         .auth-card { max-width: 450px; width: 100%; margin: 30px auto; background: #fff; padding: 25px 15px; border-radius: 16px; border: 3px solid #22d3ee; box-shadow: 0 15px 35px rgba(34, 211, 238, 0.15); text-align: center; box-sizing: border-box; }
         .phase-label { font-size: 9px; font-weight: 900; color: #0891b2; letter-spacing: 1.5px; margin-bottom: 8px; display: block; text-transform: uppercase; }
@@ -1071,7 +1083,10 @@ return (
         .partner-canvas .lead-card { box-shadow: 0 12px 28px rgba(14,116,144,.08); }
         .partner-canvas .lead-card:hover { transform: translateY(-1px); transition: transform .18s ease; }
         .partner-canvas .notification-banner { border: 1px solid rgba(255,255,255,.28); }
-        .partner-canvas button { min-height: 34px; }
+        .partner-canvas button { min-height: 34px; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, opacity .16s ease; }
+        .partner-canvas button:not(:disabled):active { transform: translateY(1px) scale(.99); }
+        .partner-canvas button:disabled { cursor: wait !important; opacity: .72; }
+        .partner-canvas button:focus-visible, .partner-canvas a:focus-visible, .partner-canvas input:focus-visible, .partner-canvas select:focus-visible, .partner-canvas textarea:focus-visible { outline: 3px solid rgba(34,211,238,.4); outline-offset: 2px; }
         .partner-canvas .inventory-item-row { box-shadow: 0 7px 18px rgba(14,116,144,.05); }
         .partner-canvas .lead-action { transition: transform .16s ease, box-shadow .16s ease, filter .16s ease; }
         .partner-canvas .lead-action:hover { transform: translateY(-1px); filter: brightness(.98); box-shadow: 0 8px 16px rgba(15,23,42,.15); }
@@ -1081,15 +1096,18 @@ return (
         @media (max-width: 768px) {
           .nav-partner { padding: 12px 15px; }
           .main-logo { height: 24px; }
+          .btn-back { min-height: 36px; padding: 6px 10px; font-size: 9px; }
           .container { padding: 0 10px 40px; }
           .auth-card { margin: 20px auto; padding: 20px 12px; }
           .notification-banner { padding: 12px; }
+          .partner-canvas input, .partner-canvas select, .partner-canvas textarea { font-size: 16px !important; }
+          .partner-canvas .lead-action { min-height: 42px !important; }
         }
       `}</style>
 
       <nav className="nav-partner">
         <img src="/logo-azphur.avif" alt="AZPHUR" className="main-logo" onClick={() => window.location.href='/'} />
-        <Link href="/" className="btn-back">← BACK TO HQ</Link>
+        <Link href="/" className="btn-back" aria-label="Back to AZPHUR main page">← BACK</Link>
       </nav>
 
       <div className="container">
@@ -1371,7 +1389,8 @@ return (
                     if (isPriceLocked) return;
                     saveDetailedQuotation(lead.id, entityType, true);
                   }}
-                  disabled={isPriceLocked}
+                  disabled={isPriceLocked || Boolean(savingLeadIds[lead.id])}
+                  aria-busy={Boolean(savingLeadIds[lead.id])}
                   style={{ 
                     width: '100%', 
                     background: isPriceLocked ? '#cbd5e1' : '#0ea5e9', 
@@ -1389,7 +1408,7 @@ return (
                     textAlign: 'center'
                   }}
                 >
-                  {isPaidInitial ? 'LOCKED (DEPOSIT PAID)' : (hasThisEntitySubmitted ? 'QUOTE LOCKED' : 'EMIT_QUOTE_V2')}
+                  {savingLeadIds[lead.id] ? 'SAVING QUOTE…' : (isPaidInitial ? 'LOCKED (DEPOSIT PAID)' : (hasThisEntitySubmitted ? 'QUOTE LOCKED' : 'EMIT_QUOTE_V2'))}
                 </button>
               </div>
 
@@ -1795,16 +1814,20 @@ const renderThumbnails = (arr, label) => {
                     <button 
                       onClick={() => handleAcceptLead(lead.id)}
                       className="lead-action lead-action--accept"
-                      style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 900, fontSize: '10px', cursor: 'pointer', flex: 1, minWidth: '110px' }}
+                      disabled={Boolean(leadActions[lead.id])}
+                      aria-busy={leadActions[lead.id] === 'accepting'}
+                      style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 900, fontSize: '10px', cursor: leadActions[lead.id] ? 'wait' : 'pointer', flex: 1, minWidth: '110px' }}
                     >
-                      ✓ ACCEPT & CLAIM
+                      {leadActions[lead.id] === 'accepting' ? 'CLAIMING…' : '✓ ACCEPT & CLAIM'}
                     </button>
                     <button 
                       onClick={() => handleRejectLead(lead.id)}
                       className="lead-action lead-action--reject"
-                      style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 900, fontSize: '10px', cursor: 'pointer', minWidth: '110px' }}
+                      disabled={Boolean(leadActions[lead.id])}
+                      aria-busy={leadActions[lead.id] === 'declining'}
+                      style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontWeight: 900, fontSize: '10px', cursor: leadActions[lead.id] ? 'wait' : 'pointer', minWidth: '110px' }}
                     >
-                      ✕ REJECT / NO THANKS
+                      {leadActions[lead.id] === 'declining' ? 'DECLINING…' : '✕ REJECT / NO THANKS'}
                     </button>
                   </div>
                 </div>
@@ -1900,9 +1923,11 @@ const renderThumbnails = (arr, label) => {
 
                   <button
                     onClick={() => saveDetailedQuotation(lead.id, entityType)}
-                    style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 900, fontSize: '11px', cursor: 'pointer', width: '100%', marginTop: '12px', boxSizing: 'border-box' }}
+                    disabled={Boolean(savingLeadIds[lead.id])}
+                    aria-busy={Boolean(savingLeadIds[lead.id])}
+                    style={{ background: '#0284c7', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', fontWeight: 900, fontSize: '11px', cursor: savingLeadIds[lead.id] ? 'wait' : 'pointer', width: '100%', marginTop: '12px', boxSizing: 'border-box' }}
                   >
-                    💾 SAVE & LOCK PROPOSAL
+                    {savingLeadIds[lead.id] ? 'SAVING PROPOSAL…' : '💾 SAVE & LOCK PROPOSAL'}
                   </button>
                 </div>
               ) : (

@@ -41,6 +41,7 @@ export default function DriverHQPage() {
   const [isOnline, setIsOnline] = useState(false);
   const [activeRide, setActiveRide] = useState<RealRide | null>(null);
   const [fetchingRide, setFetchingRide] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
 
   useEffect(() => {
     checkDriverAuth();
@@ -208,34 +209,40 @@ export default function DriverHQPage() {
   const toggleOnlineStatus = async () => {
     if (!authorizedDriver) return;
     const newStatus = !isOnline;
-    
-    setIsOnline(newStatus);
+    setActionBusy('availability');
 
-    if (newStatus) {
-      registerPushNotifications(authorizedDriver.id);
-      fetchAssignedRide();
-    } else {
-      setActiveRide(null);
-    }
+    try {
+      setIsOnline(newStatus);
 
-    if (authorizedDriver.id !== 'admin-override-id') {
-      const { error } = await supabase
-        .from('driver_profiles')
-        .update({ 
-          is_online: newStatus,
-          is_available: newStatus 
-        })
-        .eq('id', authorizedDriver.id);
-
-      if (error) {
-        console.error("Error saving driver status:", error.message);
-        setIsOnline(!newStatus);
+      if (newStatus) {
+        registerPushNotifications(authorizedDriver.id);
+        fetchAssignedRide();
+      } else {
+        setActiveRide(null);
       }
+
+      if (authorizedDriver.id !== 'admin-override-id') {
+        const { error } = await supabase
+          .from('driver_profiles')
+          .update({ 
+            is_online: newStatus,
+            is_available: newStatus 
+          })
+          .eq('id', authorizedDriver.id);
+
+        if (error) {
+          console.error("Error saving driver status:", error.message);
+          setIsOnline(!newStatus);
+        }
+      }
+    } finally {
+      setActionBusy(null);
     }
   };
 
   const updateRideStatus = async (newStatus: 'accepted' | 'in_progress' | 'completed') => {
     if (!activeRide) return;
+    setActionBusy(newStatus);
 
     try {
       if (newStatus === 'accepted') {
@@ -301,6 +308,8 @@ export default function DriverHQPage() {
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       alert("Error updating ride status: " + errorMsg);
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -342,7 +351,7 @@ export default function DriverHQPage() {
             <span className="subtitle">{authorizedDriver?.vehicle_model} • <strong className="plate">{authorizedDriver?.vehicle_plate}</strong></span>
           </div>
         </div>
-        <Link href="/EV" className="exit-btn">EXIT HQ</Link>
+        <Link href="/EV" className="exit-btn" aria-label="Back to EV & Charge">← BACK</Link>
       </header>
 
       {/* STATUS TOGGLE CARD */}
@@ -354,8 +363,8 @@ export default function DriverHQPage() {
             <div className="status-sub">{isOnline ? 'Ready to receive real-time EV customer trips' : 'Go online to accept incoming dispatches'}</div>
           </div>
         </div>
-        <button onClick={toggleOnlineStatus} className="toggle-btn">
-          {isOnline ? 'PAUSE' : 'GO ONLINE'}
+        <button onClick={toggleOnlineStatus} disabled={actionBusy === 'availability'} aria-busy={actionBusy === 'availability'} className="toggle-btn">
+          {actionBusy === 'availability' ? 'UPDATING…' : (isOnline ? 'PAUSE' : 'GO ONLINE')}
         </button>
       </div>
 
@@ -429,20 +438,20 @@ export default function DriverHQPage() {
             {/* DRIVER ACTION AREA */}
             <div className="action-area">
               {activeRide.status === 'pending' && (
-                <button className="btn btn-accept" onClick={() => updateRideStatus('accepted')}>
-                  ACCEPT DISPATCH
+                <button className="btn btn-accept" disabled={actionBusy !== null} aria-busy={actionBusy === 'accepted'} onClick={() => updateRideStatus('accepted')}>
+                  {actionBusy === 'accepted' ? 'ACCEPTING DISPATCH…' : 'ACCEPT DISPATCH'}
                 </button>
               )}
 
               {activeRide.status === 'accepted' && (
-                <button className="btn btn-start" onClick={() => updateRideStatus('in_progress')}>
-                  ARRIVED AT PICKUP / START TRIP
+                <button className="btn btn-start" disabled={actionBusy !== null} aria-busy={actionBusy === 'in_progress'} onClick={() => updateRideStatus('in_progress')}>
+                  {actionBusy === 'in_progress' ? 'STARTING TRIP…' : 'ARRIVED AT PICKUP / START TRIP'}
                 </button>
               )}
 
               {activeRide.status === 'in_progress' && (
-                <button className="btn btn-complete" onClick={() => updateRideStatus('completed')}>
-                  COMPLETE TRIP & RECORD VAT (12%)
+                <button className="btn btn-complete" disabled={actionBusy !== null} aria-busy={actionBusy === 'completed'} onClick={() => updateRideStatus('completed')}>
+                  {actionBusy === 'completed' ? 'COMPLETING TRIP…' : 'COMPLETE TRIP & RECORD VAT (12%)'}
                 </button>
               )}
             </div>
@@ -457,7 +466,7 @@ export default function DriverHQPage() {
       </main>
 
       <style jsx>{`
-        .driver-wrapper { min-height: 100vh; background: #f8fafc; color: #0f172a; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 480px; margin: 0 auto; box-sizing: border-box; }
+        .driver-wrapper { min-height: 100vh; background: linear-gradient(135deg, #f8fafc 0%, #f0fdfa 55%, #eff6ff 100%); color: #0f172a; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 960px; margin: 0 auto; box-sizing: border-box; }
         
         .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
         .driver-info { display: flex; align-items: center; gap: 12px; }
@@ -465,8 +474,8 @@ export default function DriverHQPage() {
         .title { margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; }
         .subtitle { font-size: 12px; color: #64748b; }
         .plate { color: #0284c7; }
-        .exit-btn { color: #64748b; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; transition: 0.2s; background: #fff; }
-        .exit-btn:hover { background: #f1f5f9; color: #0f172a; }
+        .exit-btn { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; color: #0e7490; border: 1px solid #67e8f9; padding: 7px 12px; border-radius: 10px; text-decoration: none; font-size: 10px; font-weight: 900; letter-spacing: 1px; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; background: rgba(255,255,255,.9); box-shadow: 0 4px 12px rgba(34,211,238,.12); }
+        .exit-btn:hover { background: #ecfeff; color: #0e7490; transform: translateY(-1px); box-shadow: 0 8px 18px rgba(8,145,178,.16); }
 
         .status-card { margin-top: 18px; padding: 16px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
         .status-card.online { border-color: #38bdf8; background: #f0f9ff; }
@@ -476,10 +485,10 @@ export default function DriverHQPage() {
         @keyframes pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
         .status-title { font-size: 12px; font-weight: 900; letter-spacing: 0.5px; color: #0f172a; }
         .status-sub { font-size: 11px; color: #64748b; }
-        .toggle-btn { background: #0f172a; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; transition: 0.2s; }
+        .toggle-btn { min-height: 40px; background: #0f172a; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; transition: transform .16s ease, opacity .16s ease, background .16s ease; touch-action: manipulation; }
         .toggle-btn:hover { background: #1e293b; }
 
-        .content { margin-top: 24px; }
+        .content { width: 100%; max-width: 760px; margin: 24px auto 0; }
         .section-hdr { font-size: 11px; color: #64748b; letter-spacing: 1.5px; font-weight: 900; margin-bottom: 12px; display: flex; justify-content: space-between; }
         .syncing { color: #0284c7; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.4; } }
@@ -504,15 +513,18 @@ export default function DriverHQPage() {
 
         .map-wrapper { margin-top: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; position: relative; }
         .map-iframe { width: 100%; height: 200px; border: none; }
-        .map-nav-btn { width: 100%; background: #ffffff; color: #0284c7; border: none; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; text-align: center; border-top: 1px solid #e2e8f0; transition: 0.2s; }
+        .map-nav-btn { min-height: 44px; width: 100%; background: #ffffff; color: #0284c7; border: none; padding: 12px; font-size: 11px; font-weight: 800; letter-spacing: 0.5px; cursor: pointer; text-align: center; border-top: 1px solid #e2e8f0; transition: transform .16s ease, background .16s ease; touch-action: manipulation; }
         .map-nav-btn:hover { background: #f8fafc; }
 
         .action-area { margin-top: 18px; }
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-weight: 900; font-size: 13px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: 0.2s; }
+        .btn { min-height: 50px; width: 100%; padding: 15px; border: none; border-radius: 12px; font-weight: 900; font-size: 13px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: transform .16s ease, opacity .16s ease, box-shadow .16s ease; touch-action: manipulation; }
         .btn-accept { background: #0284c7; color: #ffffff; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3); }
         .btn-start { background: #2563eb; color: #ffffff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); }
         .btn-complete { background: #059669; color: #ffffff; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
         .btn:hover { transform: translateY(-1px); opacity: 0.95; }
+        .driver-wrapper button:not(:disabled):active { transform: translateY(1px) scale(.99); }
+        .driver-wrapper button:disabled { cursor: wait; opacity: .7; }
+        .driver-wrapper button:focus-visible, .driver-wrapper a:focus-visible { outline: 3px solid rgba(34,211,238,.45); outline-offset: 2px; }
 
         .placeholder-card { background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 16px; padding: 40px 20px; text-align: center; color: #64748b; }
         .placeholder-card h3 { color: #0f172a; font-size: 15px; font-weight: 800; margin: 12px 0 6px 0; }
@@ -521,6 +533,16 @@ export default function DriverHQPage() {
 
         .radar-search { width: 40px; height: 40px; border: 2px solid #0284c7; border-radius: 50%; margin: 0 auto; animation: radar 1.5s infinite ease-out; }
         @keyframes radar { 0% { transform: scale(0.1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+        @media (max-width: 640px) {
+          .driver-wrapper { padding: 14px; }
+          .header, .status-card { align-items: flex-start; gap: 12px; }
+          .header { flex-wrap: wrap; }
+          .status-card { flex-direction: column; }
+          .toggle-btn { width: 100%; }
+          .driver-info { min-width: 0; }
+          .title, .subtitle, .point-details p { overflow-wrap: anywhere; }
+          .map-iframe { height: 220px; }
+        }
       `}</style>
     </div>
   );

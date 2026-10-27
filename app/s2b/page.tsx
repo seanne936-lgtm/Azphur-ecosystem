@@ -218,14 +218,14 @@ export default function S2BCombinedPortal() {
               </div>
             ))}
           </nav>
-          <button onClick={() => router.push('/')} className="back-btn">EXIT_HQ</button>
+          <button onClick={() => router.push('/')} className="back-btn">EXIT HQ</button>
         </div>
       </aside>
 
       <main className="main-content">
         <div className="header-wrapper">
           <div className="title-section">
-            <span className="phase-label">OPERATIONAL_CORE_v2.06</span>
+            <span className="phase-label">OPERATIONAL CORE v2.06</span>
             <h1 className="main-title-cyan">LOGISTICS GATEWAY</h1>
           </div>
           <div className="actions-section">
@@ -239,7 +239,7 @@ export default function S2BCombinedPortal() {
             </div>
             {canManageCargo && (
               <button onClick={() => setIsModalOpen(true)} className="modern-add-btn">
-                + REGISTER_NEW_CARGO
+                + REGISTER NEW CARGO
               </button>
             )}
           </div>
@@ -252,7 +252,7 @@ export default function S2BCombinedPortal() {
                 <thead>
                   <tr>
                     <th>REF / ASSET_INFO</th>
-                    <th>LOGISTICS_ROUTE</th>
+                    <th>LOGISTICS ROUTE</th>
                     <th>STATUS {userRole === 'ADMIN' && "(CLICK TO CHANGE)"}</th>
                   </tr>
                 </thead>
@@ -289,7 +289,7 @@ export default function S2BCombinedPortal() {
                   ))}
                 </tbody>
               </table>
-              {filteredData.length === 0 && !loading && <div className="empty-state">NO_ASSETS_FOUND</div>}
+              {filteredData.length === 0 && !loading && <div className="empty-state">NO ASSETS FOUND</div>}
             </div>
           </div>
         )}
@@ -306,16 +306,16 @@ export default function S2BCombinedPortal() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h2 className="modal-title">REGISTER_NEW_CARGO</h2>
+              <h2 className="modal-title">REGISTER NEW CARGO</h2>
               <p className="modal-subtitle">Initialize asset deployment in the logistics grid.</p>
             </div>
             <form onSubmit={handleCloudSubmit} className="modern-form">
               <div className="form-group">
-                <label>TRACKING_ID (CORE KEY FOR MAKE.CM)</label>
+                <label>TRACKING ID (CORE KEY FOR MAKE.CM)</label>
                 <input required type="text" placeholder="Es: DHL-PH-99812" value={newOrder.tracking_id} onChange={e => setNewOrder({...newOrder, tracking_id: e.target.value})} />
               </div>
               <div className="form-group">
-                <label>CUSTOMER_EMAIL</label>
+                <label>CUSTOMER EMAIL</label>
                 <input required type="email" placeholder="client@access.com" value={newOrder.customer_email} onChange={e => setNewOrder({...newOrder, customer_email: e.target.value})} />
               </div>
               {userRole === 'ADMIN' ? (
@@ -340,7 +340,7 @@ export default function S2BCombinedPortal() {
                 </div>
               </div>
               <div className="form-group">
-                <label>HARDWARE_DESCRIPTION</label>
+                <label>HARDWARE DESCRIPTION</label>
                 <input required type="text" placeholder="Asset Item Name" value={newOrder.type} onChange={e => setNewOrder({...newOrder, type: e.target.value})} />
               </div>
               <div className="form-group">
@@ -349,8 +349,8 @@ export default function S2BCombinedPortal() {
               </div>
               
               <div className="modal-actions">
-                <button type="submit" className="execute-btn">EXECUTE_DEPLOYMENT</button>
-                <button type="button" className="abort-btn" onClick={() => setIsModalOpen(false)}>ABORT_MISSION</button>
+                <button type="submit" className="execute-btn">EXECUTE DEPLOYMENT</button>
+                <button type="button" className="abort-btn" onClick={() => setIsModalOpen(false)}>ABORT MISSION</button>
               </div>
             </form>
           </div>

@@ -324,7 +324,7 @@ export default function LoginPage() {
             onClick={() => router.push('/')} 
           />
           <div className="status-orb"></div>
-          <span className="op-status-tag">UNIVERSAL_GATEWAY_v3</span>
+          <span className="op-status-tag">UNIVERSAL GATEWAY v3</span>
         </div>
         
         <div className="nav-items">
@@ -337,7 +337,7 @@ export default function LoginPage() {
       <div className="center-content">
         <div className="login-box-premium">
           <div className="login-header">
-            <span className="phase-label">SYSTEM_AUTHENTICATION</span>
+            <span className="phase-label">SYSTEM AUTHENTICATION</span>
             <h2 className="text-cyan">
               {isAdmin 
                 ? 'Admin Access Portal' 
@@ -360,37 +360,37 @@ export default function LoginPage() {
 
           {isAdmin ? (
             <div className="admin-routing-panel fade-in">
-              <span className="phase-label admin-alert-tag">⚠️ ADMIN_ACCESS_GRANTED // SELECT_DESTINATION</span>
+              <span className="phase-label admin-alert-tag">⚠️ ADMIN ACCESS GRANTED // SELECT DESTINATION</span>
               
               <button onClick={() => navigateToModule('/partner')} className="login-btn-premium btn-admin-partner">
-                GO TO PARTNER & INSTALLERS PORTAL (MOD_04) 🌐
+                GO TO PARTNER & INSTALLERS PORTAL (MOD 04) 🌐
               </button>
 
               <button onClick={() => navigateToModule('/EV')} className="login-btn-premium btn-admin-blue">
-                GO TO EV MOBILITY (MOD_05) 🔋
+                GO TO EV MOBILITY (MOD 05) 🔋
               </button>
 
               <button onClick={() => navigateToModule('/s2b')} className="login-btn-premium btn-admin-cyan">
-                GO TO S2B LOGISTICS →
+                GO TO S2B LOGISTICS → 📦
               </button>
 
               <button onClick={() => navigateToModule('/admin/operations')} className="login-btn-premium btn-admin-operations">
-                OPEN ADMIN OPERATIONS →
+                OPEN ADMIN OPERATIONS → 🔐
               </button>
             </div>
           ) : isProvider ? (
             <div className="admin-routing-panel fade-in">
-              <span className="phase-label admin-alert-tag">✓ PROVIDER_ACCESS_GRANTED // SELECT_WORKSPACE</span>
+              <span className="phase-label admin-alert-tag">✓ PROVIDER ACCESS GRANTED // SELECT WORKSPACE</span>
               <button onClick={() => navigateToModule('/s2b')} className="login-btn-premium btn-admin-cyan">
-                GO TO SUPPLY HUB →
+                GO TO SUPPLY HUB → 📦
               </button>
               <button onClick={() => navigateToModule('/partner')} className="login-btn-premium btn-admin-partner">
-                GO TO PARTNERS PORTAL →
+                GO TO PARTNERS PORTAL → 🤝
               </button>
             </div>
           ) : isDualCustomer ? (
             <div className="admin-routing-panel fade-in">
-              <span className="phase-label admin-alert-tag">⚡ DUAL_PROFILE_DETECTED // CHOOSE_DESTINATION</span>
+              <span className="phase-label admin-alert-tag">⚡ DUAL PROFILE DETECTED // CHOOSE DESTINATION</span>
               
               <button onClick={() => navigateToModule('/solar-quote')} className="login-btn-premium btn-admin-partner">
                 GO TO SOLAR QUOTATIONS (MODULE 2 / SOLAR) ☀️
@@ -419,7 +419,7 @@ export default function LoginPage() {
               )}
 
               <div className="input-group">
-                <label>REGISTERED_EMAIL</label>
+                <label>REGISTERED EMAIL</label>
                 <input 
                   type="email" 
                   placeholder="operator@azphur.com" 
@@ -446,7 +446,7 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={handleLogin} className="login-form">
               <div className="input-group">
-                <label>ACCOUNT_EMAIL</label>
+                <label>ACCOUNT EMAIL</label>
                 <input 
                   type="email" 
                   placeholder="operator@azphur.com" 
@@ -458,7 +458,7 @@ export default function LoginPage() {
               
               <div className="input-group" style={{ marginTop: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label style={{ margin: 0 }}>SECURITY_CODE</label>
+                  <label style={{ margin: 0 }}>SECURITY CODE</label>
                   <button 
                     type="button"
                     onClick={() => setShowRecovery(true)}
