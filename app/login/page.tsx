@@ -520,12 +520,19 @@ export default function LoginPage() {
         .op-status-tag { font-size: 7px; color: #0891b2; border: 1px solid #22d3ee; padding: 2px 6px; border-radius: 3px; margin-left: 15px; font-weight: 900; white-space: nowrap; }
         .nav-items { display: flex; align-items: center; }
         
-        .btn-cyan-outline { 
-          background: none; border: 1px solid #22d3ee; color: #0891b2; padding: 8px 20px; 
-          border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; 
-          transition: 0.3s; flex-shrink: 0; text-decoration: none; letter-spacing: 1px;
+        :global(.btn-cyan-outline) {
+          display: inline-flex; align-items: center; justify-content: center;
+          background: #fff; border: 1.5px solid #22d3ee; color: #0891b2;
+          padding: 10px 20px; border-radius: 16px; cursor: pointer;
+          font-weight: 800; font-size: 11px; letter-spacing: .4px; text-transform: uppercase;
+          text-decoration: none; flex-shrink: 0;
+          box-shadow: 0 8px 22px rgba(6, 182, 212, 0.14);
+          transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
         }
-        .btn-cyan-outline:hover { background: #22d3ee; color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(34, 211, 238, 0.2); }
+        :global(.btn-cyan-outline:hover) {
+          background: #ecfeff; color: #0891b2; transform: translateY(-1px);
+          box-shadow: 0 12px 26px rgba(6, 182, 212, 0.22);
+        }
 
         .center-content { flex: 1; display: flex; justify-content: center; align-items: center; padding: 60px 20px; z-index: 1; width: 100%; box-sizing: border-box; }
 

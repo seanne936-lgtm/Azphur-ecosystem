@@ -3,23 +3,71 @@ import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const adminEmails = [
-  "admin@azphur.com", 
-  "azphur@gmail.com", 
-  "seanne936@gmail.com",
-  "rhonjhonglenpaz@gmail.com"
-];
+const adminEmails = (process.env.AZPHUR_ADMIN_EMAILS || '')
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 const ADMIN_NOTIFY_LIST = [
   "seanne936@gmail.com",
   "azphur@gmail.com",
   "rhonjhonglenpaz@gmail.com"
 ];
+
+type AuthUser = { id: string; email: string };
+type PartnerIdentity = { name: string; email: string; type: 'provider' | 'installer' };
+
+async function requireAuthUser(request: Request): Promise<AuthUser | null> {
+  const authorization = request.headers.get('authorization');
+  const accessToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
+  if (!accessToken) return null;
+
+  const { data, error } = await supabase.auth.getUser(accessToken);
+  const email = data.user?.email?.trim().toLowerCase();
+  if (error || !data.user || !email) return null;
+  return { id: data.user.id, email };
+}
+
+async function getPartnerIdentity(user: AuthUser, type: 'provider' | 'installer'): Promise<PartnerIdentity | null> {
+  if (type === 'provider') {
+    const { data } = await supabase
+      .from('partner_whitelist')
+      .select('email, provider_name')
+      .eq('email', user.email)
+      .maybeSingle();
+    const name = data?.provider_name?.trim();
+    if (!name || !data?.email) return null;
+    return { name, email: data.email.trim().toLowerCase(), type };
+  }
+
+  const { data } = await supabase
+    .from('installers_whitelist')
+    .select('email, installer_name')
+    .eq('email', user.email)
+    .maybeSingle();
+  const name = data?.installer_name?.trim();
+  if (!name || !data?.email) return null;
+  return { name, email: data.email.trim().toLowerCase(), type };
+}
+
+const isAdmin = (email: string) => adminEmails.includes(email);
+const normalizeEntityName = (value: unknown) => String(value || '').replace(/[\[\]"]/g, '').toLowerCase().replace(/[\s_-]/g, '').trim();
+
+function toList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+}
 
 // Helper per recuperare la mail dalla whitelist in base al nome
 async function getWhitelistEmail(name: string, type: 'provider' | 'installer'): Promise<string> {
@@ -59,6 +107,9 @@ async function getWhitelistEmail(name: string, type: 'provider' | 'installer'): 
  */
 export async function GET(request: Request) {
   try {
+    const user = await requireAuthUser(request);
+    if (!user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const email = searchParams.get('email');
     const userId = searchParams.get('user_id');
@@ -70,19 +121,17 @@ export async function GET(request: Request) {
       );
     }
 
-    const emailClean = email ? email.toLowerCase().trim() : '';
-    const isAdmin = adminEmails.includes(emailClean);
+    const emailClean = email ? email.toLowerCase().trim() : user.email;
+    if (emailClean !== user.email && !isAdmin(user.email)) {
+      return NextResponse.json({ error: 'You can only access your own quotations.' }, { status: 403 });
+    }
 
     let query = supabase.from('leads').select('*');
 
-    if (isAdmin) {
+    if (isAdmin(user.email)) {
       query = query.order('created_at', { ascending: false });
     } else {
-      if (emailClean) {
-        query = query.or(`customer_email.eq.${emailClean},quote_details->>email.eq.${emailClean}`);
-      } else if (userId) {
-        query = query.eq('quote_details->>user_id', userId);
-      }
+      query = query.or(`customer_email.eq.${user.email},quote_details->>email.eq.${user.email}`);
     }
 
     const { data: leadsData, error } = await query;
@@ -303,11 +352,21 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { lead_id, selection_type, entity_name } = body;
+    const { lead_id, selection_type } = body;
 
-    if (!lead_id || !selection_type || !entity_name) {
-      return NextResponse.json({ error: 'Missing lead_id, selection_type or entity_name.' }, { status: 400 });
+    if (!lead_id || !['provider', 'installer'].includes(selection_type)) {
+      return NextResponse.json({ error: 'Missing or invalid lead acceptance data.' }, { status: 400 });
     }
+
+    const user = await requireAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    }
+    const identity = await getPartnerIdentity(user, selection_type);
+    if (!identity) {
+      return NextResponse.json({ error: 'Only the verified partner account can accept a lead.' }, { status: 403 });
+    }
+    const entity_name = identity.name;
 
     const { data: currentLead, error: fetchErr } = await supabase
       .from('leads')
@@ -382,7 +441,7 @@ export async function PUT(request: Request) {
     }
 
     const updatedLead = data?.[0] || null;
-    const partnerEmail = await getWhitelistEmail(entity_name, selection_type);
+    const partnerEmail = identity.email;
     const customerEmail = updatedLead?.customer_email || updatedLead?.quote_details?.email;
     const customerName = updatedLead?.customer_name || 'Valued Customer';
 
@@ -455,8 +514,10 @@ export async function PATCH(request: Request) {
       final_deal,
       deal_value,
       provider_downpayment,
+      provider_downpayment_pct,
       provider_balance,
       installer_downpayment,
+      installer_downpayment_pct,
       installer_balance,
       hide_for
     } = body;
@@ -475,27 +536,32 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
     }
 
+    const user = await requireAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
+    }
+    const customerEmail = (currentLead.customer_email || currentLead.quote_details?.email || '').trim().toLowerCase();
+    const isLeadCustomer = user.email === customerEmail;
     const isProjectPayment = payment_target === 'project_downpayment' || payment_target === 'project_final';
+    const isCustomerAction = action === 'select_partner' || isProjectPayment;
+    const isPartnerAction = action === 'save_quotation' || action === 'reject_lead' || action === 'set_balance_unlock';
+    const partnerIdentity = entity_type === 'provider' || entity_type === 'installer'
+      ? await getPartnerIdentity(user, entity_type)
+      : null;
+
+    if (isCustomerAction && !isLeadCustomer && !isAdmin(user.email)) {
+      return NextResponse.json({ error: 'You are not authorized to update this project.' }, { status: 403 });
+    }
+    if (isPartnerAction && !partnerIdentity) {
+      return NextResponse.json({ error: 'Only the verified partner account can update this lead.' }, { status: 403 });
+    }
+    if (!isCustomerAction && !isPartnerAction && !isAdmin(user.email)) {
+      return NextResponse.json({ error: 'This action is restricted to AZPHUR administrators.' }, { status: 403 });
+    }
 
     // Only the authenticated customer linked to the lead (or an AZPHUR admin)
     // may trigger a consolidated project payment, even in MOCK mode.
     if (isProjectPayment) {
-      const authorization = request.headers.get('authorization');
-      const accessToken = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
-
-      if (!accessToken) {
-        return NextResponse.json({ error: 'Authentication required for project payments.' }, { status: 401 });
-      }
-
-      const { data: authData, error: authError } = await supabase.auth.getUser(accessToken);
-      const authenticatedEmail = authData.user?.email?.toLowerCase().trim() || '';
-      const customerEmail = (currentLead.customer_email || currentLead.quote_details?.email || '').toLowerCase().trim();
-      const canPay = !authError && authenticatedEmail && (authenticatedEmail === customerEmail || adminEmails.includes(authenticatedEmail));
-
-      if (!canPay) {
-        return NextResponse.json({ error: 'You are not authorized to pay this project.' }, { status: 403 });
-      }
-
       if (!currentLead.assigned_provider || !currentLead.assigned_installer) {
         return NextResponse.json({ error: 'Provider and installer must both be selected before payment.' }, { status: 409 });
       }
@@ -511,6 +577,20 @@ export async function PATCH(request: Request) {
     const providerFinalPriceReadyBefore = Number(currentLead.provider_downpayment || 0) > 0 && Number(currentLead.provider_balance || 0) > 0;
     const installerFinalPriceReadyBefore = Number(currentLead.installer_downpayment || 0) > 0 && Number(currentLead.installer_balance || 0) > 0;
 
+    if (action === 'reject_lead') {
+      const column = entity_type === 'provider' ? 'partner_rejected_by' : 'installer_rejected_by';
+      const rejected = toList(currentLead[column]);
+      if (!rejected.some((name) => normalizeEntityName(name) === normalizeEntityName(partnerIdentity!.name))) {
+        rejected.push(partnerIdentity!.name);
+      }
+      updateData[column] = rejected;
+    }
+
+    if (action === 'set_balance_unlock') {
+      const column = entity_type === 'provider' ? 'provider_balance_unlocked' : 'installer_balance_unlocked';
+      updateData[column] = body.should_unlock === true;
+    }
+
     // 1. Gestione indipendente per nascondere il record completato al provider o all'installer
     if (hide_for) {
       if (hide_for === 'provider') updateData.provider_hidden = true;
@@ -518,10 +598,7 @@ export async function PATCH(request: Request) {
     }
 
     if (action === 'save_quotation') {
-      let cleanEntityName = entity_name || partner_name || 'AZPHUR Partner';
-      if (typeof cleanEntityName === 'string') {
-        cleanEntityName = cleanEntityName.replace(/[\[\]"]/g, '');
-      }
+      const cleanEntityName = partnerIdentity!.name;
 
       const normalizedVatRegistered = vat_registered === true || vat_registered === 'true';
       const normalizedPricesIncludeTax = prices_include_tax === true || prices_include_tax === 'true';
@@ -568,7 +645,7 @@ export async function PATCH(request: Request) {
       }
 
       updateData.quote_pdf_data = JSON.stringify({
-        partner_email: partner_email || 'partner@azphur.com',
+        partner_email: partnerIdentity!.email,
         partner_name: cleanEntityName,
         azphur_logo: 'AZPHUR',
         azphur_motto: 'Shaping Sustainable Possibilities',
@@ -581,6 +658,32 @@ export async function PATCH(request: Request) {
         entityName: cleanEntityName,
         entityType: entity_type === 'provider' ? 'provider' : 'installer'
       };
+
+      const isFinalQuote = entity_type === 'provider'
+        ? provider_downpayment !== undefined || provider_balance !== undefined
+        : installer_downpayment !== undefined || installer_balance !== undefined;
+      if (isFinalQuote) {
+        if (entity_type === 'provider') {
+          updateData.provider_downpayment = Number(provider_downpayment || 0);
+          updateData.provider_downpayment_pct = Number(provider_downpayment_pct || 0);
+          updateData.provider_balance = Number(provider_balance || 0);
+          updateData.provider_vat_registered = normalizedVatRegistered;
+          updateData.provider_vat_rate = normalizedVatRate;
+          updateData.provider_prices_include_tax = normalizedPricesIncludeTax;
+        } else {
+          updateData.installer_downpayment = Number(installer_downpayment || 0);
+          updateData.installer_downpayment_pct = Number(installer_downpayment_pct || 0);
+          updateData.installer_balance = Number(installer_balance || 0);
+          updateData.installer_vat_registered = normalizedVatRegistered;
+          updateData.installer_vat_rate = normalizedVatRate;
+          updateData.installer_prices_include_tax = normalizedPricesIncludeTax;
+        }
+        const lockKey = entity_type === 'provider' ? 'provider_final_quote_locked' : 'installer_final_quote_locked';
+        updateData.quote_details = {
+          ...(currentLead.quote_details && typeof currentLead.quote_details === 'object' ? currentLead.quote_details : {}),
+          [lockKey]: true
+        };
+      }
     }
 
     if (action === 'select_partner') {

@@ -379,8 +379,8 @@ export default function S2BCombinedPortal() {
         .modal-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
         .execute-btn { background: #111; color: #22d3ee; border: 1px solid #22d3ee; padding: 16px; border-radius: 12px; font-weight: 900; font-size: 12px; cursor: pointer; transition: 0.2s; width: 100%; }
         .execute-btn:hover { background: #22d3ee; color: #111; }
-        .abort-btn { background: transparent; color: #94a3b8; border: none; padding: 10px; font-weight: 800; font-size: 11px; cursor: pointer; }
-        .abort-btn:hover { color: #ef4444; }
+       .abort-btn { background: #fff; color: #0891b2; border: 1.5px solid #22d3ee; padding: 12px; border-radius: 16px; font-weight: 800; font-size: 11px; font-family: inherit; letter-spacing: .4px; cursor: pointer; box-shadow: 0 8px 22px rgba(6, 182, 212, 0.14); transition: background .2s ease, transform .2s ease, box-shadow .2s ease; }
+.abort-btn:hover { background: #ecfeff; transform: translateY(-1px); box-shadow: 0 12px 26px rgba(6, 182, 212, 0.22); }
 
         .status-badge { padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 900; letter-spacing: 1px; transition: 0.2s; display: inline-block; min-width: 100px; text-align: center; box-sizing: border-box; }
         .status-badge.clickable { cursor: pointer; }
@@ -399,7 +399,8 @@ export default function S2BCombinedPortal() {
         .nav-item { font-size: 13px; font-weight: 800; color: #94a3b8; cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: 'JetBrains Mono', monospace; }
         .nav-item.active { color: #111; }
         .nav-dot { color: #22d3ee; }
-        .back-btn { padding: 8px 16px; background: #f1f5f9; border-radius: 10px; font-weight: 800; cursor: pointer; border: none; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+       .back-btn { padding: 10px 20px; background: #fff; border-radius: 16px; font-weight: 800; cursor: pointer; border: 1.5px solid #22d3ee; color: #0891b2; font-size: 11px; font-family: inherit; letter-spacing: .4px; text-transform: uppercase; box-shadow: 0 8px 22px rgba(6, 182, 212, 0.14); transition: background .2s ease, transform .2s ease, box-shadow .2s ease; }
+.back-btn:hover { background: #ecfeff; transform: translateY(-1px); box-shadow: 0 12px 26px rgba(6, 182, 212, 0.22); }
         
         .main-content { padding: 30px 20px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
         .header-wrapper { display: flex; flex-direction: column; gap: 20px; margin-bottom: 40px; }
@@ -428,7 +429,7 @@ export default function S2BCombinedPortal() {
           .sidebar { width: 280px; height: 100vh; border-right: 1px solid #eef2f6; border-bottom: none; position: sticky; top: 0; }
           .sidebar-content { flex-direction: column; height: 100%; padding: 40px 30px; align-items: flex-start; justify-content: flex-start; }
           .nav-links { flex-direction: column; width: 100%; margin: 60px 0; gap: 20px; }
-          .back-btn { margin-top: auto; width: 100%; padding: 12px; text-align: center; }
+          .back-btn { position: fixed; top: 20px; right: 40px; z-index: 50; margin-top: 0; width: auto; padding: 10px 20px; }
           .main-content { padding: 50px 40px; }
           .header-wrapper { flex-direction: row; justify-content: space-between; align-items: flex-end; }
           .main-title-cyan { font-size: 38px; }

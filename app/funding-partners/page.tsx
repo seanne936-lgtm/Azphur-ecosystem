@@ -207,7 +207,7 @@ export default function AZPHURFundingPartnerPortal() {
                   <div style={styles.partnerMark}>{String(publicPartner.display_name || 'F').charAt(0).toUpperCase()}</div>
                   <span style={styles.verified}>✓ VERIFIED</span>
                 </div>
-                <div style={styles.partnerType}>{String(publicPartner.partner_type || 'funding partner').replace(/_/g, ' ')}</div>
+                <div style={styles.partnerType}>{String(publicPartner.partner_type || 'funding partner').replace(/ /g, ' ')}</div>
                 <h3 style={styles.partnerName}>{publicPartner.display_name}</h3>
                 <div style={styles.legalName}>{publicPartner.legal_name}</div>
                 <p style={styles.partnerDescription}>{publicPartner.public_description || 'Verified funding partner within the AZPHUR clean-energy network.'}</p>

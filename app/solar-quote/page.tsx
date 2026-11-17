@@ -105,7 +105,13 @@ const totalPhotosCount = (mdpPhotos?.length || 0) + (housePhotos?.length || 0) +
     setLoadingQuotes(true);
     
     try {
-      const response = await fetch(`/api/v1/solar-leads?email=${encodeURIComponent(emailClean)}`);
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Authentication required.');
+
+      const response = await fetch(`/api/v1/solar-leads?email=${encodeURIComponent(emailClean)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
       const resData = await response.json();
       
       if (response.ok && resData.success) {
@@ -931,6 +937,14 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
           <Link href="/" className="exit-btn-lux" aria-label="Back to AZPHUR main page">← BACK</Link>
         </div>
       </nav>
+{session && (loadingQuotes || isAuthorizedCustomer) && (
+  <div className={`quotes-status ${loadingQuotes ? 'is-loading' : 'is-done'}`} role="status" aria-live="polite">
+    {loadingQuotes
+      ? <span className="qs-spinner" aria-hidden="true" />
+      : <svg className="qs-check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" /><path d="M7 12.5l3.2 3.2L17 8.8" /></svg>}
+    <span>{loadingQuotes ? 'Loading quotes…' : 'Quotes loaded'}</span>
+  </div>
+)}
 
       <div className="center-content" style={{ width: '100%', maxWidth: '1400px', margin: '0 auto', padding: '20px', boxSizing: 'border-box', flex: 1 }}>
         {showLogin && !session && (
@@ -1693,8 +1707,17 @@ const handleDownloadPDF = async (q: any, type: 'provider' | 'installer', cleanNa
       .nav-items { display: flex; align-items: center; gap: 10px; }
       .btn-cyan-outline { background: none; border: 1px solid #22d3ee; color: #0891b2; padding: 8px 16px; border-radius: 100px; cursor: pointer; font-weight: 800; font-size: 10px; transition: 0.3s; letter-spacing: 1px; white-space: nowrap; }
       .btn-cyan-outline:hover { background: #22d3ee; color: #fff; box-shadow: 0 4px 12px rgba(34, 211, 238, 0.2); }
-      .exit-btn-lux { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #0e7490; font-weight: 900; text-decoration: none; border: 1px solid #67e8f9; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,.9); text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 12px rgba(34,211,238,.12); transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
-      .exit-btn-lux:hover { background:#ecfeff; transform:translateY(-1px); box-shadow:0 8px 18px rgba(8,145,178,.16); }
+      
+      :global(.exit-btn-lux) { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; background: #fff; border: 1.5px solid #22d3ee; color: #0891b2; padding: 10px 20px; border-radius: 16px; font-size: 11px; font-weight: 800; letter-spacing: .4px; text-decoration: none; text-transform: uppercase; box-shadow: 0 8px 22px rgba(6, 182, 212, 0.14); transition: background .2s ease, transform .2s ease, box-shadow .2s ease; }
+:global(.exit-btn-lux:hover) { background: #ecfeff; transform: translateY(-1px); box-shadow: 0 12px 26px rgba(6, 182, 212, 0.22); }
+.quotes-status { display: flex; align-items: center; justify-content: center; gap: 10px; width: fit-content; margin: 0 auto 4px; padding: 9px 18px; background: #fff; border: 1.5px solid #22d3ee; border-radius: 16px; color: #0891b2; font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; box-shadow: 0 8px 22px rgba(6, 182, 212, 0.14); position: relative; z-index: 10; }
+.quotes-status.is-done { border-color: #22c55e; color: #15803d; }
+.qs-spinner { width: 16px; height: 16px; border: 2.5px solid rgba(8, 145, 178, 0.2); border-top-color: #0891b2; border-radius: 50%; animation: qsSpin .8s linear infinite; flex-shrink: 0; }
+.qs-check { width: 18px; height: 18px; flex-shrink: 0; }
+.qs-check circle { fill: #22c55e; }
+.qs-check path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 20; stroke-dashoffset: 20; animation: qsDraw .35s ease-out .05s forwards; }
+@keyframes qsSpin { to { transform: rotate(360deg); } }
+@keyframes qsDraw { to { stroke-dashoffset: 0; } }
       .system-status { font-size:8px; color:#0e7490; margin-left:4px; font-family:monospace; font-weight:800; letter-spacing:.7px; }
       .user-badge-zone { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.9); border: 1px solid rgba(34,211,238,0.3); padding: 4px 10px; border-radius: 50px; flex-wrap: wrap; justify-content: center; }
       .user-email-tag { font-size: 10px; font-weight: 700; color: #0891b2; font-family: monospace; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

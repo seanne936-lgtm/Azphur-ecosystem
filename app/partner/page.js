@@ -319,9 +319,13 @@ export default function PartnerDashboard() {
     setSavingLeadIds(prev => ({ ...prev, [leadId]: true }));
 
     try {
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Authentication required.');
+
       const notificationResponse = await fetch('/api/v1/solar-leads', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           action: 'save_quotation',
           entity_type: currentEntityType,
@@ -332,43 +336,6 @@ export default function PartnerDashboard() {
       const notificationResult = await notificationResponse.json();
       if (!notificationResponse.ok || !notificationResult.success) {
         throw new Error(notificationResult.error || 'Unable to finalize the quotation notification.');
-      }
-
-      if (isFinalQuote) {
-        const percentageColumn = currentEntityType === 'provider'
-          ? 'provider_downpayment_pct'
-          : 'installer_downpayment_pct';
-        const { error: percentageError } = await supabase
-          .from('leads')
-          .update({ [percentageColumn]: dpPercentVal })
-          .eq('id', leadId);
-        if (percentageError) throw percentageError;
-
-        // Persist the FINAL-quote lock independently for provider and installer.
-        // Old proposal values do not count as a final quote and one role cannot lock the other.
-        const { data: latestLead, error: latestLeadError } = await supabase
-          .from('leads')
-          .select('quote_details')
-          .eq('id', leadId)
-          .maybeSingle();
-        if (latestLeadError) throw latestLeadError;
-
-        const existingQuoteDetails = latestLead?.quote_details && typeof latestLead.quote_details === 'object'
-          ? latestLead.quote_details
-          : {};
-        const finalQuoteLockKey = currentEntityType === 'provider'
-          ? 'provider_final_quote_locked'
-          : 'installer_final_quote_locked';
-        const { error: lockError } = await supabase
-          .from('leads')
-          .update({
-            quote_details: {
-              ...existingQuoteDetails,
-              [finalQuoteLockKey]: true
-            }
-          })
-          .eq('id', leadId);
-        if (lockError) throw lockError;
       }
 
       alert(isFinalQuote
@@ -715,9 +682,13 @@ export default function PartnerDashboard() {
     ));
 
     try {
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Authentication required.');
+
       const response = await fetch('/api/v1/solar-leads', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           lead_id: leadId,
           selection_type: entityType,
@@ -771,24 +742,23 @@ export default function PartnerDashboard() {
         ...localHiddenIds
       ]);
 
-      const { data: leadsData, error: leadsError } = await supabase
-        .from('leads')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (leadsError) throw leadsError;
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Authentication required.');
+      const leadResponse = await fetch('/api/v1/partner-leads', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const leadPayload = await leadResponse.json();
+      if (!leadResponse.ok || !leadPayload.success) {
+        throw new Error(leadPayload.error || 'Unable to load partner leads.');
+      }
+      const leadsData = leadPayload.leads || [];
       if (!leadsData || !Array.isArray(leadsData)) {
         setIncomingLeads([]);
         return;
       }
 
-      const [provRes, instRes] = await Promise.all([
-        supabase.from('provider_proposals').select('*'),
-        supabase.from('installer_proposals').select('*')
-      ]);
-
-      const allProviders = provRes.data || [];
-      const allInstallers = instRes.data || [];
+      const allProviders = leadPayload.provider_proposals || [];
+      const allInstallers = leadPayload.installer_proposals || [];
 
       const filteredLeads = leadsData
         .filter(lead => {
@@ -841,37 +811,16 @@ export default function PartnerDashboard() {
     setIncomingLeads(prev => prev.filter(lead => lead.id !== leadId));
 
     try {
-      const leadObj = incomingLeads.find(l => l.id === leadId);
-      const cleanName = (selectedEntityName || '').trim();
-
-      if (entityType === 'provider') {
-        let currentRejected = parseEntityList(leadObj?.partner_rejected_by);
-
-        if (!currentRejected.some(name => normalizeEntityName(name) === normalizeEntityName(cleanName))) {
-          currentRejected.push(cleanName);
-        }
-
-        const { error } = await supabase
-          .from('leads')
-          .update({ partner_rejected_by: currentRejected })
-          .eq('id', leadId);
-
-        if (error) throw error;
-
-      } else if (entityType === 'installer') {
-        let currentRejected = parseEntityList(leadObj?.installer_rejected_by);
-
-        if (!currentRejected.some(name => normalizeEntityName(name) === normalizeEntityName(cleanName))) {
-          currentRejected.push(cleanName);
-        }
-
-        const { error } = await supabase
-          .from('leads')
-          .update({ installer_rejected_by: currentRejected })
-          .eq('id', leadId);
-
-        if (error) throw error;
-      }
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
+      if (!accessToken) throw new Error('Authentication required.');
+      const response = await fetch('/api/v1/solar-leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ lead_id: leadId, action: 'reject_lead', entity_type: entityType })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Unable to decline this lead.');
 
       setLeadActions(prev => {
         const next = { ...prev };
@@ -1261,7 +1210,7 @@ return (
           };
           
           const isDbUnlocked = entityType === 'provider' ? lead.provider_balance_unlocked : lead.installer_balance_unlocked;
-          const isManuallyUnlocked = Boolean(unlockedLeads[`${lead.id}_${cleanCurrentEntity}`] ?? isDbUnlocked);
+          const isManuallyUnlocked = Boolean(unlockedLeads[`${lead.id} ${cleanCurrentEntity}`] ?? isDbUnlocked);
 
           const customerName = lead.customer_name || lead.full_name || lead.quote_details?.full_name || 'Valued Customer';
           const customerEmail = lead.customer_email || lead.email || lead.quote_details?.email || 'N/A';
@@ -1287,16 +1236,19 @@ return (
           const isPriceLocked = Boolean(hasThisEntitySubmitted) || Boolean(isPaidInitial);
 
           const handleToggleBalanceUnlock = async (leadId, shouldUnlock) => {
-            setUnlockedLeads(prev => ({ ...prev, [`${leadId}_${cleanCurrentEntity}`]: shouldUnlock }));
+            setUnlockedLeads(prev => ({ ...prev, [`${leadId} ${cleanCurrentEntity}`]: shouldUnlock }));
             try {
-              const unlockColumn = entityType === 'provider' ? 'provider_balance_unlocked' : 'installer_balance_unlocked';
-              const { error } = await supabase
-                .from('leads')
-                .update({ [unlockColumn]: shouldUnlock })
-                .eq('id', leadId);
-
-              if (error) {
-                console.error('Errore aggiornamento sblocco:', error);
+              const { data: authData } = await supabase.auth.getSession();
+              const accessToken = authData.session?.access_token;
+              if (!accessToken) throw new Error('Authentication required.');
+              const response = await fetch('/api/v1/solar-leads', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+                body: JSON.stringify({ lead_id: leadId, action: 'set_balance_unlock', entity_type: entityType, should_unlock: shouldUnlock })
+              });
+              const result = await response.json();
+              if (!response.ok || !result.success) {
+                console.error('Errore aggiornamento sblocco:', result.error);
               } else if (typeof fetchIncomingLeads === 'function') {
                 await fetchIncomingLeads();
               }
